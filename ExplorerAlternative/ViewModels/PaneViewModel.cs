@@ -63,6 +63,8 @@ public sealed class PaneViewModel : ObservableObject
         ToggleExpandCommand = new RelayCommand(p => ((FileSystemNodeViewModel)p!).IsExpanded ^= true);
         OpenCommand = new RelayCommand(_ => OpenSelection(), _ => PrimarySelectedNode is not null);
         OpenInNewTabCommand = new RelayCommand(_ => OpenInNewTab(), _ => PrimarySelectedNode is { IsDirectory: true });
+        OpenPowerShellHereCommand = new RelayCommand(_ => OpenPowerShellHere());
+        OpenTerminalHereCommand = new RelayCommand(_ => OpenTerminalHere());
         NewFolderCommand = new RelayCommand(_ => CreateNewFolder());
         NewFileCommand = new RelayCommand(_ => CreateNewFile());
         ShowPropertiesCommand = new RelayCommand(_ => ShowPropertiesForSelection(), _ => PrimarySelectedNode is not null);
@@ -125,6 +127,12 @@ public sealed class PaneViewModel : ObservableObject
     public RelayCommand OpenCommand { get; }
 
     public RelayCommand OpenInNewTabCommand { get; }
+
+    /// <summary>仕様書19章「ここでPowerShellを開く」：外部ウィンドウとしてPowerShellを起動する。</summary>
+    public RelayCommand OpenPowerShellHereCommand { get; }
+
+    /// <summary>仕様書19章「ここでターミナルを開く」：統合ターミナル（9章）をこのフォルダで開く。</summary>
+    public RelayCommand OpenTerminalHereCommand { get; }
 
     public RelayCommand NewFolderCommand { get; }
 
@@ -505,6 +513,47 @@ public sealed class PaneViewModel : ObservableObject
         }
 
         OpenInNewTabRequested?.Invoke(target.FullPath);
+    }
+
+    // 仕様書19章：選択中の項目（フォルダ）を「ここ」とする。ファイルが選択されている場合は
+    // その親フォルダ、何も選択されていない場合は現在のフォルダを対象にする。
+    private string GetHereDirectory()
+    {
+        var target = PrimarySelectedNode;
+        if (target is null)
+        {
+            return CurrentPath;
+        }
+
+        return target.IsDirectory ? target.FullPath : (Path.GetDirectoryName(target.FullPath) ?? CurrentPath);
+    }
+
+    // 仕様書19章「ここでPowerShellを開く」：外部のPowerShellウィンドウを起動する。
+    private void OpenPowerShellHere()
+    {
+        var directory = GetHereDirectory();
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = _settingsService.Current.Terminal.ShellExecutable,
+                WorkingDirectory = directory,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            _dialogService.ShowError($"PowerShellを起動できませんでした。({ex.Message})");
+        }
+    }
+
+    // 仕様書19章「ここでターミナルを開く」：統合ターミナル（9章）で対象フォルダへ移動する。
+    // 実行は既存のRunTerminalCommandRequested経由でMainWindowViewModelへ委譲する。
+    private void OpenTerminalHere()
+    {
+        var directory = GetHereDirectory();
+        RunTerminalCommandRequested?.Invoke($"Set-Location -LiteralPath \"{directory}\"");
     }
 
     private void CreateNewFolder()

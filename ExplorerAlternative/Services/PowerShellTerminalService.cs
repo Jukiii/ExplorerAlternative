@@ -12,11 +12,13 @@ namespace ExplorerAlternative.Services;
 public sealed class PowerShellTerminalService : IPowerShellTerminalService
 {
     private readonly string _shellExecutable;
+    private readonly bool _loadProfile;
     private Process? _process;
 
-    public PowerShellTerminalService(string shellExecutable)
+    public PowerShellTerminalService(string shellExecutable, bool loadProfile = false)
     {
         _shellExecutable = shellExecutable;
+        _loadProfile = loadProfile;
     }
 
     public event EventHandler<string>? OutputReceived;
@@ -41,7 +43,7 @@ public sealed class PowerShellTerminalService : IPowerShellTerminalService
             var startInfo = new ProcessStartInfo
             {
                 FileName = _shellExecutable,
-                Arguments = "-NoLogo -NoProfile",
+                Arguments = _loadProfile ? "-NoLogo" : "-NoLogo -NoProfile",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

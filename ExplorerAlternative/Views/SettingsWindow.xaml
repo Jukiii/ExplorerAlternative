@@ -37,18 +37,23 @@
             </StackPanel>
         </GroupBox>
 
-        <GroupBox Grid.Row="1" Header="タブ">
-            <StackPanel Orientation="Horizontal" Margin="8">
-                <TextBlock Text="スマートタブ（重複タブの抑制）" VerticalAlignment="Center" Margin="0,0,12,0" />
-                <RadioButton GroupName="DuplicateTab" Content="常に新しいタブ" Margin="0,0,16,0" VerticalAlignment="Center"
-                             IsChecked="{Binding DuplicateTabBehavior, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static models:DuplicateTabBehavior.AlwaysNew}, Mode=OneWay}"
-                             Command="{Binding SetDuplicateTabBehaviorCommand}" CommandParameter="{x:Static models:DuplicateTabBehavior.AlwaysNew}" />
-                <RadioButton GroupName="DuplicateTab" Content="既存タブを再利用" Margin="0,0,16,0" VerticalAlignment="Center"
-                             IsChecked="{Binding DuplicateTabBehavior, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static models:DuplicateTabBehavior.ReuseExisting}, Mode=OneWay}"
-                             Command="{Binding SetDuplicateTabBehaviorCommand}" CommandParameter="{x:Static models:DuplicateTabBehavior.ReuseExisting}" />
-                <RadioButton GroupName="DuplicateTab" Content="自動判定" VerticalAlignment="Center"
-                             IsChecked="{Binding DuplicateTabBehavior, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static models:DuplicateTabBehavior.Auto}, Mode=OneWay}"
-                             Command="{Binding SetDuplicateTabBehaviorCommand}" CommandParameter="{x:Static models:DuplicateTabBehavior.Auto}" />
+        <GroupBox Grid.Row="1" Header="タブ・ターミナル">
+            <StackPanel Margin="8">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="スマートタブ（重複タブの抑制）" VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <RadioButton GroupName="DuplicateTab" Content="常に新しいタブ" Margin="0,0,16,0" VerticalAlignment="Center"
+                                 IsChecked="{Binding DuplicateTabBehavior, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static models:DuplicateTabBehavior.AlwaysNew}, Mode=OneWay}"
+                                 Command="{Binding SetDuplicateTabBehaviorCommand}" CommandParameter="{x:Static models:DuplicateTabBehavior.AlwaysNew}" />
+                    <RadioButton GroupName="DuplicateTab" Content="既存タブを再利用" Margin="0,0,16,0" VerticalAlignment="Center"
+                                 IsChecked="{Binding DuplicateTabBehavior, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static models:DuplicateTabBehavior.ReuseExisting}, Mode=OneWay}"
+                                 Command="{Binding SetDuplicateTabBehaviorCommand}" CommandParameter="{x:Static models:DuplicateTabBehavior.ReuseExisting}" />
+                    <RadioButton GroupName="DuplicateTab" Content="自動判定" VerticalAlignment="Center"
+                                 IsChecked="{Binding DuplicateTabBehavior, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static models:DuplicateTabBehavior.Auto}, Mode=OneWay}"
+                                 Command="{Binding SetDuplicateTabBehaviorCommand}" CommandParameter="{x:Static models:DuplicateTabBehavior.Auto}" />
+                </StackPanel>
+                <!-- 仕様書17章「PowerShellプロファイル」。新しく開くターミナルタブから反映される。 -->
+                <CheckBox Content="ターミナルでPowerShellプロファイルを読み込む" Margin="0,12,0,0"
+                          IsChecked="{Binding LoadTerminalProfile, Mode=TwoWay}" />
             </StackPanel>
         </GroupBox>
 

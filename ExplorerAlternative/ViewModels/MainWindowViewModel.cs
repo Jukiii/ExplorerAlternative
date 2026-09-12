@@ -37,7 +37,7 @@ public sealed class MainWindowViewModel : ObservableObject
         IVersionControlService versionControlService,
         IExternalToolService externalToolService,
         ISettingsService settingsService,
-        IPowerShellTerminalService terminalService,
+        Func<IPowerShellTerminalService> terminalServiceFactory,
         IWorkspaceService workspaceService,
         IThemeService themeService,
         IPatchService patchService,
@@ -57,7 +57,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, NavigateActiveTo, OpenFile);
         NavigationPane.WorkspaceOpenRequested += name => LoadWorkspaceByName((Window)Application.Current!.MainWindow!, name);
-        Terminal = new TerminalViewModel(terminalService, settingsService.Current.Terminal.SyncByDefault);
+        TerminalHost = new TerminalHostViewModel(terminalServiceFactory, settingsService.Current.Terminal.SyncByDefault);
 
         AddTabCommand = new RelayCommand(_ => AddTab(GetDefaultInitialPath()));
         CloseTabCommand = new RelayCommand(p => CloseTab((TabViewModel)p!), _ => Tabs.Count > 1);
@@ -87,7 +87,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public NavigationPaneViewModel NavigationPane { get; }
 
-    public TerminalViewModel Terminal { get; }
+    public TerminalHostViewModel TerminalHost { get; }
 
     public RelayCommand AddTabCommand { get; }
 
@@ -151,7 +151,7 @@ public sealed class MainWindowViewModel : ObservableObject
             {
                 _activeTab.ActivePanePathChanged += OnActivePanePathChanged;
                 _activeTab.ActivePaneSelectionChanged += OnActivePaneSelectionChanged;
-                Terminal.SyncCurrentDirectory(_activeTab.ActivePane.CurrentPath);
+                TerminalHost.SyncCurrentDirectory(_activeTab.ActivePane.CurrentPath);
             }
 
             OnPropertyChanged();
@@ -225,7 +225,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void OnActivePanePathChanged(string path)
     {
-        Terminal.SyncCurrentDirectory(path);
+        TerminalHost.SyncCurrentDirectory(path);
         NavigationPane.RecordRecentPlace(path);
     }
 
@@ -269,8 +269,7 @@ public sealed class MainWindowViewModel : ObservableObject
     // 資格情報の入力待ちなどの対話にも、通常のターミナル操作と同じ画面で対応できる。
     private void RunTerminalCommand(string command)
     {
-        Terminal.IsVisible = true;
-        Terminal.SendRawCommand(command);
+        TerminalHost.SendRawCommand(command);
     }
 
     // 仕様書10章「ここでフォルダを新しいタブで開く」・37章「スマートタブ」。
@@ -316,7 +315,7 @@ public sealed class MainWindowViewModel : ObservableObject
         var newPane = CreatePane(basePane.CurrentPath, basePane.CurrentViewMode);
         tab.SplitOrientation = orientation;
         tab.AddPane(newPane);
-        Terminal.SyncCurrentDirectory(newPane.CurrentPath);
+        TerminalHost.SyncCurrentDirectory(newPane.CurrentPath);
     }
 
     private void ClosePane()
@@ -328,22 +327,22 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         tab.RemovePane(tab.ActivePane);
-        Terminal.SyncCurrentDirectory(tab.ActivePane.CurrentPath);
+        TerminalHost.SyncCurrentDirectory(tab.ActivePane.CurrentPath);
     }
 
     private void SetActivePane(PaneViewModel pane)
     {
         ActiveTab?.SetActivePane(pane);
-        Terminal.SyncCurrentDirectory(pane.CurrentPath);
+        TerminalHost.SyncCurrentDirectory(pane.CurrentPath);
     }
 
     private void ToggleTerminal()
     {
-        Terminal.ToggleVisibilityCommand.Execute(null);
+        TerminalHost.ToggleVisibilityCommand.Execute(null);
 
-        if (Terminal.IsVisible && ActiveTab is not null && !ActiveTab.ActivePane.IsAtComputerRoot)
+        if (TerminalHost.IsVisible && ActiveTab is not null && !ActiveTab.ActivePane.IsAtComputerRoot)
         {
-            Terminal.SyncCurrentDirectory(ActiveTab.ActivePane.CurrentPath);
+            TerminalHost.SyncCurrentDirectory(ActiveTab.ActivePane.CurrentPath);
         }
     }
 
@@ -453,8 +452,7 @@ public sealed class MainWindowViewModel : ObservableObject
         try
         {
             var command = _sshService.BuildConnectCommand(sshViewModel.ToProfile());
-            Terminal.IsVisible = true;
-            Terminal.SendRawCommand(command);
+            TerminalHost.SendRawCommand(command);
         }
         catch (AppOperationException ex)
         {

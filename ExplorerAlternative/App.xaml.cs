@@ -7,7 +7,7 @@ namespace ExplorerAlternative;
 
 public partial class App : Application
 {
-    private IPowerShellTerminalService? _terminalService;
+    private MainWindowViewModel? _mainWindowViewModel;
     private ISettingsService? _settingsService;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -40,8 +40,10 @@ public partial class App : Application
                 }
             }));
 
-        var terminalService = new PowerShellTerminalService(settingsService.Current.Terminal.ShellExecutable);
-        _terminalService = terminalService;
+        IPowerShellTerminalService TerminalServiceFactory() =>
+            new PowerShellTerminalService(
+                settingsService.Current.Terminal.ShellExecutable,
+                settingsService.Current.Terminal.LoadProfile);
 
         var workspaceService = new WorkspaceService(settingsService);
         var patchService = new PatchService();
@@ -54,12 +56,14 @@ public partial class App : Application
             versionControlService,
             externalToolService,
             settingsService,
-            terminalService,
+            TerminalServiceFactory,
             workspaceService,
             themeService,
             patchService,
             sshService,
             versionControlOperationsService);
+
+        _mainWindowViewModel = mainWindowViewModel;
 
         var mainWindow = new MainWindow { DataContext = mainWindowViewModel };
         MainWindow = mainWindow;
@@ -77,7 +81,7 @@ public partial class App : Application
             // 終了時の保存失敗はアプリの終了を妨げない。
         }
 
-        _terminalService?.Dispose();
+        _mainWindowViewModel?.TerminalHost.Dispose();
         base.OnExit(e);
     }
 }

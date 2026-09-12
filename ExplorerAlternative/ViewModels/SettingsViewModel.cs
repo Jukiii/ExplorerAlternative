@@ -19,6 +19,7 @@ public sealed class SettingsViewModel : ObservableObject
     private AppTheme _selectedTheme;
     private double _activePaneHighlightOpacity;
     private DuplicateTabBehavior _duplicateTabBehavior;
+    private bool _loadTerminalProfile;
 
     public SettingsViewModel(ISettingsService settingsService, IDialogService dialogService, IThemeService themeService)
     {
@@ -28,6 +29,7 @@ public sealed class SettingsViewModel : ObservableObject
         _selectedTheme = settingsService.Current.Appearance.Theme;
         _activePaneHighlightOpacity = settingsService.Current.Appearance.ActivePaneHighlightOpacity;
         _duplicateTabBehavior = settingsService.Current.Tabs.DuplicateBehavior;
+        _loadTerminalProfile = settingsService.Current.Terminal.LoadProfile;
 
         foreach (var extension in settingsService.Current.TextFileExtensions)
         {
@@ -64,6 +66,20 @@ public sealed class SettingsViewModel : ObservableObject
     }
 
     public RelayCommand SetDuplicateTabBehaviorCommand { get; }
+
+    /// <summary>仕様書17章「PowerShellプロファイル」。次回以降に開くターミナルタブから反映される。</summary>
+    public bool LoadTerminalProfile
+    {
+        get => _loadTerminalProfile;
+        set
+        {
+            if (SetProperty(ref _loadTerminalProfile, value))
+            {
+                _settingsService.Current.Terminal.LoadProfile = value;
+                _settingsService.Save();
+            }
+        }
+    }
 
     /// <summary>仕様書37章「スマートタブ」。変更と同時に即座に保存する。</summary>
     public DuplicateTabBehavior DuplicateTabBehavior

@@ -346,6 +346,57 @@ public partial class MainWindow : Window
         (sender as TextBox)?.ScrollToEnd();
     }
 
+    // 仕様書17章：タブストリップでの切替。
+    private void TerminalTab_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TerminalViewModel terminal } &&
+            DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.TerminalHost.ActiveTerminal = terminal;
+            e.Handled = true;
+        }
+    }
+
+    private void TerminalTabClose_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TerminalViewModel terminal } &&
+            DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.TerminalHost.CloseTerminalCommand.Execute(terminal);
+            e.Handled = true;
+        }
+    }
+
+    // 仕様書19章：ファイル・フォルダをターミナル入力欄へドラッグ＆ドロップするとパスが入力される。
+    private void TerminalInput_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void TerminalInput_Drop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop) || DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var paths = (string[])e.Data.GetData(DataFormats.FileDrop)!;
+        var terminal = viewModel.TerminalHost.ActiveTerminal;
+
+        if (terminal is null)
+        {
+            return;
+        }
+
+        foreach (var path in paths)
+        {
+            terminal.InsertPathIntoInput(path);
+        }
+
+        e.Handled = true;
+    }
+
     private void PaneContainer_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement element || element.DataContext is not PaneViewModel pane)

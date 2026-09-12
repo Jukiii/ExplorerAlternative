@@ -15,6 +15,9 @@
             <MenuItem Header="開く" Command="{Binding OpenCommand}" />
             <!-- 仕様書10章・37章：フォルダのみ有効（CanExecuteでIsDirectoryを判定）。 -->
             <MenuItem Header="新しいタブで開く" Command="{Binding OpenInNewTabCommand}" />
+            <!-- 仕様書19章：ターミナル連携。 -->
+            <MenuItem Header="ここでPowerShellを開く" Command="{Binding OpenPowerShellHereCommand}" />
+            <MenuItem Header="ここでターミナルを開く" Command="{Binding OpenTerminalHereCommand}" />
             <MenuItem Header="新しいフォルダ" Command="{Binding NewFolderCommand}" />
             <MenuItem Header="新しいファイル" Command="{Binding NewFileCommand}" />
             <Separator />
@@ -673,41 +676,80 @@
             </Border>
         </Grid>
 
-        <!-- PowerShellターミナル -->
+        <!-- PowerShellターミナル（仕様書17章：複数タブ） -->
         <Border Grid.Row="4" Background="{DynamicResource TerminalBackgroundBrush}"
-                Visibility="{Binding Terminal.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                Visibility="{Binding TerminalHost.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}"
+                DataContext="{Binding TerminalHost}">
             <Grid Height="230">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <DockPanel Grid.Row="0" Margin="8,6">
+                <!-- タブストリップ。各タブはSync状態を個別に保持する（18章）。 -->
+                <DockPanel Grid.Row="0" Margin="8,6,8,0">
+                    <Button DockPanel.Dock="Right" Content="＋" Width="26" ToolTip="新しいターミナル"
+                            Command="{Binding AddTerminalCommand}" Foreground="{DynamicResource TerminalForegroundBrush}" />
+                    <ItemsControl ItemsSource="{Binding Terminals}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,4,0" Padding="8,3" CornerRadius="4"
+                                        Background="#2A2A2A" Cursor="Hand"
+                                        MouseLeftButtonUp="TerminalTab_MouseLeftButtonUp">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource TerminalAccentBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TerminalForegroundBrush}" />
+                                        <TextBlock Text=" ✕" Margin="6,0,0,0" Foreground="{DynamicResource TerminalForegroundBrush}"
+                                                   MouseLeftButtonUp="TerminalTabClose_MouseLeftButtonUp" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+
+                <DockPanel Grid.Row="1" Margin="8,6" DataContext="{Binding ActiveTerminal}">
                     <ToggleButton DockPanel.Dock="Left" Padding="10,4"
-                                  IsChecked="{Binding Terminal.IsSyncEnabled, Mode=TwoWay}"
-                                  Content="{Binding Terminal.IsSyncEnabled, Converter={StaticResource SyncLabelConverter}}"
+                                  IsChecked="{Binding IsSyncEnabled, Mode=TwoWay}"
+                                  Content="{Binding IsSyncEnabled, Converter={StaticResource SyncLabelConverter}}"
                                   Foreground="{DynamicResource TerminalForegroundBrush}" />
-                    <TextBlock Text="PowerShell Terminal" VerticalAlignment="Center" Margin="10,0"
+                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Margin="10,0"
                                Foreground="{DynamicResource TerminalForegroundBrush}" FontWeight="SemiBold" />
                 </DockPanel>
 
-                <TextBox x:Name="TerminalOutputTextBox" Grid.Row="1" Text="{Binding Terminal.OutputText, Mode=OneWay}"
+                <TextBox x:Name="TerminalOutputTextBox" Grid.Row="2" Text="{Binding ActiveTerminal.OutputText, Mode=OneWay}"
                          IsReadOnly="True" TextWrapping="Wrap" FontFamily="Cascadia Mono,Consolas"
                          Background="{DynamicResource TerminalBackgroundBrush}" Foreground="{DynamicResource TerminalForegroundBrush}"
                          BorderThickness="0" Margin="8,0" Padding="2"
                          VerticalScrollBarVisibility="Auto"
                          TextChanged="TerminalOutputTextBox_TextChanged" />
 
-                <Border Grid.Row="2" Background="#2A2A2A" CornerRadius="4" Margin="8,6,8,8" Padding="8,4">
-                    <DockPanel>
+                <!-- 仕様書19章：ファイル・フォルダをドラッグ＆ドロップするとパスが入力される。 -->
+                <Border Grid.Row="3" Background="#2A2A2A" CornerRadius="4" Margin="8,6,8,8" Padding="8,4"
+                        AllowDrop="True" DragOver="TerminalInput_DragOver" Drop="TerminalInput_Drop">
+                    <DockPanel DataContext="{Binding ActiveTerminal}">
                         <TextBlock DockPanel.Dock="Left" Text="&gt;" Foreground="{DynamicResource TerminalAccentBrush}"
                                    FontFamily="Cascadia Mono,Consolas" Margin="0,0,6,0" />
-                        <TextBox Text="{Binding Terminal.InputText, UpdateSourceTrigger=PropertyChanged}"
+                        <TextBox Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
                                  FontFamily="Cascadia Mono,Consolas" Background="Transparent" BorderThickness="0"
                                  Foreground="{DynamicResource TerminalForegroundBrush}" CaretBrush="{DynamicResource TerminalForegroundBrush}">
                             <TextBox.InputBindings>
-                                <KeyBinding Key="Return" Command="{Binding DataContext.Terminal.SendCommand, ElementName=RootWindow}" />
+                                <KeyBinding Key="Return" Command="{Binding SendCommand}" />
                             </TextBox.InputBindings>
                         </TextBox>
                     </DockPanel>
