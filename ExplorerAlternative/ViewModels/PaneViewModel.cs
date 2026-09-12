@@ -22,6 +22,8 @@ public sealed class PaneViewModel : ObservableObject
     private readonly IVersionControlService _versionControlService;
     private readonly IExternalToolService _externalToolService;
     private readonly ISettingsService _settingsService;
+    private readonly Stack<string> _backStack = new();
+    private readonly Stack<string> _forwardStack = new();
 
     private string _currentPath;
     private ViewMode _currentViewMode;
@@ -64,8 +66,10 @@ public sealed class PaneViewModel : ObservableObject
         RunExternalToolCommand = new RelayCommand(p => RunExternalTool((ExternalToolDefinition)p!), _ => PrimarySelectedNode is not null);
         CancelAddressEditCommand = new RelayCommand(_ => IsAddressEditing = false);
         BulkRenameCommand = new RelayCommand(_ => BulkRenameSelection(), _ => SelectedNodes.Count > 1);
+        GoBackCommand = new RelayCommand(_ => GoBack(), _ => CanGoBack);
+        GoForwardCommand = new RelayCommand(_ => GoForward(), _ => CanGoForward);
 
-        NavigateTo(_currentPath, addToHistory: false);
+        LoadPath(_currentPath);
     }
 
     public event Action<string>? PathChanged;
@@ -109,6 +113,14 @@ public sealed class PaneViewModel : ObservableObject
     public RelayCommand RunExternalToolCommand { get; }
 
     public RelayCommand BulkRenameCommand { get; }
+
+    public RelayCommand GoBackCommand { get; }
+
+    public RelayCommand GoForwardCommand { get; }
+
+    public bool CanGoBack => _backStack.Count > 0;
+
+    public bool CanGoForward => _forwardStack.Count > 0;
 
     /// <summary>コンテキストメニューの「外部ツール」サブメニュー（仕様書22章）用。</summary>
     public IReadOnlyList<ExternalToolDefinition> ExternalTools => _settingsService.Current.ExternalTools;
@@ -170,9 +182,57 @@ public sealed class PaneViewModel : ObservableObject
         PrimarySelectedNode = SelectedNodes.Count == 1 ? SelectedNodes[0] : SelectedNodes.LastOrDefault();
     }
 
-    public void NavigateTo(string path) => NavigateTo(path, addToHistory: true);
+    /// <summary>通常のナビゲーション（フォルダを開く・パンくず・お気に入り等）。戻る/進む履歴に積む。</summary>
+    public void NavigateTo(string path)
+    {
+        if (path == CurrentPath)
+        {
+            LoadPath(path);
+            return;
+        }
 
-    private void NavigateTo(string path, bool addToHistory)
+        _backStack.Push(CurrentPath);
+        _forwardStack.Clear();
+        RaiseHistoryChanged();
+        LoadPath(path);
+    }
+
+    public void GoBack()
+    {
+        if (!CanGoBack)
+        {
+            return;
+        }
+
+        _forwardStack.Push(CurrentPath);
+        var target = _backStack.Pop();
+        RaiseHistoryChanged();
+        LoadPath(target);
+    }
+
+    public void GoForward()
+    {
+        if (!CanGoForward)
+        {
+            return;
+        }
+
+        _backStack.Push(CurrentPath);
+        var target = _forwardStack.Pop();
+        RaiseHistoryChanged();
+        LoadPath(target);
+    }
+
+    private void RaiseHistoryChanged()
+    {
+        OnPropertyChanged(nameof(CanGoBack));
+        OnPropertyChanged(nameof(CanGoForward));
+        GoBackCommand.RaiseCanExecuteChanged();
+        GoForwardCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>実際にフォルダ内容を読み込んで表示を更新する（履歴には影響しない）。</summary>
+    private void LoadPath(string path)
     {
         try
         {
@@ -204,7 +264,8 @@ public sealed class PaneViewModel : ObservableObject
         }
     }
 
-    public void RefreshCurrentFolder() => NavigateTo(CurrentPath);
+    /// <summary>現在フォルダを再読込する（履歴には積まない）。</summary>
+    public void RefreshCurrentFolder() => LoadPath(CurrentPath);
 
     private static bool IsPathComputerRoot(string path) => string.IsNullOrEmpty(path);
 

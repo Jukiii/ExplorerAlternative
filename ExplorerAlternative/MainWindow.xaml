@@ -42,6 +42,8 @@
              Spaceキーのみ、ListBox(Extended選択モード)が内部消費してしまうため
              コードビハインドのPreviewKeyDownでトンネリング段階で処理する（MainWindow.xaml.cs参照）。 -->
         <KeyBinding Key="Up" Modifiers="Alt" Command="{Binding DataContext.GoUpCommand, ElementName=RootWindow}" />
+        <KeyBinding Key="Left" Modifiers="Alt" Command="{Binding DataContext.GoBackCommand, ElementName=RootWindow}" />
+        <KeyBinding Key="Right" Modifiers="Alt" Command="{Binding DataContext.GoForwardCommand, ElementName=RootWindow}" />
         <KeyBinding Key="OemTilde" Modifiers="Control" Command="{Binding DataContext.ToggleTerminalCommand, ElementName=RootWindow}" />
     </Window.InputBindings>
 
@@ -113,7 +115,11 @@
                 BorderBrush="{StaticResource BorderBrush2}" BorderThickness="0,0,0,1">
             <DockPanel Margin="8,6" LastChildFill="True"
                        DataContext="{Binding ActiveTab.ActivePane}">
-                <Button DockPanel.Dock="Left" Content="⬆" FontSize="14" Width="30" Padding="0" ToolTip="親フォルダへ移動 (Alt+↑)"
+                <Button DockPanel.Dock="Left" Content="←" FontSize="14" Width="30" Padding="0" ToolTip="戻る (Alt+←)"
+                        Command="{Binding GoBackCommand}" />
+                <Button DockPanel.Dock="Left" Content="→" FontSize="14" Width="30" Padding="0" Margin="2,0,0,0" ToolTip="進む (Alt+→)"
+                        Command="{Binding GoForwardCommand}" />
+                <Button DockPanel.Dock="Left" Content="⬆" FontSize="14" Width="30" Padding="0" Margin="6,0,0,0" ToolTip="親フォルダへ移動 (Alt+↑)"
                         Command="{Binding GoUpCommand}" />
 
                 <Border DockPanel.Dock="Right" Background="{StaticResource PanelBackgroundBrush}" CornerRadius="5"

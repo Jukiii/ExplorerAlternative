@@ -47,6 +47,8 @@ public sealed class MainWindowViewModel : ObservableObject
         AddTabCommand = new RelayCommand(_ => AddTab(GetDefaultInitialPath()));
         CloseTabCommand = new RelayCommand(p => CloseTab((TabViewModel)p!), _ => Tabs.Count > 1);
         GoUpCommand = new RelayCommand(_ => ActiveTab?.ActivePane.GoUpCommand.Execute(null));
+        GoBackCommand = new RelayCommand(_ => ActiveTab?.ActivePane.GoBackCommand.Execute(null), _ => ActiveTab?.ActivePane.CanGoBack == true);
+        GoForwardCommand = new RelayCommand(_ => ActiveTab?.ActivePane.GoForwardCommand.Execute(null), _ => ActiveTab?.ActivePane.CanGoForward == true);
         TogglePreviewCommand = new RelayCommand(_ => TogglePreview());
         ToggleTerminalCommand = new RelayCommand(_ => ToggleTerminal());
         OpenCheatSheetCommand = new RelayCommand(_ => _dialogService.ShowCheatSheet());
@@ -74,6 +76,10 @@ public sealed class MainWindowViewModel : ObservableObject
     public RelayCommand CloseTabCommand { get; }
 
     public RelayCommand GoUpCommand { get; }
+
+    public RelayCommand GoBackCommand { get; }
+
+    public RelayCommand GoForwardCommand { get; }
 
     public RelayCommand TogglePreviewCommand { get; }
 
