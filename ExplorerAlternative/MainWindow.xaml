@@ -15,6 +15,13 @@
             <MenuItem Header="開く" Command="{Binding OpenCommand}" />
             <!-- 仕様書10章・37章：フォルダのみ有効（CanExecuteでIsDirectoryを判定）。 -->
             <MenuItem Header="新しいタブで開く" Command="{Binding OpenInNewTabCommand}" />
+            <!-- 仕様書34章：アプリで開く（ファイルのみ有効）。 -->
+            <MenuItem Header="アプリで開く">
+                <MenuItem Header="既定のアプリで開く" Command="{Binding OpenWithDefaultAppCommand}" />
+                <MenuItem Header="アプリを選択..." Command="{Binding OpenWithBrowseCommand}" />
+            </MenuItem>
+            <!-- 仕様書35章：Windows Explorerとの連携。 -->
+            <MenuItem Header="Windows Explorerで開く" Command="{Binding OpenInWindowsExplorerCommand}" />
             <!-- 仕様書19章：ターミナル連携。 -->
             <MenuItem Header="ここでPowerShellを開く" Command="{Binding OpenPowerShellHereCommand}" />
             <MenuItem Header="ここでターミナルを開く" Command="{Binding OpenTerminalHereCommand}" />
@@ -425,6 +432,9 @@
                                                         CommandParameter="{Binding}" />
                                                 <Button Content="▼" FontSize="8" Width="18" Height="20" Padding="0" ToolTip="下へ移動"
                                                         Command="{Binding DataContext.NavigationPane.MoveFavoriteDownCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}" />
+                                                <Button Content="✎" FontSize="10" Width="20" Height="20" Padding="0" ToolTip="名前の変更"
+                                                        Command="{Binding DataContext.NavigationPane.RenameFavoriteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                         CommandParameter="{Binding}" />
                                                 <Button Content="✕" FontSize="9" Width="20" Height="20" Padding="0" ToolTip="お気に入りから削除"
                                                         Command="{Binding DataContext.NavigationPane.RemoveFavoriteCommand, RelativeSource={RelativeSource AncestorType=Window}}"

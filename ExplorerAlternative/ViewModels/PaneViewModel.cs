@@ -73,6 +73,9 @@ public sealed class PaneViewModel : ObservableObject
         ToggleExpandCommand = new RelayCommand(p => ((FileSystemNodeViewModel)p!).IsExpanded ^= true);
         OpenCommand = new RelayCommand(_ => OpenSelection(), _ => PrimarySelectedNode is not null);
         OpenInNewTabCommand = new RelayCommand(_ => OpenInNewTab(), _ => PrimarySelectedNode is { IsDirectory: true });
+        OpenWithDefaultAppCommand = new RelayCommand(_ => OpenSelection(), _ => PrimarySelectedNode is { IsDirectory: false });
+        OpenWithBrowseCommand = new RelayCommand(_ => OpenWithBrowse(), _ => PrimarySelectedNode is { IsDirectory: false });
+        OpenInWindowsExplorerCommand = new RelayCommand(_ => OpenInWindowsExplorer(), _ => PrimarySelectedNode is not null);
         OpenPowerShellHereCommand = new RelayCommand(_ => OpenPowerShellHere());
         OpenTerminalHereCommand = new RelayCommand(_ => OpenTerminalHere());
         NewFolderCommand = new RelayCommand(_ => CreateNewFolder());
@@ -154,6 +157,15 @@ public sealed class PaneViewModel : ObservableObject
     public RelayCommand OpenCommand { get; }
 
     public RelayCommand OpenInNewTabCommand { get; }
+
+    /// <summary>仕様書34章「アプリで開く」：既定のアプリで開く（OpenCommandのファイル限定版）。</summary>
+    public RelayCommand OpenWithDefaultAppCommand { get; }
+
+    /// <summary>仕様書34章「アプリで開く」：任意のEXEを選択して開く（今回だけ指定）。</summary>
+    public RelayCommand OpenWithBrowseCommand { get; }
+
+    /// <summary>仕様書35章「Windows Explorerで開く」。</summary>
+    public RelayCommand OpenInWindowsExplorerCommand { get; }
 
     /// <summary>仕様書19章「ここでPowerShellを開く」：外部ウィンドウとしてPowerShellを起動する。</summary>
     public RelayCommand OpenPowerShellHereCommand { get; }
@@ -611,6 +623,65 @@ public sealed class PaneViewModel : ObservableObject
         }
 
         OpenInNewTabRequested?.Invoke(target.FullPath);
+    }
+
+    // 仕様書34章「アプリで開く」：任意のEXEを選択し、選択ファイルを引数として起動する（今回だけ指定）。
+    private void OpenWithBrowse()
+    {
+        var target = PrimarySelectedNode;
+        if (target is null || target.IsDirectory)
+        {
+            return;
+        }
+
+        var exePath = _dialogService.ShowOpenFileDialog("アプリを選択", "実行ファイル (*.exe)|*.exe|すべてのファイル (*.*)|*.*");
+        if (string.IsNullOrEmpty(exePath))
+        {
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = exePath,
+                Arguments = $"\"{target.FullPath}\"",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            _dialogService.ShowError($"「{target.Name}」を開けませんでした。({ex.Message})");
+        }
+    }
+
+    // 仕様書35章「Windows Explorerで開く」：フォルダはそのまま開き、ファイルは
+    // 親フォルダをExplorerで開いて対象を選択状態にする。
+    private void OpenInWindowsExplorer()
+    {
+        var target = PrimarySelectedNode;
+        if (target is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var arguments = target.IsDirectory
+                ? $"\"{target.FullPath}\""
+                : $"/select,\"{target.FullPath}\"";
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = arguments,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            _dialogService.ShowError($"Windows Explorerで開けませんでした。({ex.Message})");
+        }
     }
 
     // 仕様書19章：選択中の項目（フォルダ）を「ここ」とする。ファイルが選択されている場合は

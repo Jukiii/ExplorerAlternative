@@ -27,6 +27,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IDiffService _diffService;
     private readonly ISshCredentialStore _sshCredentialStore;
     private readonly IFolderScanService _folderScanService;
+    private readonly IExplorerIntegrationService _explorerIntegrationService;
 
     private TabViewModel? _activeTab;
     private PreviewViewModel? _currentPreview;
@@ -48,7 +49,9 @@ public sealed class MainWindowViewModel : ObservableObject
         IVersionControlOperationsService versionControlOperationsService,
         IDiffService diffService,
         ISshCredentialStore sshCredentialStore,
-        IFolderScanService folderScanService)
+        IFolderScanService folderScanService,
+        IExplorerIntegrationService explorerIntegrationService,
+        string? startupPath = null)
     {
         _fileSystemService = fileSystemService;
         _dialogService = dialogService;
@@ -63,8 +66,9 @@ public sealed class MainWindowViewModel : ObservableObject
         _diffService = diffService;
         _sshCredentialStore = sshCredentialStore;
         _folderScanService = folderScanService;
+        _explorerIntegrationService = explorerIntegrationService;
 
-        NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, NavigateActiveTo, OpenFile);
+        NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, dialogService, NavigateActiveTo, OpenFile);
         NavigationPane.WorkspaceOpenRequested += name => LoadWorkspaceByName((Window)Application.Current!.MainWindow!, name);
         TerminalHost = new TerminalHostViewModel(terminalServiceFactory, settingsService.Current.Terminal.SyncByDefault);
 
@@ -93,7 +97,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OpenDiskAnalysisCommand = new RelayCommand(_ => OpenDiskAnalysis());
         OpenCommandPaletteCommand = new RelayCommand(_ => OpenCommandPalette());
 
-        AddTab(GetDefaultInitialPath());
+        AddTab(ResolveStartupPath(startupPath));
     }
 
     public ObservableCollection<TabViewModel> Tabs { get; } = new();
@@ -194,6 +198,30 @@ public sealed class MainWindowViewModel : ObservableObject
     private static string GetDefaultInitialPath()
     {
         return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    }
+
+    // 仕様書35章「Explorerから本アプリへフォルダを渡して開く」：起動引数でフォルダ（または
+    // ファイル。その場合は親フォルダ）を渡された場合、その場所を最初のタブとして開く。
+    private static string ResolveStartupPath(string? startupPath)
+    {
+        if (!string.IsNullOrWhiteSpace(startupPath))
+        {
+            if (Directory.Exists(startupPath))
+            {
+                return startupPath;
+            }
+
+            if (File.Exists(startupPath))
+            {
+                var parent = Path.GetDirectoryName(startupPath);
+                if (!string.IsNullOrEmpty(parent))
+                {
+                    return parent;
+                }
+            }
+        }
+
+        return GetDefaultInitialPath();
     }
 
     private void AddTab(string initialPath)
@@ -464,7 +492,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void OpenSettings()
     {
-        var settingsViewModel = new SettingsViewModel(_settingsService, _dialogService, _themeService);
+        var settingsViewModel = new SettingsViewModel(_settingsService, _dialogService, _themeService, _explorerIntegrationService);
         _dialogService.ShowSettings(settingsViewModel);
     }
 

@@ -10,20 +10,40 @@ public sealed class DialogService : IDialogService
 {
     private PreviewWindow? _previewWindow;
 
+    // 仕様書27章：MainWindow構築中（起動引数のフォルダ読み込み失敗など、MainWindowが
+    // まだApplication.Current.MainWindowに割り当てられる前）にエラーを表示する経路があるため、
+    // owner未確定時はowner無しのオーバーロードにフォールバックし、クラッシュを避ける。
     public void ShowError(string message)
     {
-        MessageBox.Show(Application.Current?.MainWindow!, message, "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+        if (Application.Current?.MainWindow is { } owner)
+        {
+            MessageBox.Show(owner, message, "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        else
+        {
+            MessageBox.Show(message, "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     public void ShowInfo(string message)
     {
-        MessageBox.Show(Application.Current?.MainWindow!, message, "情報", MessageBoxButton.OK, MessageBoxImage.Information);
+        if (Application.Current?.MainWindow is { } owner)
+        {
+            MessageBox.Show(owner, message, "情報", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        else
+        {
+            MessageBox.Show(message, "情報", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
     }
 
     public bool Confirm(string message)
     {
-        return MessageBox.Show(Application.Current?.MainWindow!, message, "確認", MessageBoxButton.YesNo, MessageBoxImage.Question)
-            == MessageBoxResult.Yes;
+        var result = Application.Current?.MainWindow is { } owner
+            ? MessageBox.Show(owner, message, "確認", MessageBoxButton.YesNo, MessageBoxImage.Question)
+            : MessageBox.Show(message, "確認", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+        return result == MessageBoxResult.Yes;
     }
 
     public string? PromptText(string title, string message, string defaultValue = "")

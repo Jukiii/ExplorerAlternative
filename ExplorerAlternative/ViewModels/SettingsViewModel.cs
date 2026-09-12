@@ -15,21 +15,29 @@ public sealed class SettingsViewModel : ObservableObject
     private readonly ISettingsService _settingsService;
     private readonly IDialogService _dialogService;
     private readonly IThemeService _themeService;
+    private readonly IExplorerIntegrationService _explorerIntegrationService;
     private string _newExtension = string.Empty;
     private AppTheme _selectedTheme;
     private double _activePaneHighlightOpacity;
     private DuplicateTabBehavior _duplicateTabBehavior;
     private bool _loadTerminalProfile;
+    private bool _explorerIntegrationEnabled;
 
-    public SettingsViewModel(ISettingsService settingsService, IDialogService dialogService, IThemeService themeService)
+    public SettingsViewModel(
+        ISettingsService settingsService,
+        IDialogService dialogService,
+        IThemeService themeService,
+        IExplorerIntegrationService explorerIntegrationService)
     {
         _settingsService = settingsService;
         _dialogService = dialogService;
         _themeService = themeService;
+        _explorerIntegrationService = explorerIntegrationService;
         _selectedTheme = settingsService.Current.Appearance.Theme;
         _activePaneHighlightOpacity = settingsService.Current.Appearance.ActivePaneHighlightOpacity;
         _duplicateTabBehavior = settingsService.Current.Tabs.DuplicateBehavior;
         _loadTerminalProfile = settingsService.Current.Terminal.LoadProfile;
+        _explorerIntegrationEnabled = explorerIntegrationService.IsEnabled;
 
         foreach (var extension in settingsService.Current.TextFileExtensions)
         {
@@ -77,6 +85,29 @@ public sealed class SettingsViewModel : ObservableObject
             {
                 _settingsService.Current.Terminal.LoadProfile = value;
                 _settingsService.Save();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 仕様書35章「Windows Explorer連携」の連携ON/OFF。フォルダの右クリックメニューへの
+    /// 登録・削除をレジストリ（HKEY_CURRENT_USER）に対して即座に行う。
+    /// </summary>
+    public bool ExplorerIntegrationEnabled
+    {
+        get => _explorerIntegrationEnabled;
+        set
+        {
+            if (SetProperty(ref _explorerIntegrationEnabled, value))
+            {
+                if (value)
+                {
+                    _explorerIntegrationService.Enable();
+                }
+                else
+                {
+                    _explorerIntegrationService.Disable();
+                }
             }
         }
     }

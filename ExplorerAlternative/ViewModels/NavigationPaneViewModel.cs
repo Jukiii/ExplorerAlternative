@@ -16,14 +16,16 @@ public sealed class NavigationPaneViewModel : ObservableObject
 
     private readonly ISettingsService _settingsService;
     private readonly IFileSystemService _fileSystemService;
+    private readonly IDialogService _dialogService;
     private readonly Action<string> _navigate;
     private readonly Action<string> _openFile;
     private bool _isCollapsed;
 
-    public NavigationPaneViewModel(ISettingsService settingsService, IFileSystemService fileSystemService, Action<string> navigate, Action<string> openFile)
+    public NavigationPaneViewModel(ISettingsService settingsService, IFileSystemService fileSystemService, IDialogService dialogService, Action<string> navigate, Action<string> openFile)
     {
         _settingsService = settingsService;
         _fileSystemService = fileSystemService;
+        _dialogService = dialogService;
         _navigate = navigate;
         _openFile = openFile;
 
@@ -62,6 +64,7 @@ public sealed class NavigationPaneViewModel : ObservableObject
         NavigateToEntryCommand = new RelayCommand(p => _navigate(((FavoriteEntry)p!).Path));
         OpenPinnedFileCommand = new RelayCommand(p => _openFile(((FavoriteEntry)p!).Path));
         RemoveFavoriteCommand = new RelayCommand(p => RemoveFavorite((FavoriteEntry)p!));
+        RenameFavoriteCommand = new RelayCommand(p => RenameFavorite((FavoriteEntry)p!));
         MoveFavoriteUpCommand = new RelayCommand(p => MoveFavorite((FavoriteEntry)p!, -1));
         MoveFavoriteDownCommand = new RelayCommand(p => MoveFavorite((FavoriteEntry)p!, 1));
         RemoveRecentPlaceCommand = new RelayCommand(p => RemoveRecentPlace((FavoriteEntry)p!));
@@ -94,6 +97,8 @@ public sealed class NavigationPaneViewModel : ObservableObject
     public RelayCommand OpenPinnedFileCommand { get; }
 
     public RelayCommand RemoveFavoriteCommand { get; }
+
+    public RelayCommand RenameFavoriteCommand { get; }
 
     public RelayCommand MoveFavoriteUpCommand { get; }
 
@@ -157,6 +162,35 @@ public sealed class NavigationPaneViewModel : ObservableObject
     {
         Favorites.Remove(entry);
         _settingsService.Current.Favorites.RemoveAll(f => f.Path == entry.Path);
+        _settingsService.Save();
+    }
+
+    // 仕様書36章：お気に入りの名前変更。FavoriteEntryはINotifyPropertyChangedを実装しないため、
+    // 表示更新のために要素そのものを差し替える（ObservableCollectionのReplace通知でUIが更新される）。
+    private void RenameFavorite(FavoriteEntry entry)
+    {
+        var newName = _dialogService.PromptText("名前の変更", "新しい名前を入力してください。", entry.Name);
+        if (string.IsNullOrWhiteSpace(newName) || newName == entry.Name)
+        {
+            return;
+        }
+
+        var index = Favorites.IndexOf(entry);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var renamed = new FavoriteEntry { Name = newName, Path = entry.Path };
+        Favorites[index] = renamed;
+
+        var settingsList = _settingsService.Current.Favorites;
+        var settingsIndex = settingsList.FindIndex(f => f.Path == entry.Path);
+        if (settingsIndex >= 0)
+        {
+            settingsList[settingsIndex] = renamed;
+        }
+
         _settingsService.Save();
     }
 

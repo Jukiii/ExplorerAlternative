@@ -52,6 +52,7 @@ public partial class App : Application
         var folderScanService = new FolderScanService();
         var versionControlOperationsService = new VersionControlOperationsService();
         var diffService = new DiffService();
+        var explorerIntegrationService = new ExplorerIntegrationService();
 
         var mainWindowViewModel = new MainWindowViewModel(
             fileSystemService,
@@ -67,7 +68,9 @@ public partial class App : Application
             versionControlOperationsService,
             diffService,
             sshCredentialStore,
-            folderScanService);
+            folderScanService,
+            explorerIntegrationService,
+            e.Args.Length > 0 ? e.Args[0] : null);
 
         _mainWindowViewModel = mainWindowViewModel;
 
