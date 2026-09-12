@@ -82,6 +82,7 @@ public sealed class MainWindowViewModel : ObservableObject
         ClosePaneCommand = new RelayCommand(_ => ClosePane(), _ => ActiveTab?.CanClosePane == true);
         SetActivePaneCommand = new RelayCommand(p => SetActivePane((PaneViewModel)p!));
         OpenSshConnectionCommand = new RelayCommand(_ => OpenSshConnection());
+        ToggleVcsPaneCommand = new RelayCommand(_ => IsVcsPaneVisible = !IsVcsPaneVisible);
 
         AddTab(GetDefaultInitialPath());
     }
@@ -131,6 +132,17 @@ public sealed class MainWindowViewModel : ObservableObject
     public RelayCommand SetActivePaneCommand { get; }
 
     public RelayCommand OpenSshConnectionCommand { get; }
+
+    public RelayCommand ToggleVcsPaneCommand { get; }
+
+    private bool _isVcsPaneVisible = true;
+
+    /// <summary>Git/SVN情報ペイン（右側、表示/非表示切替可能）の表示状態。</summary>
+    public bool IsVcsPaneVisible
+    {
+        get => _isVcsPaneVisible;
+        set => SetProperty(ref _isVcsPaneVisible, value);
+    }
 
     public TabViewModel? ActiveTab
     {

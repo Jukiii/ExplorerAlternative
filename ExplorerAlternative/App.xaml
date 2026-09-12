@@ -178,12 +178,18 @@
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <!-- 既定はCenter（アイコンのみのボタン等）。個別にHorizontalContentAlignment="Left"等を
+                 指定したボタン（ナビゲーションペインの項目など）はローカル値が優先され、そちらに従う。
+                 以前はControlTemplate側でCenterを固定指定していたため、個別指定が反映されなかった。 -->
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
                                 Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                                RecognizesAccessKey="True" />
                         </Border>
                         <ControlTemplate.Triggers>

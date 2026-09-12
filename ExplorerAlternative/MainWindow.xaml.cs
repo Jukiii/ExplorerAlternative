@@ -24,24 +24,41 @@ public partial class MainWindow : Window
 
     private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
         // ListBox(Extended選択モード)はSpaceキーを選択切り替えとして内部消費し、
         // Window.InputBindingsのKeyBindingまでバブリングしないため、
         // トンネリング段階(PreviewKeyDown)でプレビューコマンドを直接実行する。
-        if (e.Key != Key.Space || DataContext is not MainWindowViewModel viewModel)
+        if (e.Key == Key.Space && e.OriginalSource is not TextBox)
         {
+            e.Handled = true;
+
+            if (viewModel.TogglePreviewCommand.CanExecute(null))
+            {
+                viewModel.TogglePreviewCommand.Execute(null);
+            }
+
             return;
         }
 
-        if (e.OriginalSource is TextBox)
-        {
-            return;
-        }
+        // 仕様書9.1章「Ctrl + @」。個別コントロール（TextBox等）がキー入力を消費して
+        // Window.InputBindingsまでバブリングしないケースへの保険として、トンネリング段階で
+        // 直接コマンドを実行する（Spaceキーと同じ対策）。
+        var isTerminalToggleGesture =
+            (e.Key == Key.OemTilde && Keyboard.Modifiers == ModifierKeys.Control) ||
+            (e.Key == Key.D2 && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift));
 
-        e.Handled = true;
-
-        if (viewModel.TogglePreviewCommand.CanExecute(null))
+        if (isTerminalToggleGesture)
         {
-            viewModel.TogglePreviewCommand.Execute(null);
+            e.Handled = true;
+
+            if (viewModel.ToggleTerminalCommand.CanExecute(null))
+            {
+                viewModel.ToggleTerminalCommand.Execute(null);
+            }
         }
     }
 
@@ -457,5 +474,37 @@ public partial class MainWindow : Window
     {
         _tabDragStartPoint = null;
         _tabDragDuplicated = false;
+    }
+
+    // 仕様書4章：ナビゲーションペイン内のListBox（お気に入り等）は既定でホイール/トラックパッドの
+    // スクロールを自身で消費してしまい、外側のScrollViewer（ペイン全体）へ伝播しない。
+    // ここで明示的に外側のScrollViewerへスクロールを転送する。
+    private void NavListBox_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is not DependencyObject element)
+        {
+            return;
+        }
+
+        var scrollViewer = FindAncestorScrollViewer(element);
+        if (scrollViewer is null)
+        {
+            return;
+        }
+
+        scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - e.Delta);
+        e.Handled = true;
+    }
+
+    private static ScrollViewer? FindAncestorScrollViewer(DependencyObject element)
+    {
+        var current = VisualTreeHelper.GetParent(element);
+
+        while (current is not null and not ScrollViewer)
+        {
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return current as ScrollViewer;
     }
 }

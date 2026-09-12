@@ -114,12 +114,14 @@
     <Window.InputBindings>
         <!-- Window.InputBindings は論理ツリーに属さずDataContextを継承しないため、
              ElementName経由でWindowのDataContextを明示的に参照する必要がある。
-             Spaceキーのみ、ListBox(Extended選択モード)が内部消費してしまうため
-             コードビハインドのPreviewKeyDownでトンネリング段階で処理する（MainWindow.xaml.cs参照）。 -->
+             SpaceキーとCtrl+@（ターミナル表示切替）は、ListBoxやTextBox等の個別コントロールが
+             内部消費してWindow.InputBindingsまでバブリングしないことがあるため、
+             コードビハインドのPreviewKeyDownでトンネリング段階で処理する（MainWindow.xaml.cs参照）。
+             仕様書9.1章「Ctrl + @」：JISキーボードでは「@」＝OemTilde（無変換）だが、USキーボード
+             配列では「@」はShift+2で入力するため、両方をCtrl+@として扱う（PreviewKeyDown側で判定）。 -->
         <KeyBinding Key="Up" Modifiers="Alt" Command="{Binding DataContext.GoUpCommand, ElementName=RootWindow}" />
         <KeyBinding Key="Left" Modifiers="Alt" Command="{Binding DataContext.GoBackCommand, ElementName=RootWindow}" />
         <KeyBinding Key="Right" Modifiers="Alt" Command="{Binding DataContext.GoForwardCommand, ElementName=RootWindow}" />
-        <KeyBinding Key="OemTilde" Modifiers="Control" Command="{Binding DataContext.ToggleTerminalCommand, ElementName=RootWindow}" />
         <KeyBinding Key="L" Modifiers="Control" Command="{Binding DataContext.ActiveTab.ActivePane.BeginAddressEditCommand, ElementName=RootWindow}" />
         <KeyBinding Key="F6" Command="{Binding DataContext.ActiveTab.ActivePane.BeginAddressEditCommand, ElementName=RootWindow}" />
         <!-- 仕様書10章：タブ操作のショートカット。 -->
@@ -133,7 +135,6 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -142,8 +143,6 @@
         <Border Grid.Row="0" Background="{DynamicResource ToolbarBackgroundBrush}"
                 BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,0,0,1">
             <DockPanel LastChildFill="True">
-                <Button DockPanel.Dock="Right" Content="＋" FontSize="15" Width="34" Margin="4" Padding="0"
-                        ToolTip="新しいタブ" Command="{Binding AddTabCommand}" />
                 <Menu DockPanel.Dock="Right" Background="Transparent" VerticalAlignment="Center">
                     <MenuItem Header="☰ メニュー" Padding="8,6">
                         <MenuItem Header="お気に入りに追加" Command="{Binding AddFavoriteCommand}" />
@@ -152,6 +151,7 @@
                         <MenuItem Header="下に分割" Command="{Binding SplitVerticalCommand}" />
                         <MenuItem Header="ペインを閉じる" Command="{Binding ClosePaneCommand}" />
                         <MenuItem Header="ペインを入れ替え" Command="{Binding ActiveTab.SwapPanesCommand}" />
+                        <MenuItem Header="Git/SVN情報ペインを表示/非表示" Command="{Binding ToggleVcsPaneCommand}" />
                         <Separator />
                         <MenuItem Header="ワークスペースを保存"
                                   Command="{Binding SaveWorkspaceCommand}"
@@ -166,45 +166,51 @@
                         <MenuItem Header="ショートカット一覧" Command="{Binding OpenCheatSheetCommand}" />
                     </MenuItem>
                 </Menu>
-                <ListBox ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab, Mode=TwoWay}"
-                         Background="Transparent" BorderThickness="0"
-                         ItemContainerStyle="{StaticResource TabItemContainerStyle}"
-                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                         ScrollViewer.VerticalScrollBarVisibility="Disabled">
-                    <ListBox.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                    </ListBox.ItemsPanel>
-                    <ListBox.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:TabViewModel}">
-                            <DockPanel Margin="10,6" MinWidth="110" ToolTip="Ctrl+ドラッグで複製 / 右クリックで固定"
-                                       PreviewMouseLeftButtonDown="TabItem_PreviewMouseLeftButtonDown"
-                                       PreviewMouseMove="TabItem_PreviewMouseMove"
-                                       PreviewMouseLeftButtonUp="TabItem_PreviewMouseLeftButtonUp">
-                                <DockPanel.ContextMenu>
-                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                        <MenuItem Header="{Binding PinMenuHeader}" Command="{Binding TogglePinCommand}" />
-                                        <MenuItem Header="閉じる"
-                                                  Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                  CommandParameter="{Binding}" />
-                                    </ContextMenu>
-                                </DockPanel.ContextMenu>
-                                <!-- 仕様書10章「タブ固定」：固定中は閉じるボタンの代わりにピンアイコンを表示する。 -->
-                                <Button DockPanel.Dock="Right" Content="✕" FontSize="10" Width="20" Height="20" Padding="0"
-                                        Margin="8,0,0,0" ToolTip="タブを閉じる"
-                                        Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"
-                                        Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}" />
-                                <TextBlock DockPanel.Dock="Right" Text="📌" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="11"
-                                           ToolTip="固定されています"
-                                           Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibilityConverter}}" />
-                                <TextBlock Text="📁" Margin="0,0,6,0" VerticalAlignment="Center" FontSize="13" />
-                                <TextBlock Text="{Binding Header}" VerticalAlignment="Center" />
-                            </DockPanel>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                <!-- 新しいタブボタンはタブのすぐ右側に配置する（DockPanelの残り全幅を専有させず、
+                     タブと同じStackPanelでコンテンツ幅に収める）。 -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <ListBox ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab, Mode=TwoWay}"
+                             Background="Transparent" BorderThickness="0"
+                             ItemContainerStyle="{StaticResource TabItemContainerStyle}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                             ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:TabViewModel}">
+                                <DockPanel Margin="10,6" MinWidth="110" ToolTip="Ctrl+ドラッグで複製 / 右クリックで固定"
+                                           PreviewMouseLeftButtonDown="TabItem_PreviewMouseLeftButtonDown"
+                                           PreviewMouseMove="TabItem_PreviewMouseMove"
+                                           PreviewMouseLeftButtonUp="TabItem_PreviewMouseLeftButtonUp">
+                                    <DockPanel.ContextMenu>
+                                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                            <MenuItem Header="{Binding PinMenuHeader}" Command="{Binding TogglePinCommand}" />
+                                            <MenuItem Header="閉じる"
+                                                      Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                      CommandParameter="{Binding}" />
+                                        </ContextMenu>
+                                    </DockPanel.ContextMenu>
+                                    <!-- 仕様書10章「タブ固定」：固定中は閉じるボタンの代わりにピンアイコンを表示する。 -->
+                                    <Button DockPanel.Dock="Right" Content="✕" FontSize="10" Width="20" Height="20" Padding="0"
+                                            Margin="8,0,0,0" ToolTip="タブを閉じる"
+                                            Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"
+                                            Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" />
+                                    <TextBlock DockPanel.Dock="Right" Text="📌" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="11"
+                                               ToolTip="固定されています"
+                                               Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                    <TextBlock Text="📁" Margin="0,0,6,0" VerticalAlignment="Center" FontSize="13" />
+                                    <TextBlock Text="{Binding Header}" VerticalAlignment="Center" />
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button Content="＋" FontSize="15" Width="34" Margin="4" Padding="0"
+                            ToolTip="新しいタブ" Command="{Binding AddTabCommand}" />
+                </StackPanel>
             </DockPanel>
         </Border>
 
@@ -232,7 +238,9 @@
                     </StackPanel>
                 </Border>
 
-                <Border Margin="10,0,0,0" Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="5" Padding="6,0">
+                <!-- 仕様書11章：アドレスバーは残りの横幅いっぱいに伸ばす（DockPanelの最後の子要素にして埋める）。 -->
+                <Grid Margin="10,0,0,0">
+                <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="5" Padding="6,0">
                     <Grid>
                         <Grid.Style>
                             <Style TargetType="Grid">
@@ -290,7 +298,7 @@
                 </Border>
 
                 <TextBox x:Name="AddressEditTextBox" Text="{Binding AddressEditText, UpdateSourceTrigger=PropertyChanged}"
-                         VerticalContentAlignment="Center" Margin="10,0,0,0" Padding="6,4"
+                         VerticalContentAlignment="Center" Padding="6,4"
                          Background="{DynamicResource WindowBackgroundBrush}"
                          Foreground="{DynamicResource TextPrimaryBrush}"
                          BorderBrush="{DynamicResource AccentBrush}"
@@ -310,30 +318,18 @@
                         <KeyBinding Key="Escape" Command="{Binding DataContext.ActiveTab.ActivePane.CancelAddressEditCommand, ElementName=RootWindow}" />
                     </TextBox.InputBindings>
                 </TextBox>
+                </Grid>
             </DockPanel>
         </Border>
 
-        <!-- Git/SVN情報 -->
-        <Border Grid.Row="2" Background="{DynamicResource VcsBannerBackgroundBrush}" Padding="10,5"
-                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,0,0,1"
-                DataContext="{Binding ActiveTab.ActivePane}"
-                Visibility="{Binding VcsInfo.Kind, Converter={StaticResource VcsKindToVisibilityConverter}}">
-            <TextBlock FontSize="12">
-                <Run Text="🌿" />
-                <Run Text="{Binding VcsInfo.Kind, Mode=OneWay}" FontWeight="SemiBold" />
-                <Run Text="ブランチ:" Foreground="{DynamicResource TextSecondaryBrush}" />
-                <Run Text="{Binding VcsInfo.BranchName, Mode=OneWay}" FontWeight="SemiBold" />
-                <Run Text="  " />
-                <Run Text="{Binding VcsInfo.StatusSummary, Mode=OneWay}" Foreground="{DynamicResource TextSecondaryBrush}" />
-            </TextBlock>
-        </Border>
-
-        <!-- ナビゲーションペイン + メインペイン -->
-        <Grid Grid.Row="3">
+        <!-- ナビゲーションペイン + メインペイン + Git/SVN情報ペイン -->
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <!-- ナビゲーションペイン（仕様書4章・6章） -->
@@ -350,7 +346,8 @@
                             <TextBlock Text="クイックアクセス" FontWeight="SemiBold" Margin="2,14,0,4" />
                             <ListBox ItemsSource="{Binding NavigationPane.QuickAccess}"
                                      BorderThickness="0" Background="Transparent"
-                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
+                                     PreviewMouseWheel="NavListBox_PreviewMouseWheel">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:FavoriteEntry}">
                                         <Button Content="{Binding Name}" HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
@@ -373,7 +370,8 @@
                             <TextBlock Text="ドライブ" FontWeight="SemiBold" Margin="2,14,0,4" />
                             <ListBox ItemsSource="{Binding NavigationPane.Drives}"
                                      BorderThickness="0" Background="Transparent"
-                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
+                                     PreviewMouseWheel="NavListBox_PreviewMouseWheel">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:FavoriteEntry}">
                                         <Button Content="{Binding Name}" HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
@@ -397,6 +395,7 @@
                             <ListBox ItemsSource="{Binding NavigationPane.Favorites}" MaxHeight="200"
                                      BorderThickness="0" Background="Transparent"
                                      ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
+                                     PreviewMouseWheel="NavListBox_PreviewMouseWheel"
                                      AllowDrop="True"
                                      DragOver="FavoritesListBox_DragOver"
                                      Drop="FavoritesListBox_Drop">
@@ -439,7 +438,8 @@
                             </DockPanel>
                             <ListBox ItemsSource="{Binding NavigationPane.RecentPlaces}" MaxHeight="160"
                                      BorderThickness="0" Background="Transparent"
-                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
+                                     PreviewMouseWheel="NavListBox_PreviewMouseWheel">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:FavoriteEntry}">
                                         <DockPanel>
@@ -469,7 +469,8 @@
                             <TextBlock Text="ピン留めファイル" FontWeight="SemiBold" Margin="2,14,0,4" />
                             <ListBox ItemsSource="{Binding NavigationPane.PinnedFiles}" MaxHeight="160"
                                      BorderThickness="0" Background="Transparent"
-                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
+                                     PreviewMouseWheel="NavListBox_PreviewMouseWheel">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:FavoriteEntry}">
                                         <DockPanel>
@@ -502,7 +503,8 @@
                             </DockPanel>
                             <ListBox ItemsSource="{Binding NavigationPane.Tags}"
                                      BorderThickness="0" Background="Transparent"
-                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
+                                     PreviewMouseWheel="NavListBox_PreviewMouseWheel">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:TagDefinition}">
                                         <DockPanel Margin="4,3">
@@ -523,7 +525,8 @@
                             <TextBlock Text="ワークスペース" FontWeight="SemiBold" Margin="2,14,0,4" />
                             <ListBox ItemsSource="{Binding NavigationPane.Workspaces}" MaxHeight="140"
                                      BorderThickness="0" Background="Transparent"
-                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
+                                     PreviewMouseWheel="NavListBox_PreviewMouseWheel">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Button Content="{Binding}" HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
@@ -700,13 +703,84 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </Border>
+
+            <!-- Git/SVN情報ペイン（表示/非表示切り替え可能）。ハンバーガーメニューからも切替できる。 -->
+            <GridSplitter Grid.Column="3" Width="3" HorizontalAlignment="Stretch" Background="{DynamicResource BorderBrush2}"
+                          Visibility="{Binding IsVcsPaneVisible, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+            <Border Grid.Column="4" Width="260" Background="{DynamicResource PanelBackgroundBrush}"
+                    Visibility="{Binding IsVcsPaneVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                <DockPanel Margin="10" DataContext="{Binding ActiveTab.ActivePane}">
+                    <Button DockPanel.Dock="Top" Content="折りたたむ »" HorizontalAlignment="Right"
+                            Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"
+                            Command="{Binding DataContext.ToggleVcsPaneCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+
+                    <StackPanel>
+                        <TextBlock Text="Git / SVN 情報" FontWeight="SemiBold" Margin="0,14,0,10" />
+
+                        <TextBlock Text="このフォルダはGit/SVN管理下ではありません。" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding VcsInfo.Kind}" Value="{x:Static models:VersionControlKind.Git}">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding VcsInfo.Kind}" Value="{x:Static models:VersionControlKind.Svn}">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <StackPanel>
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding VcsInfo.Kind}" Value="{x:Static models:VersionControlKind.Git}">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding VcsInfo.Kind}" Value="{x:Static models:VersionControlKind.Svn}">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock FontSize="13" TextWrapping="Wrap">
+                                <Run Text="🌿" />
+                                <Run Text="{Binding VcsInfo.Kind, Mode=OneWay}" FontWeight="SemiBold" />
+                            </TextBlock>
+                            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap">
+                                <Run Text="ブランチ: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <Run Text="{Binding VcsInfo.BranchName, Mode=OneWay}" FontWeight="SemiBold" />
+                            </TextBlock>
+                            <TextBlock Margin="0,12,0,0" Text="状態" FontWeight="SemiBold" />
+                            <TextBlock Margin="0,4,0,0" Text="{Binding VcsInfo.StatusSummary, Mode=OneWay}"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <Button Grid.Column="4" Content="«" Width="22" Height="22" Padding="0" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="4"
+                    ToolTip="Git/SVN情報ペインを表示" Foreground="{DynamicResource TextSecondaryBrush}"
+                    Visibility="{Binding IsVcsPaneVisible, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"
+                    Command="{Binding ToggleVcsPaneCommand}" />
         </Grid>
 
         <!-- PowerShellターミナル（仕様書17章：複数タブ） -->
-        <Border Grid.Row="4" Background="{DynamicResource TerminalBackgroundBrush}"
-                Visibility="{Binding TerminalHost.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}"
-                DataContext="{Binding TerminalHost}">
-            <Grid Height="230">
+        <!-- 注意: Visibilityのバインディング元（TerminalHost.IsVisible）は、この要素の
+             「変更前」のDataContext（Window＝MainWindowViewModel）を指す。DataContext自体を
+             ここでTerminalHostへ切り替えてしまうと、同じ要素上のVisibilityバインディングも
+             新しいDataContext（TerminalHostViewModel）基準で解決されてしまい、
+             存在しない"TerminalHost.IsVisible"を探しにいって解決に失敗する
+             （＝表示状態がトグルに追従しなくなる不具合の原因だった）。
+             そのためDataContextの切り替えは内側のGridで行う。 -->
+        <Border Grid.Row="3" Background="{DynamicResource TerminalBackgroundBrush}"
+                Visibility="{Binding TerminalHost.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Grid Height="230" DataContext="{Binding TerminalHost}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />

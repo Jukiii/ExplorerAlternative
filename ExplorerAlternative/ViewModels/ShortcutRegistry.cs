@@ -8,7 +8,7 @@ public static class ShortcutRegistry
 {
     public static IReadOnlyList<ShortcutEntry> All { get; } = new List<ShortcutEntry>
     {
-        new("ターミナル表示/非表示", "Ctrl + @"),
+        new("ターミナル表示/非表示", "Ctrl + @（USキー配列ではCtrl + Shift + 2でも可）"),
         new("親フォルダへ移動", "Alt + ↑"),
         new("戻る", "Alt + ←"),
         new("進む", "Alt + →"),
