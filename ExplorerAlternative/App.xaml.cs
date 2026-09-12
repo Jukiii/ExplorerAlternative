@@ -56,6 +56,7 @@ public partial class App : Application
         var trayIconService = new TrayIconService();
         var globalHotkeyService = new GlobalHotkeyService();
         var jumpListService = new JumpListService();
+        var projectDetectionService = new ProjectDetectionService();
 
         // 仕様書39章：`--workspace 名前` はジャンプリストからのワークスペース直接起動。
         // それ以外の第1引数は35章「Explorerから本アプリへフォルダを渡して開く」用のパス。
@@ -93,6 +94,7 @@ public partial class App : Application
             trayIconService,
             globalHotkeyService,
             jumpListService,
+            projectDetectionService,
             startupPath);
 
         _mainWindowViewModel = mainWindowViewModel;

@@ -86,6 +86,13 @@
                 </MenuItem.ItemContainerStyle>
             </MenuItem>
             <Separator />
+            <!-- 仕様書56章：それぞれ検出されている場合のみ有効になる。 -->
+            <MenuItem Header="ルートへ移動">
+                <MenuItem Header="プロジェクトルートへ移動" Command="{Binding GoToProjectRootCommand}" />
+                <MenuItem Header="ソリューションルートへ移動" Command="{Binding GoToSolutionRootCommand}" />
+                <MenuItem Header="Gitルートへ移動" Command="{Binding GoToGitRootCommand}" />
+            </MenuItem>
+            <Separator />
             <!-- 仕様書14章：Git/SVN管理下のフォルダでのみ有効になる（CanExecuteでVcsInfo.Kindを判定）。 -->
             <MenuItem Header="Patchを作成..." Command="{Binding CreatePatchCommand}" />
             <MenuItem Header="Patchを適用..." Command="{Binding ApplyPatchCommand}" />
@@ -482,6 +489,41 @@
                                                     <DataTemplate>
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Text="🕘" Margin="0,0,6,0" FontSize="11" />
+                                                            <TextBlock Text="{Binding}" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </Button.ContentTemplate>
+                                            </Button>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- 最近開いたプロジェクト（仕様書55章） -->
+                            <DockPanel Margin="2,14,0,4">
+                                <Button DockPanel.Dock="Right" Content="クリア" FontSize="9" Padding="4,0"
+                                        ToolTip="最近のプロジェクトをクリア" Command="{Binding NavigationPane.ClearRecentProjectsCommand}" />
+                                <TextBlock Text="最近のプロジェクト" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <ListBox ItemsSource="{Binding NavigationPane.RecentProjects}" MaxHeight="160"
+                                     BorderThickness="0" Background="Transparent"
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
+                                     PreviewMouseWheel="NavListBox_PreviewMouseWheel">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:FavoriteEntry}">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="✕" FontSize="9" Width="20" Height="20" Padding="0"
+                                                    ToolTip="一覧から削除"
+                                                    Command="{Binding DataContext.NavigationPane.RemoveRecentProjectCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button Content="{Binding Name}" ToolTip="{Binding Path}"
+                                                    HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
+                                                    Command="{Binding DataContext.NavigationPane.NavigateToEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}">
+                                                <Button.ContentTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="📦" Margin="0,0,6,0" FontSize="11" />
                                                             <TextBlock Text="{Binding}" />
                                                         </StackPanel>
                                                     </DataTemplate>

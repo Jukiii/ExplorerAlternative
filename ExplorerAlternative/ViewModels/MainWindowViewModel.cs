@@ -32,6 +32,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly ITrayIconService _trayIconService;
     private readonly IGlobalHotkeyService _globalHotkeyService;
     private readonly IJumpListService _jumpListService;
+    private readonly IProjectDetectionService _projectDetectionService;
 
     private TabViewModel? _activeTab;
     private PreviewViewModel? _currentPreview;
@@ -59,6 +60,7 @@ public sealed class MainWindowViewModel : ObservableObject
         ITrayIconService trayIconService,
         IGlobalHotkeyService globalHotkeyService,
         IJumpListService jumpListService,
+        IProjectDetectionService projectDetectionService,
         string? startupPath = null)
     {
         _fileSystemService = fileSystemService;
@@ -78,6 +80,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _trayIconService = trayIconService;
         _globalHotkeyService = globalHotkeyService;
         _jumpListService = jumpListService;
+        _projectDetectionService = projectDetectionService;
 
         NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, dialogService, NavigateActiveTo, OpenFile);
         NavigationPane.WorkspaceOpenRequested += name => LoadWorkspaceByName((Window)Application.Current!.MainWindow!, name);
@@ -298,7 +301,10 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void OnActivePanePathChanged(string path)
     {
-        TerminalHost.SyncCurrentDirectory(path);
+        // 仕様書57章「プロジェクト単位ターミナル」：プロジェクトが検出されている場合は
+        // プロジェクトルートをカレントディレクトリとする（Terminal Syncと連動）。
+        var syncTarget = ActiveTab?.ActivePane.CurrentProject?.RootPath ?? path;
+        TerminalHost.SyncCurrentDirectory(syncTarget);
         NavigationPane.RecordRecentPlace(path);
         RebuildJumpList();
     }
@@ -340,12 +346,22 @@ public sealed class MainWindowViewModel : ObservableObject
             _patchService,
             _versionControlOperationsService,
             _diffService,
+            _projectDetectionService,
             initialPath,
             initialViewMode);
 
         pane.RunTerminalCommandRequested += RunTerminalCommand;
         pane.PinFileRequested += node => NavigationPane.AddPinnedFile(node.Name, node.FullPath);
         pane.OpenInNewTabRequested += OpenPathInNewTab;
+        pane.ProjectDetected += project => NavigationPane.RecordRecentProject(project.Name, project.RootPath);
+
+        // PaneViewModelのコンストラクタ内で初回のLoadPathが実行済みのため、上のイベント購読より前に
+        // 初回分のProjectDetectedが発火してしまっている。取りこぼした初回分をここで補う。
+        if (pane.CurrentProject is { } initialProject)
+        {
+            NavigationPane.RecordRecentProject(initialProject.Name, initialProject.RootPath);
+        }
+
         return pane;
     }
 
@@ -772,6 +788,24 @@ public sealed class MainWindowViewModel : ObservableObject
                 CanExecute = () => ActiveTab?.ActivePane.CommitCommand.CanExecute(null) == true
             },
             new() { Name = "SSH接続の管理...", Execute = OpenSshConnection },
+            new()
+            {
+                Name = "プロジェクトルートへ移動",
+                Execute = () => ActiveTab?.ActivePane.GoToProjectRootCommand.Execute(null),
+                CanExecute = () => ActiveTab?.ActivePane.GoToProjectRootCommand.CanExecute(null) == true
+            },
+            new()
+            {
+                Name = "ソリューションルートへ移動",
+                Execute = () => ActiveTab?.ActivePane.GoToSolutionRootCommand.Execute(null),
+                CanExecute = () => ActiveTab?.ActivePane.GoToSolutionRootCommand.CanExecute(null) == true
+            },
+            new()
+            {
+                Name = "Gitルートへ移動",
+                Execute = () => ActiveTab?.ActivePane.GoToGitRootCommand.Execute(null),
+                CanExecute = () => ActiveTab?.ActivePane.GoToGitRootCommand.CanExecute(null) == true
+            },
             new()
             {
                 Name = "ワークスペースを保存...",

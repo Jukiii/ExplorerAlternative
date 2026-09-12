@@ -46,6 +46,11 @@ public sealed class NavigationPaneViewModel : ObservableObject
             RecentPlaces.Add(new FavoriteEntry { Name = DisplayNameFor(path), Path = path });
         }
 
+        foreach (var project in _settingsService.Current.RecentProjects)
+        {
+            RecentProjects.Add(project);
+        }
+
         foreach (var pinned in _settingsService.Current.PinnedFiles)
         {
             PinnedFiles.Add(pinned);
@@ -69,6 +74,8 @@ public sealed class NavigationPaneViewModel : ObservableObject
         MoveFavoriteDownCommand = new RelayCommand(p => MoveFavorite((FavoriteEntry)p!, 1));
         RemoveRecentPlaceCommand = new RelayCommand(p => RemoveRecentPlace((FavoriteEntry)p!));
         ClearRecentPlacesCommand = new RelayCommand(_ => ClearRecentPlaces());
+        RemoveRecentProjectCommand = new RelayCommand(p => RemoveRecentProject((FavoriteEntry)p!));
+        ClearRecentProjectsCommand = new RelayCommand(_ => ClearRecentProjects());
         RemovePinnedFileCommand = new RelayCommand(p => RemovePinnedFile((FavoriteEntry)p!));
         RemoveTagCommand = new RelayCommand(p => RemoveTag((TagDefinition)p!));
         LoadWorkspaceCommand = new RelayCommand(p => WorkspaceOpenRequested?.Invoke((string)p!));
@@ -85,6 +92,9 @@ public sealed class NavigationPaneViewModel : ObservableObject
     public ObservableCollection<FavoriteEntry> Favorites { get; } = new();
 
     public ObservableCollection<FavoriteEntry> RecentPlaces { get; } = new();
+
+    /// <summary>仕様書55章「最近開いたプロジェクト」。</summary>
+    public ObservableCollection<FavoriteEntry> RecentProjects { get; } = new();
 
     public ObservableCollection<FavoriteEntry> PinnedFiles { get; } = new();
 
@@ -107,6 +117,10 @@ public sealed class NavigationPaneViewModel : ObservableObject
     public RelayCommand RemoveRecentPlaceCommand { get; }
 
     public RelayCommand ClearRecentPlacesCommand { get; }
+
+    public RelayCommand RemoveRecentProjectCommand { get; }
+
+    public RelayCommand ClearRecentProjectsCommand { get; }
 
     public RelayCommand RemovePinnedFileCommand { get; }
 
@@ -258,6 +272,40 @@ public sealed class NavigationPaneViewModel : ObservableObject
     {
         RecentPlaces.Clear();
         _settingsService.Current.RecentPlaces.Clear();
+        _settingsService.Save();
+    }
+
+    // 仕様書55章：最近開いたプロジェクト。プロジェクトルートへ実際に移動したときに呼び出される。
+    public void RecordRecentProject(string name, string rootPath)
+    {
+        var existing = RecentProjects.FirstOrDefault(e => string.Equals(e.Path, rootPath, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            RecentProjects.Remove(existing);
+        }
+
+        RecentProjects.Insert(0, new FavoriteEntry { Name = name, Path = rootPath });
+
+        while (RecentProjects.Count > MaxRecentPlaces)
+        {
+            RecentProjects.RemoveAt(RecentProjects.Count - 1);
+        }
+
+        _settingsService.Current.RecentProjects = RecentProjects.ToList();
+        _settingsService.Save();
+    }
+
+    private void RemoveRecentProject(FavoriteEntry entry)
+    {
+        RecentProjects.Remove(entry);
+        _settingsService.Current.RecentProjects.RemoveAll(p => p.Path == entry.Path);
+        _settingsService.Save();
+    }
+
+    private void ClearRecentProjects()
+    {
+        RecentProjects.Clear();
+        _settingsService.Current.RecentProjects.Clear();
         _settingsService.Save();
     }
 

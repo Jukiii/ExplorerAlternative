@@ -26,6 +26,7 @@ public sealed class PaneViewModel : ObservableObject
     private readonly IPatchService _patchService;
     private readonly IVersionControlOperationsService _versionControlOperationsService;
     private readonly IDiffService _diffService;
+    private readonly IProjectDetectionService _projectDetectionService;
     private readonly Stack<string> _backStack = new();
     private readonly Stack<string> _forwardStack = new();
 
@@ -41,6 +42,8 @@ public sealed class PaneViewModel : ObservableObject
     private VersionControlInfo _vcsInfo = VersionControlInfo.None;
     private IReadOnlyDictionary<string, string> _vcsStatusByPath = new Dictionary<string, string>();
     private bool _isActive;
+    private ProjectInfo? _currentProject;
+    private string? _solutionRootPath;
 
     public PaneViewModel(
         IFileSystemService fileSystemService,
@@ -51,6 +54,7 @@ public sealed class PaneViewModel : ObservableObject
         IPatchService patchService,
         IVersionControlOperationsService versionControlOperationsService,
         IDiffService diffService,
+        IProjectDetectionService projectDetectionService,
         string initialPath,
         ViewMode initialViewMode)
     {
@@ -62,6 +66,7 @@ public sealed class PaneViewModel : ObservableObject
         _patchService = patchService;
         _versionControlOperationsService = versionControlOperationsService;
         _diffService = diffService;
+        _projectDetectionService = projectDetectionService;
         _currentPath = initialPath;
         _currentViewMode = initialViewMode;
 
@@ -114,6 +119,9 @@ public sealed class PaneViewModel : ObservableObject
         InitRepositoryCommand = new RelayCommand(_ => InitRepository(), _ => VcsInfo.Kind == VersionControlKind.None);
         CloneRepositoryCommand = new RelayCommand(_ => CloneRepository());
         ShowDiffCommand = new RelayCommand(_ => ShowDiff(), _ => VcsInfo.Kind != VersionControlKind.None && PrimarySelectedNode is { IsDirectory: false });
+        GoToProjectRootCommand = new RelayCommand(_ => NavigateTo(CurrentProject!.RootPath), _ => CurrentProject is not null && CurrentProject.RootPath != CurrentPath);
+        GoToSolutionRootCommand = new RelayCommand(_ => NavigateTo(_solutionRootPath!), _ => _solutionRootPath is not null && _solutionRootPath != CurrentPath);
+        GoToGitRootCommand = new RelayCommand(_ => NavigateTo(VcsInfo.RootPath!), _ => VcsInfo.Kind != VersionControlKind.None && VcsInfo.RootPath is not null && VcsInfo.RootPath != CurrentPath);
         HoldForComparisonCommand = new RelayCommand(_ => HoldForComparison(), _ => PrimarySelectedNode is { IsDirectory: false });
         CompareWithHeldCommand = new RelayCommand(
             _ => CompareWithHeld(),
@@ -329,6 +337,22 @@ public sealed class PaneViewModel : ObservableObject
         private set => SetProperty(ref _vcsInfo, value);
     }
 
+    /// <summary>仕様書54章：現在パスまたはその祖先で検出されたプロジェクト。</summary>
+    public ProjectInfo? CurrentProject
+    {
+        get => _currentProject;
+        private set => SetProperty(ref _currentProject, value);
+    }
+
+    /// <summary>仕様書56章：現在パスから見えるプロジェクトが切り替わったときに通知する。</summary>
+    public event Action<ProjectInfo>? ProjectDetected;
+
+    public RelayCommand GoToProjectRootCommand { get; }
+
+    public RelayCommand GoToSolutionRootCommand { get; }
+
+    public RelayCommand GoToGitRootCommand { get; }
+
     public bool IsActive
     {
         get => _isActive;
@@ -412,6 +436,18 @@ public sealed class PaneViewModel : ObservableObject
 
             VcsInfo = IsPathComputerRoot(path) ? VersionControlInfo.None : _versionControlService.Detect(path);
             _vcsStatusByPath = _versionControlService.GetFileStatuses(VcsInfo);
+
+            var previousProjectRoot = CurrentProject?.RootPath;
+            CurrentProject = IsPathComputerRoot(path) ? null : _projectDetectionService.Detect(path);
+            _solutionRootPath = IsPathComputerRoot(path) ? null : _projectDetectionService.FindSolutionRoot(path);
+            GoToProjectRootCommand.RaiseCanExecuteChanged();
+            GoToSolutionRootCommand.RaiseCanExecuteChanged();
+            GoToGitRootCommand.RaiseCanExecuteChanged();
+
+            if (CurrentProject is not null && CurrentProject.RootPath != previousProjectRoot)
+            {
+                ProjectDetected?.Invoke(CurrentProject);
+            }
 
             RootNodes.Clear();
 
