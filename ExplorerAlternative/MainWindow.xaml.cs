@@ -1,15 +1,20 @@
+using System.Collections.Specialized;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using ExplorerAlternative.ViewModels;
 
 namespace ExplorerAlternative;
 
 public partial class MainWindow : Window
 {
+    private static readonly string SourcePaneFormat = "ExplorerAlternative.SourcePane";
+
     private Point? _tabDragStartPoint;
     private bool _tabDragDuplicated;
+    private Point? _fileDragStartPoint;
 
     public MainWindow()
     {
@@ -116,6 +121,163 @@ public partial class MainWindow : Window
             node.IsExpanded = false;
             e.Handled = true;
         }
+    }
+
+    // 仕様書20章：ファイル/フォルダのドラッグ&ドロップによる移動・コピー。
+    // ドラッグ開始位置が実際の行（ListBoxItem/ListViewItem）上でなければ無視する
+    // （空白部分でのマウスドラッグは範囲選択として動作させるため）。
+    private void NodeListBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _fileDragStartPoint = IsOverItemContainer(e.OriginalSource as DependencyObject)
+            ? e.GetPosition(null)
+            : null;
+    }
+
+    private void NodeListBox_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_fileDragStartPoint is null || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        var current = e.GetPosition(null);
+        var diff = _fileDragStartPoint.Value - current;
+
+        if (Math.Abs(diff.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(diff.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        _fileDragStartPoint = null;
+
+        if (sender is not FrameworkElement element || element.DataContext is not PaneViewModel pane ||
+            pane.SelectedNodes.Count == 0)
+        {
+            return;
+        }
+
+        var fileList = new StringCollection();
+        fileList.AddRange(pane.SelectedNodes.Select(n => n.FullPath).ToArray());
+
+        var dataObject = new DataObject();
+        dataObject.SetFileDropList(fileList);
+        dataObject.SetData(SourcePaneFormat, pane);
+
+        DragDrop.DoDragDrop(element, dataObject, DragDropEffects.Copy | DragDropEffects.Move);
+    }
+
+    private static bool IsOverItemContainer(DependencyObject? source)
+    {
+        while (source is not null and not ListBox and not ListView)
+        {
+            if (source is ListBoxItem or ListViewItem)
+            {
+                return true;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
+    }
+
+    private void PaneGrid_DragOver(object sender, DragEventArgs e)
+    {
+        if (sender is not FrameworkElement element || element.DataContext is not PaneViewModel pane ||
+            !e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
+        var sourcePaths = (string[])e.Data.GetData(DataFormats.FileDrop)!;
+        var destinationFolder = ResolveDropTargetFolder(e, element, pane);
+
+        e.Effects = DetermineDropEffect(sourcePaths, destinationFolder, e);
+        e.Handled = true;
+    }
+
+    private void PaneGrid_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is not FrameworkElement element || element.DataContext is not PaneViewModel destinationPane ||
+            !e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            return;
+        }
+
+        var sourcePaths = (string[])e.Data.GetData(DataFormats.FileDrop)!;
+        var destinationFolder = ResolveDropTargetFolder(e, element, destinationPane);
+        var effects = DetermineDropEffect(sourcePaths, destinationFolder, e);
+
+        if (effects == DragDropEffects.None)
+        {
+            return;
+        }
+
+        var isMove = effects == DragDropEffects.Move;
+        var sourcePane = e.Data.GetDataPresent(SourcePaneFormat) ? e.Data.GetData(SourcePaneFormat) as PaneViewModel : null;
+
+        destinationPane.DropFiles(sourcePaths, destinationFolder, isMove);
+
+        if (isMove && sourcePane is not null && !ReferenceEquals(sourcePane, destinationPane))
+        {
+            sourcePane.RefreshCurrentFolder();
+        }
+
+        e.Handled = true;
+    }
+
+    // ドロップ先がフォルダ行であればそのフォルダの中へ、それ以外（ファイル行や空白部分）は
+    // ペインの現在フォルダへドロップしたものとして扱う。
+    private static string ResolveDropTargetFolder(DragEventArgs e, FrameworkElement relativeTo, PaneViewModel pane)
+    {
+        var position = e.GetPosition(relativeTo);
+        var hit = VisualTreeHelper.HitTest(relativeTo, position)?.VisualHit;
+        var node = FindNodeFromVisual(hit);
+
+        return node is { IsDirectory: true } ? node.FullPath : pane.CurrentPath;
+    }
+
+    private static FileSystemNodeViewModel? FindNodeFromVisual(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is FrameworkElement { DataContext: FileSystemNodeViewModel node })
+            {
+                return node;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return null;
+    }
+
+    // Ctrl=コピー、Shift=移動、指定なしは同一ドライブなら移動・異なるドライブならコピー
+    // （Windows標準エクスプローラーの慣習に合わせる）。
+    private static DragDropEffects DetermineDropEffect(IReadOnlyList<string> sourcePaths, string destinationFolder, DragEventArgs e)
+    {
+        if (sourcePaths.Count == 0)
+        {
+            return DragDropEffects.None;
+        }
+
+        if ((e.KeyStates & DragDropKeyStates.ControlKey) != 0)
+        {
+            return DragDropEffects.Copy;
+        }
+
+        if ((e.KeyStates & DragDropKeyStates.ShiftKey) != 0)
+        {
+            return DragDropEffects.Move;
+        }
+
+        var destinationRoot = System.IO.Path.GetPathRoot(destinationFolder);
+        var sameDrive = string.Equals(System.IO.Path.GetPathRoot(sourcePaths[0]), destinationRoot, StringComparison.OrdinalIgnoreCase);
+
+        return sameDrive ? DragDropEffects.Move : DragDropEffects.Copy;
     }
 
     private void AddressEditTextBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)

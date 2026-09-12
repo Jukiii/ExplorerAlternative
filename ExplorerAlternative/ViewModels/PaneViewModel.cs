@@ -529,6 +529,59 @@ public sealed class PaneViewModel : ObservableObject
         }
     }
 
+    // 仕様書20章「移動」に対応するドラッグ&ドロップ本体。ドロップ先フォルダの内部/子孫への
+    // 移動・コピーや、同じフォルダへの無意味なドロップは黙って無視する（既存フォルダへの
+    // File.Move/Directory.Move例外を避けるための最小限の防御）。
+    public void DropFiles(IReadOnlyList<string> sourcePaths, string destinationFolder, bool isMove)
+    {
+        var targets = sourcePaths
+            .Where(source => !IsNoOpOrInvalidDrop(source, destinationFolder))
+            .ToList();
+
+        if (targets.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            if (isMove)
+            {
+                _fileSystemService.Move(targets, destinationFolder);
+            }
+            else
+            {
+                _fileSystemService.Copy(targets, destinationFolder);
+            }
+
+            RefreshCurrentFolder();
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+    }
+
+    private static bool IsNoOpOrInvalidDrop(string sourcePath, string destinationFolder)
+    {
+        var normalizedSource = Path.TrimEndingDirectorySeparator(sourcePath);
+        var normalizedDestination = Path.TrimEndingDirectorySeparator(destinationFolder);
+
+        if (string.Equals(normalizedSource, normalizedDestination, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var sourceParent = Path.GetDirectoryName(normalizedSource);
+        if (string.Equals(sourceParent, normalizedDestination, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // フォルダを自分自身の子孫へ移動・コピーすることはできない。
+        return normalizedDestination.StartsWith(normalizedSource + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
     public void RunExternalTool(ExternalToolDefinition tool)
     {
         var target = PrimarySelectedNode;

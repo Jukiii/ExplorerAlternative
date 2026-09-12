@@ -322,7 +322,7 @@
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
-                                <Grid AllowDrop="True">
+                                <Grid AllowDrop="True" DragOver="PaneGrid_DragOver" Drop="PaneGrid_Drop">
                                     <!-- 階層表示 -->
                                     <ListBox x:Name="TreeListBox" ItemsSource="{Binding VisibleNodes}"
                                              SelectionMode="Extended" BorderThickness="0" Padding="6"
@@ -330,6 +330,8 @@
                                              SelectionChanged="TreeListBox_SelectionChanged"
                                              MouseDoubleClick="NodeListBox_MouseDoubleClick"
                                              PreviewKeyDown="TreeListBox_PreviewKeyDown"
+                                             PreviewMouseLeftButtonDown="NodeListBox_PreviewMouseLeftButtonDown"
+                                             PreviewMouseMove="NodeListBox_PreviewMouseMove"
                                              ContextMenu="{StaticResource NodeContextMenu}">
                                         <ListBox.Style>
                                             <Style TargetType="ListBox">
@@ -362,6 +364,8 @@
                                               SelectionChanged="TreeListBox_SelectionChanged"
                                               MouseDoubleClick="NodeListBox_MouseDoubleClick"
                                               PreviewKeyDown="NodeListBox_PreviewKeyDown"
+                                              PreviewMouseLeftButtonDown="NodeListBox_PreviewMouseLeftButtonDown"
+                                              PreviewMouseMove="NodeListBox_PreviewMouseMove"
                                               ContextMenu="{StaticResource NodeContextMenu}">
                                         <ListView.Style>
                                             <Style TargetType="ListView">
