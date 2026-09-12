@@ -43,6 +43,8 @@ public partial class App : Application
         _terminalService = terminalService;
 
         var workspaceService = new WorkspaceService(settingsService);
+        var patchService = new PatchService();
+        var sshService = new SshService();
 
         var mainWindowViewModel = new MainWindowViewModel(
             fileSystemService,
@@ -52,7 +54,9 @@ public partial class App : Application
             settingsService,
             terminalService,
             workspaceService,
-            themeService);
+            themeService,
+            patchService,
+            sshService);
 
         var mainWindow = new MainWindow { DataContext = mainWindowViewModel };
         MainWindow = mainWindow;

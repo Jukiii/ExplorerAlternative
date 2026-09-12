@@ -22,6 +22,7 @@ public sealed class PaneViewModel : ObservableObject
     private readonly IVersionControlService _versionControlService;
     private readonly IExternalToolService _externalToolService;
     private readonly ISettingsService _settingsService;
+    private readonly IPatchService _patchService;
     private readonly Stack<string> _backStack = new();
     private readonly Stack<string> _forwardStack = new();
 
@@ -39,6 +40,7 @@ public sealed class PaneViewModel : ObservableObject
         IVersionControlService versionControlService,
         IExternalToolService externalToolService,
         ISettingsService settingsService,
+        IPatchService patchService,
         string initialPath,
         ViewMode initialViewMode)
     {
@@ -47,6 +49,7 @@ public sealed class PaneViewModel : ObservableObject
         _versionControlService = versionControlService;
         _externalToolService = externalToolService;
         _settingsService = settingsService;
+        _patchService = patchService;
         _currentPath = initialPath;
         _currentViewMode = initialViewMode;
 
@@ -69,6 +72,8 @@ public sealed class PaneViewModel : ObservableObject
         GoBackCommand = new RelayCommand(_ => GoBack(), _ => CanGoBack);
         GoForwardCommand = new RelayCommand(_ => GoForward(), _ => CanGoForward);
         ToggleTagCommand = new RelayCommand(p => ToggleTag((TagDefinition)p!), _ => SelectedNodes.Count > 0);
+        CreatePatchCommand = new RelayCommand(_ => CreatePatch(), _ => VcsInfo.Kind != VersionControlKind.None);
+        ApplyPatchCommand = new RelayCommand(_ => ApplyPatch(), _ => VcsInfo.Kind != VersionControlKind.None);
 
         LoadPath(_currentPath);
     }
@@ -120,6 +125,10 @@ public sealed class PaneViewModel : ObservableObject
     public RelayCommand GoForwardCommand { get; }
 
     public RelayCommand ToggleTagCommand { get; }
+
+    public RelayCommand CreatePatchCommand { get; }
+
+    public RelayCommand ApplyPatchCommand { get; }
 
     /// <summary>コンテキストメニューの「タグ」サブメニューに表示する、登録済みタグ一覧。</summary>
     public IReadOnlyList<TagDefinition> AvailableTags => _settingsService.Current.TagDefinitions;
@@ -261,6 +270,8 @@ public sealed class PaneViewModel : ObservableObject
             RebuildBreadcrumb();
 
             VcsInfo = IsPathComputerRoot(path) ? VersionControlInfo.None : _versionControlService.Detect(path);
+            CreatePatchCommand.RaiseCanExecuteChanged();
+            ApplyPatchCommand.RaiseCanExecuteChanged();
 
             PathChanged?.Invoke(path);
         }
@@ -684,6 +695,55 @@ public sealed class PaneViewModel : ObservableObject
         if (_dialogService.ShowBulkRename(viewModel))
         {
             BulkRename(targets, viewModel.Pattern);
+        }
+    }
+
+    // 仕様書14.1章：現在の変更内容（git diff / svn diff）からPatchファイルを作成する。
+    private void CreatePatch()
+    {
+        var defaultName = VcsInfo.Kind == VersionControlKind.Git ? "changes.patch" : "changes.diff";
+        var outputPath = _dialogService.ShowSaveFileDialog(
+            "Patchの作成",
+            "Patchファイル (*.patch;*.diff)|*.patch;*.diff|すべてのファイル (*.*)|*.*",
+            defaultName);
+
+        if (outputPath is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _patchService.CreatePatch(VcsInfo, outputPath);
+            _dialogService.ShowInfo($"Patchを作成しました。\n{outputPath}");
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+    }
+
+    // 仕様書14.2章：Patchファイルを選択して現在のGit/SVN管理フォルダへ適用する。
+    private void ApplyPatch()
+    {
+        var patchPath = _dialogService.ShowOpenFileDialog(
+            "Patchの適用",
+            "Patchファイル (*.patch;*.diff)|*.patch;*.diff|すべてのファイル (*.*)|*.*");
+
+        if (patchPath is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _patchService.ApplyPatch(VcsInfo, patchPath);
+            RefreshCurrentFolder();
+            _dialogService.ShowInfo("Patchを適用しました。");
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
         }
     }
 }

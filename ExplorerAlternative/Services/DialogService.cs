@@ -2,6 +2,7 @@ using System.Windows;
 using ExplorerAlternative.Services.Abstractions;
 using ExplorerAlternative.ViewModels;
 using ExplorerAlternative.Views;
+using Microsoft.Win32;
 
 namespace ExplorerAlternative.Services;
 
@@ -82,6 +83,24 @@ public sealed class DialogService : IDialogService
     public bool ShowBulkRename(BulkRenameViewModel bulkRenameViewModel)
     {
         var window = new BulkRenameDialog(bulkRenameViewModel) { Owner = Application.Current?.MainWindow };
+        return window.ShowDialog() == true;
+    }
+
+    public string? ShowSaveFileDialog(string title, string filter, string defaultFileName)
+    {
+        var dialog = new SaveFileDialog { Title = title, Filter = filter, FileName = defaultFileName };
+        return dialog.ShowDialog(Application.Current?.MainWindow) == true ? dialog.FileName : null;
+    }
+
+    public string? ShowOpenFileDialog(string title, string filter)
+    {
+        var dialog = new OpenFileDialog { Title = title, Filter = filter };
+        return dialog.ShowDialog(Application.Current?.MainWindow) == true ? dialog.FileName : null;
+    }
+
+    public bool ShowSshConnection(SshConnectionViewModel sshConnectionViewModel)
+    {
+        var window = new SshConnectionDialog(sshConnectionViewModel) { Owner = Application.Current?.MainWindow };
         return window.ShowDialog() == true;
     }
 }

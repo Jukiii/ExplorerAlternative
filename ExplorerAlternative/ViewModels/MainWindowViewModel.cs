@@ -21,6 +21,8 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly ISettingsService _settingsService;
     private readonly IWorkspaceService _workspaceService;
     private readonly IThemeService _themeService;
+    private readonly IPatchService _patchService;
+    private readonly ISshService _sshService;
 
     private TabViewModel? _activeTab;
     private bool _isPreviewOpen;
@@ -34,7 +36,9 @@ public sealed class MainWindowViewModel : ObservableObject
         ISettingsService settingsService,
         IPowerShellTerminalService terminalService,
         IWorkspaceService workspaceService,
-        IThemeService themeService)
+        IThemeService themeService,
+        IPatchService patchService,
+        ISshService sshService)
     {
         _fileSystemService = fileSystemService;
         _dialogService = dialogService;
@@ -43,6 +47,8 @@ public sealed class MainWindowViewModel : ObservableObject
         _settingsService = settingsService;
         _workspaceService = workspaceService;
         _themeService = themeService;
+        _patchService = patchService;
+        _sshService = sshService;
 
         NavigationPane = new NavigationPaneViewModel(settingsService, NavigateActiveTo);
         Terminal = new TerminalViewModel(terminalService, settingsService.Current.Terminal.SyncByDefault);
@@ -65,6 +71,7 @@ public sealed class MainWindowViewModel : ObservableObject
         SplitVerticalCommand = new RelayCommand(_ => SplitPane(Orientation.Vertical), _ => ActiveTab?.CanSplit == true);
         ClosePaneCommand = new RelayCommand(_ => ClosePane(), _ => ActiveTab?.CanClosePane == true);
         SetActivePaneCommand = new RelayCommand(p => SetActivePane((PaneViewModel)p!));
+        OpenSshConnectionCommand = new RelayCommand(_ => OpenSshConnection());
 
         AddTab(GetDefaultInitialPath());
     }
@@ -110,6 +117,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public RelayCommand ClosePaneCommand { get; }
 
     public RelayCommand SetActivePaneCommand { get; }
+
+    public RelayCommand OpenSshConnectionCommand { get; }
 
     public TabViewModel? ActiveTab
     {
@@ -198,6 +207,7 @@ public sealed class MainWindowViewModel : ObservableObject
             _versionControlService,
             _externalToolService,
             _settingsService,
+            _patchService,
             initialPath,
             initialViewMode);
     }
@@ -280,6 +290,33 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         var settingsViewModel = new SettingsViewModel(_settingsService, _dialogService, _themeService);
         _dialogService.ShowSettings(settingsViewModel);
+    }
+
+    // 仕様書15章：SSH接続情報を入力し、統合ターミナル(9章)上でssh接続を確立する。
+    private void OpenSshConnection()
+    {
+        var sshViewModel = new SshConnectionViewModel();
+        if (!_dialogService.ShowSshConnection(sshViewModel))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(sshViewModel.Host))
+        {
+            _dialogService.ShowError("接続先ホストを入力してください。");
+            return;
+        }
+
+        try
+        {
+            var command = _sshService.BuildConnectCommand(sshViewModel.ToProfile());
+            Terminal.IsVisible = true;
+            Terminal.SendRawCommand(command);
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
     }
 
     private void AddCurrentFolderToFavorites()

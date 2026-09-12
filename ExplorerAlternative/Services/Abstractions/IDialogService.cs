@@ -29,4 +29,13 @@ public interface IDialogService
 
     /// <summary>一括名前変更ダイアログ（仕様書21章）を表示する。OKで確定された場合はtrueを返す。</summary>
     bool ShowBulkRename(BulkRenameViewModel bulkRenameViewModel);
+
+    /// <summary>ファイル保存ダイアログ（仕様書14.1章のPatch作成先選択などに使用）を表示する。キャンセル時はnull。</summary>
+    string? ShowSaveFileDialog(string title, string filter, string defaultFileName);
+
+    /// <summary>ファイル選択ダイアログ（仕様書14.2章のPatch適用元選択などに使用）を表示する。キャンセル時はnull。</summary>
+    string? ShowOpenFileDialog(string title, string filter);
+
+    /// <summary>SSH接続ダイアログ（仕様書15章）を表示する。「接続」で確定された場合はtrueを返す。</summary>
+    bool ShowSshConnection(SshConnectionViewModel sshConnectionViewModel);
 }

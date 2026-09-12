@@ -72,6 +72,18 @@ public sealed class TerminalViewModel : ObservableObject
         }
     }
 
+    /// <summary>外部（SSH接続など）から生成したコマンドを、ユーザー入力と同様の見た目でターミナルへ送信する。</summary>
+    public void SendRawCommand(string command)
+    {
+        if (!_terminalService.IsRunning)
+        {
+            _terminalService.Start();
+        }
+
+        AppendOutput($"> {command}");
+        _terminalService.SendCommand(command);
+    }
+
     private void Send()
     {
         AppendOutput($"> {InputText}");

@@ -56,6 +56,10 @@
                     </Style>
                 </MenuItem.ItemContainerStyle>
             </MenuItem>
+            <Separator />
+            <!-- 仕様書14章：Git/SVN管理下のフォルダでのみ有効になる（CanExecuteでVcsInfo.Kindを判定）。 -->
+            <MenuItem Header="Patchを作成..." Command="{Binding CreatePatchCommand}" />
+            <MenuItem Header="Patchを適用..." Command="{Binding ApplyPatchCommand}" />
         </ContextMenu>
     </Window.Resources>
 
@@ -101,6 +105,8 @@
                         <MenuItem Header="ワークスペースを開く"
                                   Command="{Binding LoadWorkspaceCommand}"
                                   CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}" />
+                        <Separator />
+                        <MenuItem Header="SSH接続..." Command="{Binding OpenSshConnectionCommand}" />
                         <Separator />
                         <MenuItem Header="設定..." Command="{Binding OpenSettingsCommand}" />
                         <MenuItem Header="ショートカット一覧" Command="{Binding OpenCheatSheetCommand}" />
