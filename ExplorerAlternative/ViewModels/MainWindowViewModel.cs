@@ -33,6 +33,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IGlobalHotkeyService _globalHotkeyService;
     private readonly IJumpListService _jumpListService;
     private readonly IProjectDetectionService _projectDetectionService;
+    private readonly Func<IFolderWatcherService> _folderWatcherServiceFactory;
 
     private TabViewModel? _activeTab;
     private PreviewViewModel? _currentPreview;
@@ -61,6 +62,7 @@ public sealed class MainWindowViewModel : ObservableObject
         IGlobalHotkeyService globalHotkeyService,
         IJumpListService jumpListService,
         IProjectDetectionService projectDetectionService,
+        Func<IFolderWatcherService> folderWatcherServiceFactory,
         string? startupPath = null)
     {
         _fileSystemService = fileSystemService;
@@ -81,6 +83,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _globalHotkeyService = globalHotkeyService;
         _jumpListService = jumpListService;
         _projectDetectionService = projectDetectionService;
+        _folderWatcherServiceFactory = folderWatcherServiceFactory;
 
         NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, dialogService, NavigateActiveTo, OpenFile);
         NavigationPane.WorkspaceOpenRequested += name => LoadWorkspaceByName((Window)Application.Current!.MainWindow!, name);
@@ -276,6 +279,11 @@ public sealed class MainWindowViewModel : ObservableObject
         var index = Tabs.IndexOf(tab);
         Tabs.Remove(tab);
 
+        foreach (var pane in tab.Panes)
+        {
+            pane.Dispose();
+        }
+
         if (ReferenceEquals(ActiveTab, tab))
         {
             ActiveTab = Tabs[Math.Min(index, Tabs.Count - 1)];
@@ -347,6 +355,7 @@ public sealed class MainWindowViewModel : ObservableObject
             _versionControlOperationsService,
             _diffService,
             _projectDetectionService,
+            _folderWatcherServiceFactory,
             initialPath,
             initialViewMode);
 
@@ -426,7 +435,9 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
-        tab.RemovePane(tab.ActivePane);
+        var paneToClose = tab.ActivePane;
+        tab.RemovePane(paneToClose);
+        paneToClose.Dispose();
         TerminalHost.SyncCurrentDirectory(tab.ActivePane.CurrentPath);
     }
 
@@ -915,6 +926,14 @@ public sealed class MainWindowViewModel : ObservableObject
         window.Left = state.WindowLeft;
         window.Top = state.WindowTop;
         NavigationPane.IsCollapsed = state.NavigationPaneCollapsed;
+
+        foreach (var oldTab in Tabs)
+        {
+            foreach (var pane in oldTab.Panes)
+            {
+                pane.Dispose();
+            }
+        }
 
         Tabs.Clear();
 

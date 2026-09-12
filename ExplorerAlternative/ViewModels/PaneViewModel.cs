@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Threading;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
 using ExplorerAlternative.Services;
@@ -14,7 +15,7 @@ namespace ExplorerAlternative.ViewModels;
 /// メインペイン1枠分のビューモデル（仕様書4章・19章）。将来の分割ペイン対応のため、
 /// タブは複数のPaneViewModelを保持できる構造にしている（Phase 1では1タブ1ペイン）。
 /// </summary>
-public sealed class PaneViewModel : ObservableObject
+public sealed class PaneViewModel : ObservableObject, IDisposable
 {
     private const string DropEffectFormat = "Preferred DropEffect";
 
@@ -27,8 +28,11 @@ public sealed class PaneViewModel : ObservableObject
     private readonly IVersionControlOperationsService _versionControlOperationsService;
     private readonly IDiffService _diffService;
     private readonly IProjectDetectionService _projectDetectionService;
+    private readonly IFolderWatcherService _folderWatcherService;
     private readonly Stack<string> _backStack = new();
     private readonly Stack<string> _forwardStack = new();
+    private DispatcherTimer? _externalChangeDebounceTimer;
+    private bool _isDisposed;
 
     // 仕様書25章「比較対象として保持」。複数タブ・複数ペインをまたいで1つだけ保持すればよいため、
     // 専用のサービスを新設せずインスタンス間で共有するstaticフィールドとしている。
@@ -55,6 +59,7 @@ public sealed class PaneViewModel : ObservableObject
         IVersionControlOperationsService versionControlOperationsService,
         IDiffService diffService,
         IProjectDetectionService projectDetectionService,
+        Func<IFolderWatcherService> folderWatcherServiceFactory,
         string initialPath,
         ViewMode initialViewMode)
     {
@@ -67,6 +72,8 @@ public sealed class PaneViewModel : ObservableObject
         _versionControlOperationsService = versionControlOperationsService;
         _diffService = diffService;
         _projectDetectionService = projectDetectionService;
+        _folderWatcherService = folderWatcherServiceFactory();
+        _folderWatcherService.Changed += OnFolderChangedExternally;
         _currentPath = initialPath;
         _currentViewMode = initialViewMode;
 
@@ -436,6 +443,7 @@ public sealed class PaneViewModel : ObservableObject
 
             VcsInfo = IsPathComputerRoot(path) ? VersionControlInfo.None : _versionControlService.Detect(path);
             _vcsStatusByPath = _versionControlService.GetFileStatuses(VcsInfo);
+            _folderWatcherService.SetPath(IsPathComputerRoot(path) ? null : path);
 
             var previousProjectRoot = CurrentProject?.RootPath;
             CurrentProject = IsPathComputerRoot(path) ? null : _projectDetectionService.Detect(path);
@@ -489,6 +497,48 @@ public sealed class PaneViewModel : ObservableObject
 
     /// <summary>現在フォルダを再読込する（履歴には積まない）。</summary>
     public void RefreshCurrentFolder() => LoadPath(CurrentPath);
+
+    // 仕様書64章：FileSystemWatcherの通知は背景スレッドから来るため、UIスレッドへ
+    // マーシャリングした上で、短時間に連続する変化をまとめるためデバウンスしてから更新する。
+    private void OnFolderChangedExternally()
+    {
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            _externalChangeDebounceTimer ??= CreateDebounceTimer();
+            _externalChangeDebounceTimer.Stop();
+            _externalChangeDebounceTimer.Start();
+        }));
+    }
+
+    private DispatcherTimer CreateDebounceTimer()
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            RefreshCurrentFolder();
+        };
+        return timer;
+    }
+
+    /// <summary>タブ/ペインを閉じる際に呼び出し、フォルダ監視を解放する。</summary>
+    public void Dispose()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _isDisposed = true;
+        _externalChangeDebounceTimer?.Stop();
+        _folderWatcherService.Changed -= OnFolderChangedExternally;
+        _folderWatcherService.Dispose();
+    }
 
     private static bool IsPathComputerRoot(string path) => string.IsNullOrEmpty(path);
 
