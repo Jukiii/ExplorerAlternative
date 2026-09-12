@@ -49,6 +49,7 @@ public partial class App : Application
         var patchService = new PatchService();
         var sshService = new SshService();
         var sshCredentialStore = new WindowsCredentialSshStore();
+        var folderScanService = new FolderScanService();
         var versionControlOperationsService = new VersionControlOperationsService();
         var diffService = new DiffService();
 
@@ -65,7 +66,8 @@ public partial class App : Application
             sshService,
             versionControlOperationsService,
             diffService,
-            sshCredentialStore);
+            sshCredentialStore,
+            folderScanService);
 
         _mainWindowViewModel = mainWindowViewModel;
 

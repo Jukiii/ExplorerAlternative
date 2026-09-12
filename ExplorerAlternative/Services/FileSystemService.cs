@@ -48,7 +48,8 @@ public sealed class FileSystemService : IFileSystemService
                     FullPath = info.FullName,
                     IsDirectory = true,
                     LastModified = SafeGetLastWriteTime(info),
-                    Created = SafeGetCreationTime(info)
+                    Created = SafeGetCreationTime(info),
+                    IsHidden = IsHiddenOrSystem(info.Attributes, info.Name)
                 });
             }
 
@@ -62,7 +63,8 @@ public sealed class FileSystemService : IFileSystemService
                     IsDirectory = false,
                     SizeBytes = SafeGetLength(info),
                     LastModified = SafeGetLastWriteTime(info),
-                    Created = SafeGetCreationTime(info)
+                    Created = SafeGetCreationTime(info),
+                    IsHidden = IsHiddenOrSystem(info.Attributes, info.Name)
                 });
             }
 
@@ -293,4 +295,9 @@ public sealed class FileSystemService : IFileSystemService
             return null;
         }
     }
+
+    // 仕様書49章の例（.git, .gitignore, .env, .vscode等）はWindowsのHidden属性を
+    // 持たないことが多いため、Windows属性に加えてドット始まりの名前も隠しファイルとして扱う。
+    private static bool IsHiddenOrSystem(FileAttributes attributes, string name) =>
+        attributes.HasFlag(FileAttributes.Hidden) || attributes.HasFlag(FileAttributes.System) || name.StartsWith('.');
 }

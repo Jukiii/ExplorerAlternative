@@ -68,6 +68,7 @@ public sealed class PaneViewModel : ObservableObject
         NavigateToCommand = new RelayCommand(p => NavigateTo((string)p!));
         GoUpCommand = new RelayCommand(_ => GoUp());
         SetViewModeCommand = new RelayCommand(p => CurrentViewMode = (ViewMode)p!);
+        ToggleShowHiddenFilesCommand = new RelayCommand(_ => ShowHiddenFiles = !ShowHiddenFiles);
         ToggleExpandCommand = new RelayCommand(p => ((FileSystemNodeViewModel)p!).IsExpanded ^= true);
         OpenCommand = new RelayCommand(_ => OpenSelection(), _ => PrimarySelectedNode is not null);
         OpenInNewTabCommand = new RelayCommand(_ => OpenInNewTab(), _ => PrimarySelectedNode is { IsDirectory: true });
@@ -268,6 +269,26 @@ public sealed class PaneViewModel : ObservableObject
         set => SetProperty(ref _currentViewMode, value);
     }
 
+    /// <summary>仕様書49章「隠しファイル」。設定に永続化し、切り替え時に再読み込みする。</summary>
+    public bool ShowHiddenFiles
+    {
+        get => _settingsService.Current.View.ShowHiddenFiles;
+        set
+        {
+            if (_settingsService.Current.View.ShowHiddenFiles == value)
+            {
+                return;
+            }
+
+            _settingsService.Current.View.ShowHiddenFiles = value;
+            _settingsService.Save();
+            OnPropertyChanged();
+            RefreshCurrentFolder();
+        }
+    }
+
+    public RelayCommand ToggleShowHiddenFilesCommand { get; }
+
     public bool IsAddressEditing
     {
         get => _isAddressEditing;
@@ -378,7 +399,9 @@ public sealed class PaneViewModel : ObservableObject
 
             RootNodes.Clear();
 
+            var showHidden = _settingsService.Current.View.ShowHiddenFiles;
             foreach (var entry in entries
+                .Where(e => showHidden || !e.IsHidden)
                 .OrderByDescending(e => e.IsDirectory)
                 .ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase))
             {

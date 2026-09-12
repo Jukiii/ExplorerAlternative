@@ -132,7 +132,9 @@ public sealed class FileSystemNodeViewModel : ObservableObject
 
         try
         {
+            var showHidden = _settingsService.Current.View.ShowHiddenFiles;
             var entries = _fileSystemService.GetChildren(FullPath)
+                .Where(e => showHidden || !e.IsHidden)
                 .OrderByDescending(e => e.IsDirectory)
                 .ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase);
 

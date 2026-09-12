@@ -17,6 +17,7 @@
         <conv:SyncLabelConverter x:Key="SyncLabelConverter" />
         <conv:EnumEqualsConverter x:Key="EnumEqualsConverter" />
         <conv:TagAssignedConverter x:Key="TagAssignedConverter" />
+        <conv:ByteSizeConverter x:Key="ByteSizeConverter" />
 
         <!-- 既定のウィンドウ外観 -->
         <Style TargetType="Window">

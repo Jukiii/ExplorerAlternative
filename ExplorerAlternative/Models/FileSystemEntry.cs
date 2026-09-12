@@ -13,4 +13,7 @@ public sealed class FileSystemEntry
     public DateTime? LastModified { get; init; }
 
     public DateTime? Created { get; init; }
+
+    /// <summary>仕様書49章：Hidden/Systemいずれかの属性を持つか。</summary>
+    public bool IsHidden { get; init; }
 }

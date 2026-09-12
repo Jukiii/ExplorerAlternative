@@ -123,6 +123,8 @@
         <KeyBinding Key="Left" Modifiers="Alt" Command="{Binding DataContext.GoBackCommand, ElementName=RootWindow}" />
         <KeyBinding Key="Right" Modifiers="Alt" Command="{Binding DataContext.GoForwardCommand, ElementName=RootWindow}" />
         <KeyBinding Key="L" Modifiers="Control" Command="{Binding DataContext.ActiveTab.ActivePane.BeginAddressEditCommand, ElementName=RootWindow}" />
+        <!-- 仕様書12章：Ctrl+Fで検索。 -->
+        <KeyBinding Key="F" Modifiers="Control" Command="{Binding DataContext.OpenSearchCommand, ElementName=RootWindow}" />
         <KeyBinding Key="F6" Command="{Binding DataContext.ActiveTab.ActivePane.BeginAddressEditCommand, ElementName=RootWindow}" />
         <!-- 仕様書10章：タブ操作のショートカット。 -->
         <KeyBinding Key="T" Modifiers="Control" Command="{Binding DataContext.AddTabCommand, ElementName=RootWindow}" />
@@ -152,6 +154,9 @@
                         <MenuItem Header="ペインを閉じる" Command="{Binding ClosePaneCommand}" />
                         <MenuItem Header="ペインを入れ替え" Command="{Binding ActiveTab.SwapPanesCommand}" />
                         <MenuItem Header="Git/SVN情報ペインを表示/非表示" Command="{Binding ToggleVcsPaneCommand}" />
+                        <Separator />
+                        <MenuItem Header="検索... (Ctrl+F)" Command="{Binding OpenSearchCommand}" />
+                        <MenuItem Header="ディスク解析..." Command="{Binding OpenDiskAnalysisCommand}" />
                         <Separator />
                         <MenuItem Header="ワークスペースを保存"
                                   Command="{Binding SaveWorkspaceCommand}"
@@ -237,6 +242,12 @@
                                       Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:ViewMode.Tree}" />
                     </StackPanel>
                 </Border>
+
+                <!-- 仕様書49章：隠しファイルの表示/非表示切替。 -->
+                <ToggleButton DockPanel.Dock="Right" Content="隠しファイル" Padding="10,4" Margin="6,0,0,0"
+                              ToolTip="隠しファイル（. で始まる名前 / Hidden・System属性）の表示切替"
+                              IsChecked="{Binding ShowHiddenFiles, Mode=OneWay}"
+                              Command="{Binding ToggleShowHiddenFilesCommand}" />
 
                 <!-- 仕様書11章：アドレスバーは残りの横幅いっぱいに伸ばす（DockPanelの最後の子要素にして埋める）。 -->
                 <Grid Margin="10,0,0,0">

@@ -110,6 +110,18 @@ public sealed class DialogService : IDialogService
         window.ShowDialog();
     }
 
+    public void ShowSearch(SearchViewModel searchViewModel)
+    {
+        var window = new SearchDialog(searchViewModel) { Owner = Application.Current?.MainWindow };
+        window.Show();
+    }
+
+    public void ShowDiskAnalysis(DiskAnalysisViewModel diskAnalysisViewModel)
+    {
+        var window = new DiskAnalysisDialog(diskAnalysisViewModel) { Owner = Application.Current?.MainWindow };
+        window.Show();
+    }
+
     public void ShowProperties(PropertiesViewModel propertiesViewModel)
     {
         var window = new PropertiesDialog(propertiesViewModel) { Owner = Application.Current?.MainWindow };

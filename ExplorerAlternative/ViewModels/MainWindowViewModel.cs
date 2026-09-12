@@ -26,6 +26,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IVersionControlOperationsService _versionControlOperationsService;
     private readonly IDiffService _diffService;
     private readonly ISshCredentialStore _sshCredentialStore;
+    private readonly IFolderScanService _folderScanService;
 
     private TabViewModel? _activeTab;
     private PreviewViewModel? _currentPreview;
@@ -46,7 +47,8 @@ public sealed class MainWindowViewModel : ObservableObject
         ISshService sshService,
         IVersionControlOperationsService versionControlOperationsService,
         IDiffService diffService,
-        ISshCredentialStore sshCredentialStore)
+        ISshCredentialStore sshCredentialStore,
+        IFolderScanService folderScanService)
     {
         _fileSystemService = fileSystemService;
         _dialogService = dialogService;
@@ -60,6 +62,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _versionControlOperationsService = versionControlOperationsService;
         _diffService = diffService;
         _sshCredentialStore = sshCredentialStore;
+        _folderScanService = folderScanService;
 
         NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, NavigateActiveTo, OpenFile);
         NavigationPane.WorkspaceOpenRequested += name => LoadWorkspaceByName((Window)Application.Current!.MainWindow!, name);
@@ -86,6 +89,8 @@ public sealed class MainWindowViewModel : ObservableObject
         SetActivePaneCommand = new RelayCommand(p => SetActivePane((PaneViewModel)p!));
         OpenSshConnectionCommand = new RelayCommand(_ => OpenSshConnection());
         ToggleVcsPaneCommand = new RelayCommand(_ => IsVcsPaneVisible = !IsVcsPaneVisible);
+        OpenSearchCommand = new RelayCommand(_ => OpenSearch());
+        OpenDiskAnalysisCommand = new RelayCommand(_ => OpenDiskAnalysis());
 
         AddTab(GetDefaultInitialPath());
     }
@@ -137,6 +142,12 @@ public sealed class MainWindowViewModel : ObservableObject
     public RelayCommand OpenSshConnectionCommand { get; }
 
     public RelayCommand ToggleVcsPaneCommand { get; }
+
+    /// <summary>仕様書12章「検索」（Ctrl+F）。</summary>
+    public RelayCommand OpenSearchCommand { get; }
+
+    /// <summary>仕様書38章・58章・59章：巨大ファイル/重複ファイル/空フォルダ検索。</summary>
+    public RelayCommand OpenDiskAnalysisCommand { get; }
 
     private bool _isVcsPaneVisible = true;
 
@@ -460,6 +471,31 @@ public sealed class MainWindowViewModel : ObservableObject
         var profilesViewModel = new SshProfilesViewModel(_settingsService, _dialogService, _sshService, _sshCredentialStore);
         profilesViewModel.RequestConnect += (command, password) => TerminalHost.SendRawCommand(command, password);
         _dialogService.ShowSshProfiles(profilesViewModel);
+    }
+
+    // 仕様書12章：現在フォルダ以下を検索する。
+    private void OpenSearch()
+    {
+        var pane = ActiveTab?.ActivePane;
+        if (pane is null || pane.IsAtComputerRoot)
+        {
+            return;
+        }
+
+        var searchViewModel = new SearchViewModel(pane.CurrentPath, _folderScanService, _dialogService);
+        searchViewModel.NavigateRequested += folder => pane.NavigateTo(folder);
+        _dialogService.ShowSearch(searchViewModel);
+    }
+
+    // 仕様書38章・58章・59章：巨大ファイル/重複ファイル/空フォルダ検索。
+    private void OpenDiskAnalysis()
+    {
+        var initialPath = ActiveTab?.ActivePane is { IsAtComputerRoot: false } pane
+            ? pane.CurrentPath
+            : GetDefaultInitialPath();
+
+        var viewModel = new DiskAnalysisViewModel(initialPath, _folderScanService, _fileSystemService, _dialogService);
+        _dialogService.ShowDiskAnalysis(viewModel);
     }
 
     private void AddCurrentFolderToFavorites()

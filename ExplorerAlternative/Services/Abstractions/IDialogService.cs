@@ -42,6 +42,12 @@ public interface IDialogService
     /// <summary>SSH接続の登録・管理ダイアログ（仕様書44章）を表示する。</summary>
     void ShowSshProfiles(SshProfilesViewModel sshProfilesViewModel);
 
+    /// <summary>検索ダイアログ（仕様書12章）を非モーダルで表示する。</summary>
+    void ShowSearch(SearchViewModel searchViewModel);
+
+    /// <summary>ディスク解析ダイアログ（仕様書38章・58章・59章）を表示する。</summary>
+    void ShowDiskAnalysis(DiskAnalysisViewModel diskAnalysisViewModel);
+
     /// <summary>プロパティダイアログ（仕様書48章）を表示する。</summary>
     void ShowProperties(PropertiesViewModel propertiesViewModel);
 
