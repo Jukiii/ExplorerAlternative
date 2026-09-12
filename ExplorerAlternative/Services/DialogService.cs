@@ -78,4 +78,10 @@ public sealed class DialogService : IDialogService
         var window = new SettingsWindow(settingsViewModel) { Owner = Application.Current?.MainWindow };
         window.ShowDialog();
     }
+
+    public bool ShowBulkRename(BulkRenameViewModel bulkRenameViewModel)
+    {
+        var window = new BulkRenameDialog(bulkRenameViewModel) { Owner = Application.Current?.MainWindow };
+        return window.ShowDialog() == true;
+    }
 }

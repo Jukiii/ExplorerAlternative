@@ -26,4 +26,7 @@ public interface IDialogService
     void ShowCheatSheet();
 
     void ShowSettings(SettingsViewModel settingsViewModel);
+
+    /// <summary>一括名前変更ダイアログ（仕様書21章）を表示する。OKで確定された場合はtrueを返す。</summary>
+    bool ShowBulkRename(BulkRenameViewModel bulkRenameViewModel);
 }

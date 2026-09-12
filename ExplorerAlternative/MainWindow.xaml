@@ -20,6 +20,7 @@
             <MenuItem Header="貼り付け" Command="{Binding PasteCommand}" />
             <Separator />
             <MenuItem Header="名前の変更" Command="{Binding RenameCommand}" />
+            <MenuItem Header="一括名前変更..." Command="{Binding BulkRenameCommand}" />
             <MenuItem Header="削除" Command="{Binding DeleteCommand}" />
             <Separator />
             <MenuItem Header="外部ツール" ItemsSource="{Binding ExternalTools}">
