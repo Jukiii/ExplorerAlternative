@@ -122,6 +122,12 @@ public sealed class DialogService : IDialogService
         window.Show();
     }
 
+    public void ShowCommandPalette(CommandPaletteViewModel commandPaletteViewModel)
+    {
+        var window = new CommandPaletteDialog(commandPaletteViewModel) { Owner = Application.Current?.MainWindow };
+        window.ShowDialog();
+    }
+
     public void ShowProperties(PropertiesViewModel propertiesViewModel)
     {
         var window = new PropertiesDialog(propertiesViewModel) { Owner = Application.Current?.MainWindow };

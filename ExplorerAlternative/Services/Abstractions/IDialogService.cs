@@ -48,6 +48,9 @@ public interface IDialogService
     /// <summary>ディスク解析ダイアログ（仕様書38章・58章・59章）を表示する。</summary>
     void ShowDiskAnalysis(DiskAnalysisViewModel diskAnalysisViewModel);
 
+    /// <summary>コマンドパレット（仕様書46章）を表示する。</summary>
+    void ShowCommandPalette(CommandPaletteViewModel commandPaletteViewModel);
+
     /// <summary>プロパティダイアログ（仕様書48章）を表示する。</summary>
     void ShowProperties(PropertiesViewModel propertiesViewModel);
 

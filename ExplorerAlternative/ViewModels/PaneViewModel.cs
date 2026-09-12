@@ -69,6 +69,7 @@ public sealed class PaneViewModel : ObservableObject
         GoUpCommand = new RelayCommand(_ => GoUp());
         SetViewModeCommand = new RelayCommand(p => CurrentViewMode = (ViewMode)p!);
         ToggleShowHiddenFilesCommand = new RelayCommand(_ => ShowHiddenFiles = !ShowHiddenFiles);
+        RefreshCommand = new RelayCommand(_ => RefreshCurrentFolder());
         ToggleExpandCommand = new RelayCommand(p => ((FileSystemNodeViewModel)p!).IsExpanded ^= true);
         OpenCommand = new RelayCommand(_ => OpenSelection(), _ => PrimarySelectedNode is not null);
         OpenInNewTabCommand = new RelayCommand(_ => OpenInNewTab(), _ => PrimarySelectedNode is { IsDirectory: true });
@@ -288,6 +289,9 @@ public sealed class PaneViewModel : ObservableObject
     }
 
     public RelayCommand ToggleShowHiddenFilesCommand { get; }
+
+    /// <summary>仕様書46章のコマンドパレット例「Refresh」。F5でも実行できる。</summary>
+    public RelayCommand RefreshCommand { get; }
 
     public bool IsAddressEditing
     {

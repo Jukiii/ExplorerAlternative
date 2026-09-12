@@ -125,6 +125,11 @@
         <KeyBinding Key="L" Modifiers="Control" Command="{Binding DataContext.ActiveTab.ActivePane.BeginAddressEditCommand, ElementName=RootWindow}" />
         <!-- 仕様書12章：Ctrl+Fで検索。 -->
         <KeyBinding Key="F" Modifiers="Control" Command="{Binding DataContext.OpenSearchCommand, ElementName=RootWindow}" />
+        <!-- 仕様書36章「Ctrl+Dでブックマーク（お気に入り）に追加」。 -->
+        <KeyBinding Key="D" Modifiers="Control" Command="{Binding DataContext.AddFavoriteCommand, ElementName=RootWindow}" />
+        <!-- 仕様書46章：コマンドパレット。 -->
+        <KeyBinding Key="P" Modifiers="Control+Shift" Command="{Binding DataContext.OpenCommandPaletteCommand, ElementName=RootWindow}" />
+        <KeyBinding Key="F5" Command="{Binding DataContext.ActiveTab.ActivePane.RefreshCommand, ElementName=RootWindow}" />
         <KeyBinding Key="F6" Command="{Binding DataContext.ActiveTab.ActivePane.BeginAddressEditCommand, ElementName=RootWindow}" />
         <!-- 仕様書10章：タブ操作のショートカット。 -->
         <KeyBinding Key="T" Modifiers="Control" Command="{Binding DataContext.AddTabCommand, ElementName=RootWindow}" />
@@ -157,6 +162,7 @@
                         <Separator />
                         <MenuItem Header="検索... (Ctrl+F)" Command="{Binding OpenSearchCommand}" />
                         <MenuItem Header="ディスク解析..." Command="{Binding OpenDiskAnalysisCommand}" />
+                        <MenuItem Header="コマンドパレット... (Ctrl+Shift+P)" Command="{Binding OpenCommandPaletteCommand}" />
                         <Separator />
                         <MenuItem Header="ワークスペースを保存"
                                   Command="{Binding SaveWorkspaceCommand}"

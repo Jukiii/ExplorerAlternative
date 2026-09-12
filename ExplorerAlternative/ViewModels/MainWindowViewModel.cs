@@ -91,6 +91,7 @@ public sealed class MainWindowViewModel : ObservableObject
         ToggleVcsPaneCommand = new RelayCommand(_ => IsVcsPaneVisible = !IsVcsPaneVisible);
         OpenSearchCommand = new RelayCommand(_ => OpenSearch());
         OpenDiskAnalysisCommand = new RelayCommand(_ => OpenDiskAnalysis());
+        OpenCommandPaletteCommand = new RelayCommand(_ => OpenCommandPalette());
 
         AddTab(GetDefaultInitialPath());
     }
@@ -148,6 +149,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     /// <summary>仕様書38章・58章・59章：巨大ファイル/重複ファイル/空フォルダ検索。</summary>
     public RelayCommand OpenDiskAnalysisCommand { get; }
+
+    /// <summary>仕様書46章「コマンドパレット」（Ctrl+Shift+P）。</summary>
+    public RelayCommand OpenCommandPaletteCommand { get; }
 
     private bool _isVcsPaneVisible = true;
 
@@ -496,6 +500,70 @@ public sealed class MainWindowViewModel : ObservableObject
 
         var viewModel = new DiskAnalysisViewModel(initialPath, _folderScanService, _fileSystemService, _dialogService);
         _dialogService.ShowDiskAnalysis(viewModel);
+    }
+
+    // 仕様書46章：主要操作を検索・実行するコマンドパレット。
+    // 各エントリはクロージャとして持つため、パレットを開いた後にActiveTab/ActivePaneが
+    // 変わっても常に「実行時点」の状態を参照する。
+    private void OpenCommandPalette()
+    {
+        var entries = new List<CommandPaletteEntry>
+        {
+            new() { Name = "検索を開く (Ctrl+F)", Execute = OpenSearch },
+            new() { Name = "ディスク解析を開く", Execute = OpenDiskAnalysis },
+            new() { Name = "設定を開く", Execute = () => OpenSettingsCommand.Execute(null) },
+            new() { Name = "ショートカット一覧", Execute = () => OpenCheatSheetCommand.Execute(null) },
+            new() { Name = "新しいタブ (Ctrl+T)", Execute = () => AddTabCommand.Execute(null) },
+            new() { Name = "タブを閉じる (Ctrl+W)", Execute = () => CloseTabCommand.Execute(ActiveTab), CanExecute = () => CloseTabCommand.CanExecute(ActiveTab) },
+            new() { Name = "右に分割", Execute = () => SplitHorizontalCommand.Execute(null), CanExecute = () => SplitHorizontalCommand.CanExecute(null) },
+            new() { Name = "下に分割", Execute = () => SplitVerticalCommand.Execute(null), CanExecute = () => SplitVerticalCommand.CanExecute(null) },
+            new() { Name = "ペインを閉じる", Execute = () => ClosePaneCommand.Execute(null), CanExecute = () => ClosePaneCommand.CanExecute(null) },
+            new() { Name = "ペインを入れ替え", Execute = () => ActiveTab?.SwapPanesCommand.Execute(null), CanExecute = () => ActiveTab?.SwapPanesCommand.CanExecute(null) == true },
+            new() { Name = "隠しファイルの表示切替", Execute = () => ActiveTab?.ActivePane.ToggleShowHiddenFilesCommand.Execute(null) },
+            new() { Name = "最新の情報に更新 (F5)", Execute = () => ActiveTab?.ActivePane.RefreshCommand.Execute(null) },
+            new() { Name = "ターミナルの表示/非表示 (Ctrl+@)", Execute = ToggleTerminal },
+            new() { Name = "プレビュー (Space)", Execute = () => TogglePreviewCommand.Execute(null) },
+            new() { Name = "Git/SVN情報ペインの表示/非表示", Execute = () => ToggleVcsPaneCommand.Execute(null) },
+            new() { Name = "現在の場所をブックマークに追加 (Ctrl+D)", Execute = () => AddFavoriteCommand.Execute(null) },
+            new()
+            {
+                Name = "Patchを作成...",
+                Execute = () => ActiveTab?.ActivePane.CreatePatchCommand.Execute(null),
+                CanExecute = () => ActiveTab?.ActivePane.CreatePatchCommand.CanExecute(null) == true
+            },
+            new()
+            {
+                Name = "Patchを適用...",
+                Execute = () => ActiveTab?.ActivePane.ApplyPatchCommand.Execute(null),
+                CanExecute = () => ActiveTab?.ActivePane.ApplyPatchCommand.CanExecute(null) == true
+            },
+            new()
+            {
+                Name = "変更をステージ",
+                Execute = () => ActiveTab?.ActivePane.StageAllCommand.Execute(null),
+                CanExecute = () => ActiveTab?.ActivePane.StageAllCommand.CanExecute(null) == true
+            },
+            new()
+            {
+                Name = "コミット...",
+                Execute = () => ActiveTab?.ActivePane.CommitCommand.Execute(null),
+                CanExecute = () => ActiveTab?.ActivePane.CommitCommand.CanExecute(null) == true
+            },
+            new() { Name = "SSH接続の管理...", Execute = OpenSshConnection },
+            new()
+            {
+                Name = "ワークスペースを保存...",
+                Execute = () => SaveWorkspaceCommand.Execute(Application.Current?.MainWindow)
+            },
+            new()
+            {
+                Name = "ワークスペースを開く...",
+                Execute = () => LoadWorkspaceCommand.Execute(Application.Current?.MainWindow)
+            }
+        };
+
+        var paletteViewModel = new CommandPaletteViewModel(entries);
+        _dialogService.ShowCommandPalette(paletteViewModel);
     }
 
     private void AddCurrentFolderToFavorites()

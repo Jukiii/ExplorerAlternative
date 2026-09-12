@@ -25,5 +25,9 @@ public static class ShortcutRegistry
         new("タブを閉じる", "Ctrl + W"),
         new("次のタブへ切替", "Ctrl + Tab"),
         new("タブを複製", "Ctrl + ドラッグ"),
+        new("検索", "Ctrl + F"),
+        new("コマンドパレット", "Ctrl + Shift + P"),
+        new("現在の場所をブックマークに追加", "Ctrl + D"),
+        new("最新の情報に更新", "F5"),
     };
 }
