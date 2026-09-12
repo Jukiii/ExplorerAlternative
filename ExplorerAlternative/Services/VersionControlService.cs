@@ -7,15 +7,12 @@ using ExplorerAlternative.Services.Abstractions;
 namespace ExplorerAlternative.Services;
 
 /// <summary>
-/// Git/SVN管理情報の判定（仕様書12章）。
-/// 仕様書の文言どおり「現在のフォルダまたはその下位階層」を探索対象とする
-/// （通常のリポジトリルート探索のように祖先フォルダは辿らない）。
-/// 探索コストを抑えるため下位階層の探索深度には上限を設ける。
+/// Git/SVN管理情報の判定（仕様書12章・20章）。
+/// 仕様書20章「現在パスから親方向へ探索」のとおり、現在のフォルダまたはその祖先
+/// フォルダに管理情報が存在する場合にのみ表示する（下位階層は探索しない）。
 /// </summary>
 public sealed class VersionControlService : IVersionControlService
 {
-    private const int MaxSearchDepth = 3;
-
     public VersionControlInfo Detect(string path)
     {
         if (!Directory.Exists(path))
@@ -23,13 +20,13 @@ public sealed class VersionControlService : IVersionControlService
             return VersionControlInfo.None;
         }
 
-        var gitRoot = FindMarker(path, ".git", MaxSearchDepth);
+        var gitRoot = FindMarkerUpward(path, ".git");
         if (gitRoot is not null)
         {
             return BuildGitInfo(gitRoot);
         }
 
-        var svnRoot = FindMarker(path, ".svn", MaxSearchDepth);
+        var svnRoot = FindMarkerUpward(path, ".svn");
         if (svnRoot is not null)
         {
             return BuildSvnInfo(svnRoot);
@@ -38,38 +35,31 @@ public sealed class VersionControlService : IVersionControlService
         return VersionControlInfo.None;
     }
 
-    private static string? FindMarker(string path, string markerName, int remainingDepth)
+    private static string? FindMarkerUpward(string path, string markerName)
     {
-        try
-        {
-            if (Directory.Exists(Path.Combine(path, markerName)) || File.Exists(Path.Combine(path, markerName)))
-            {
-                return path;
-            }
+        var current = path;
 
-            if (remainingDepth <= 0)
+        while (!string.IsNullOrEmpty(current))
+        {
+            try
+            {
+                if (Directory.Exists(Path.Combine(current, markerName)) || File.Exists(Path.Combine(current, markerName)))
+                {
+                    return current;
+                }
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
             {
                 return null;
             }
 
-            foreach (var subDirectory in Directory.EnumerateDirectories(path))
+            var parent = Directory.GetParent(current);
+            if (parent is null)
             {
-                var name = Path.GetFileName(subDirectory);
-                if (name is ".git" or ".svn")
-                {
-                    continue;
-                }
-
-                var found = FindMarker(subDirectory, markerName, remainingDepth - 1);
-                if (found is not null)
-                {
-                    return found;
-                }
+                break;
             }
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-        {
-            return null;
+
+            current = parent.FullName;
         }
 
         return null;

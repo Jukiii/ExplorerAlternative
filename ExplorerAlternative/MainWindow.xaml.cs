@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using ExplorerAlternative.ViewModels;
 
 namespace ExplorerAlternative;
@@ -361,6 +362,26 @@ public partial class MainWindow : Window
     private void TerminalOutputTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         (sender as TextBox)?.ScrollToEnd();
+    }
+
+    // ターミナルを表示した際、すぐに入力できるよう入力欄へフォーカスする。
+    private void TerminalInputTextBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is not TextBox textBox || e.NewValue is not true)
+        {
+            return;
+        }
+
+        textBox.Focus();
+    }
+
+    // ターミナル部分（出力欄を含む）をクリックしたときに入力欄へフォーカスする。
+    // 出力欄（TextBox）自身がクリック時に自分へフォーカスを奪う処理を持っているため、
+    // 同じ入力処理の中でFocus()を呼んでもすぐに上書きされてしまう。
+    // Dispatcher.BeginInvokeで、クリックの既定処理が完了した後に改めてフォーカスする。
+    private void TerminalPanel_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        Dispatcher.BeginInvoke(new Action(() => TerminalInputTextBox.Focus()), DispatcherPriority.Input);
     }
 
     // 仕様書17章：タブストリップでの切替。

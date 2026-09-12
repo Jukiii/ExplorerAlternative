@@ -778,8 +778,15 @@
              存在しない"TerminalHost.IsVisible"を探しにいって解決に失敗する
              （＝表示状態がトグルに追従しなくなる不具合の原因だった）。
              そのためDataContextの切り替えは内側のGridで行う。 -->
+        <!-- クリックでどこからでも（出力欄を含め）入力欄へフォーカスできるようにする。
+             出力欄（TextBox）はクリック時に自分自身へフォーカスを奪う内部処理を持ち、
+             かつその処理でイベントをHandled済みにするため、通常のバブリング段階の
+             ハンドラーでは出力欄からのクリックを検知できない。トンネリング段階
+             （PreviewMouseLeftButtonDown）で検知しつつ、実際のフォーカス移動は
+             Dispatcher.BeginInvokeで出力欄自身の既定処理が終わった後に行う。 -->
         <Border Grid.Row="3" Background="{DynamicResource TerminalBackgroundBrush}"
-                Visibility="{Binding TerminalHost.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                Visibility="{Binding TerminalHost.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}"
+                PreviewMouseLeftButtonDown="TerminalPanel_MouseLeftButtonDown">
             <Grid Height="230" DataContext="{Binding TerminalHost}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -845,9 +852,10 @@
                     <DockPanel DataContext="{Binding ActiveTerminal}">
                         <TextBlock DockPanel.Dock="Left" Text="&gt;" Foreground="{DynamicResource TerminalAccentBrush}"
                                    FontFamily="Cascadia Mono,Consolas" Margin="0,0,6,0" />
-                        <TextBox Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
+                        <TextBox x:Name="TerminalInputTextBox" Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
                                  FontFamily="Cascadia Mono,Consolas" Background="Transparent" BorderThickness="0"
-                                 Foreground="{DynamicResource TerminalForegroundBrush}" CaretBrush="{DynamicResource TerminalForegroundBrush}">
+                                 Foreground="{DynamicResource TerminalForegroundBrush}" CaretBrush="{DynamicResource TerminalForegroundBrush}"
+                                 IsVisibleChanged="TerminalInputTextBox_IsVisibleChanged">
                             <TextBox.InputBindings>
                                 <KeyBinding Key="Return" Command="{Binding SendCommand}" />
                             </TextBox.InputBindings>
