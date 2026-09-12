@@ -94,6 +94,9 @@ public sealed class PaneViewModel : ObservableObject
 
     public event Action<string>? PathChanged;
 
+    /// <summary>選択中ノードが変わったときに発火する（Quick Look追従用、仕様書11章）。</summary>
+    public event Action? SelectionChanged;
+
     /// <summary>Git/SVN操作コマンドを統合ターミナル（9章）で実行してもらうための橋渡し。</summary>
     public event Action<string>? RunTerminalCommandRequested;
 
@@ -238,6 +241,7 @@ public sealed class PaneViewModel : ObservableObject
         }
 
         PrimarySelectedNode = SelectedNodes.Count == 1 ? SelectedNodes[0] : SelectedNodes.LastOrDefault();
+        SelectionChanged?.Invoke();
     }
 
     /// <summary>通常のナビゲーション（フォルダを開く・パンくず・お気に入り等）。戻る/進む履歴に積む。</summary>

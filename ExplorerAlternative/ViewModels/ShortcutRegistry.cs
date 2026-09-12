@@ -13,6 +13,8 @@ public static class ShortcutRegistry
         new("戻る", "Alt + ←"),
         new("進む", "Alt + →"),
         new("プレビュー", "Space"),
+        new("プレビューを閉じる", "Esc（プレビューウィンドウ上）"),
+        new("プレビューで前後移動", "← / →（プレビューウィンドウ上）"),
         new("アドレスバーを編集", "Ctrl + L / F6"),
         new("開く", "Enter"),
         new("名前の変更", "F2"),

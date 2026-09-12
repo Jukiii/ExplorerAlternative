@@ -13,6 +13,7 @@ public sealed class TabViewModel : ObservableObject
     private const int MaxPanes = 2;
 
     private readonly Dictionary<PaneViewModel, Action<string>> _pathHandlers = new();
+    private readonly Dictionary<PaneViewModel, Action> _selectionHandlers = new();
 
     private string _header;
     private int _activePaneIndex;
@@ -49,6 +50,9 @@ public sealed class TabViewModel : ObservableObject
 
     /// <summary>アクティブペインの現在フォルダが変わったときに発火する（ターミナル同期用）。</summary>
     public event Action<string>? ActivePanePathChanged;
+
+    /// <summary>アクティブペインの選択が変わったときに発火する（Quick Look追従用、仕様書11章）。</summary>
+    public event Action? ActivePaneSelectionChanged;
 
     public ObservableCollection<PaneViewModel> Panes { get; } = new();
 
@@ -106,6 +110,10 @@ public sealed class TabViewModel : ObservableObject
         _pathHandlers[pane] = Handler;
         pane.PathChanged += Handler;
 
+        void SelectionHandler() => OnPaneSelectionChanged(pane);
+        _selectionHandlers[pane] = SelectionHandler;
+        pane.SelectionChanged += SelectionHandler;
+
         _activePaneIndex = Panes.Count - 1;
         OnPropertyChanged(nameof(ActivePaneIndex));
         OnPropertyChanged(nameof(ActivePane));
@@ -128,6 +136,12 @@ public sealed class TabViewModel : ObservableObject
         {
             pane.PathChanged -= handler;
             _pathHandlers.Remove(pane);
+        }
+
+        if (_selectionHandlers.TryGetValue(pane, out var selectionHandler))
+        {
+            pane.SelectionChanged -= selectionHandler;
+            _selectionHandlers.Remove(pane);
         }
 
         var index = Panes.IndexOf(pane);
@@ -175,6 +189,14 @@ public sealed class TabViewModel : ObservableObject
         if (ReferenceEquals(pane, ActivePane))
         {
             ActivePanePathChanged?.Invoke(path);
+        }
+    }
+
+    private void OnPaneSelectionChanged(PaneViewModel pane)
+    {
+        if (ReferenceEquals(pane, ActivePane))
+        {
+            ActivePaneSelectionChanged?.Invoke();
         }
     }
 

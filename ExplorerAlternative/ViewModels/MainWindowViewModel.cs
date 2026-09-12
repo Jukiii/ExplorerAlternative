@@ -26,7 +26,9 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IVersionControlOperationsService _versionControlOperationsService;
 
     private TabViewModel? _activeTab;
-    private bool _isPreviewOpen;
+    private PreviewViewModel? _currentPreview;
+    private List<FileSystemNodeViewModel> _previewNodes = new();
+    private int _previewIndex = -1;
     private int _tabCounter;
 
     public MainWindowViewModel(
@@ -140,6 +142,7 @@ public sealed class MainWindowViewModel : ObservableObject
             if (_activeTab is not null)
             {
                 _activeTab.ActivePanePathChanged -= OnActivePanePathChanged;
+                _activeTab.ActivePaneSelectionChanged -= OnActivePaneSelectionChanged;
             }
 
             _activeTab = value;
@@ -147,6 +150,7 @@ public sealed class MainWindowViewModel : ObservableObject
             if (_activeTab is not null)
             {
                 _activeTab.ActivePanePathChanged += OnActivePanePathChanged;
+                _activeTab.ActivePaneSelectionChanged += OnActivePaneSelectionChanged;
                 Terminal.SyncCurrentDirectory(_activeTab.ActivePane.CurrentPath);
             }
 
@@ -343,24 +347,86 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    // 仕様書11章・13章：Quick Look。開いている間は選択変更に追従するが、
+    // 固定（15章）中は追従を止める。← / →（13章）はプレビューを開いた時点の
+    // 一覧（VisibleNodes）内で前後移動する。
     private void TogglePreview()
     {
-        if (_isPreviewOpen)
+        if (_currentPreview is not null)
         {
-            _dialogService.ClosePreview();
-            _isPreviewOpen = false;
+            ClosePreviewInternal();
             return;
         }
 
-        var node = ActiveTab?.ActivePane.PrimarySelectedNode;
-        if (node is null)
+        var pane = ActiveTab?.ActivePane;
+        var node = pane?.PrimarySelectedNode;
+        if (pane is null || node is null)
         {
             return;
         }
 
-        var preview = PreviewViewModel.Create(node, _fileSystemService, _settingsService.Current.TextFileExtensions);
+        _previewNodes = pane.VisibleNodes.ToList();
+        _previewIndex = _previewNodes.IndexOf(node);
+        ShowPreviewAtCurrentIndex();
+    }
+
+    private void ShowPreviewAtCurrentIndex()
+    {
+        if (_previewIndex < 0 || _previewIndex >= _previewNodes.Count)
+        {
+            return;
+        }
+
+        var wasPinned = _currentPreview?.IsPinned ?? false;
+
+        var preview = PreviewViewModel.Create(_previewNodes[_previewIndex], _fileSystemService, _versionControlService, _settingsService);
+        preview.IsPinned = wasPinned;
+        preview.RequestPrevious = () => MovePreview(-1);
+        preview.RequestNext = () => MovePreview(1);
+        preview.RequestClose = ClosePreviewInternal;
+
+        _currentPreview = preview;
         _dialogService.ShowPreview(preview);
-        _isPreviewOpen = true;
+    }
+
+    private void MovePreview(int offset)
+    {
+        var newIndex = _previewIndex + offset;
+        if (newIndex < 0 || newIndex >= _previewNodes.Count)
+        {
+            return;
+        }
+
+        _previewIndex = newIndex;
+        ShowPreviewAtCurrentIndex();
+    }
+
+    private void ClosePreviewInternal()
+    {
+        _dialogService.ClosePreview();
+        _currentPreview = null;
+        _previewNodes = new List<FileSystemNodeViewModel>();
+        _previewIndex = -1;
+    }
+
+    // 仕様書11章：プレビューを開いたまま選択を変更すると、固定（15章）中でない限り追従する。
+    private void OnActivePaneSelectionChanged()
+    {
+        if (_currentPreview is null || _currentPreview.IsPinned)
+        {
+            return;
+        }
+
+        var pane = ActiveTab?.ActivePane;
+        var node = pane?.PrimarySelectedNode;
+        if (pane is null || node is null)
+        {
+            return;
+        }
+
+        _previewNodes = pane.VisibleNodes.ToList();
+        _previewIndex = _previewNodes.IndexOf(node);
+        ShowPreviewAtCurrentIndex();
     }
 
     private void OpenSettings()
