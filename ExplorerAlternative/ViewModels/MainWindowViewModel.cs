@@ -59,6 +59,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         AddTabCommand = new RelayCommand(_ => AddTab(GetDefaultInitialPath()));
         CloseTabCommand = new RelayCommand(p => CloseTab((TabViewModel)p!), _ => Tabs.Count > 1);
+        NextTabCommand = new RelayCommand(_ => ActivateNextTab(), _ => Tabs.Count > 1);
         GoUpCommand = new RelayCommand(_ => ActiveTab?.ActivePane.GoUpCommand.Execute(null));
         GoBackCommand = new RelayCommand(_ => ActiveTab?.ActivePane.GoBackCommand.Execute(null), _ => ActiveTab?.ActivePane.CanGoBack == true);
         GoForwardCommand = new RelayCommand(_ => ActiveTab?.ActivePane.GoForwardCommand.Execute(null), _ => ActiveTab?.ActivePane.CanGoForward == true);
@@ -89,6 +90,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public RelayCommand AddTabCommand { get; }
 
     public RelayCommand CloseTabCommand { get; }
+
+    public RelayCommand NextTabCommand { get; }
 
     public RelayCommand GoUpCommand { get; }
 
@@ -184,6 +187,12 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        if (tab.IsPinned)
+        {
+            _dialogService.ShowInfo("固定されたタブです。閉じるには先に固定を解除してください。");
+            return;
+        }
+
         var index = Tabs.IndexOf(tab);
         Tabs.Remove(tab);
 
@@ -191,6 +200,18 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             ActiveTab = Tabs[Math.Min(index, Tabs.Count - 1)];
         }
+    }
+
+    // 仕様書10章：Ctrl+Tabでのタブ切替。
+    private void ActivateNextTab()
+    {
+        if (Tabs.Count <= 1 || ActiveTab is null)
+        {
+            return;
+        }
+
+        var index = Tabs.IndexOf(ActiveTab);
+        ActiveTab = Tabs[(index + 1) % Tabs.Count];
     }
 
     private void NavigateActiveTo(string path)
@@ -236,6 +257,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         pane.RunTerminalCommandRequested += RunTerminalCommand;
         pane.PinFileRequested += node => NavigationPane.AddPinnedFile(node.Name, node.FullPath);
+        pane.OpenInNewTabRequested += OpenPathInNewTab;
         return pane;
     }
 
@@ -245,6 +267,26 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         Terminal.IsVisible = true;
         Terminal.SendRawCommand(command);
+    }
+
+    // 仕様書10章「ここでフォルダを新しいタブで開く」・37章「スマートタブ」。
+    // ReuseExisting/Autoでは、指定パスを表示中のタブが既にあればそれをアクティブにする
+    // （どちらも同じ「重複検出して再利用する」挙動とし、Autoは将来の判定拡張の余地として区別している）。
+    private void OpenPathInNewTab(string path)
+    {
+        if (_settingsService.Current.Tabs.DuplicateBehavior != DuplicateTabBehavior.AlwaysNew)
+        {
+            var existing = Tabs.FirstOrDefault(t =>
+                t.Panes.Any(p => string.Equals(p.CurrentPath, path, StringComparison.OrdinalIgnoreCase)));
+
+            if (existing is not null)
+            {
+                ActiveTab = existing;
+                return;
+            }
+        }
+
+        AddTab(path);
     }
 
     private void DuplicateTab(TabViewModel source)
@@ -399,6 +441,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 Header = t.Header,
                 ActivePaneIndex = t.ActivePaneIndex,
                 SplitOrientation = t.SplitOrientation,
+                IsPinned = t.IsPinned,
                 Panes = t.Panes.Select(p => new PaneState
                 {
                     CurrentPath = p.CurrentPath,
@@ -454,7 +497,11 @@ public sealed class MainWindowViewModel : ObservableObject
                 : new List<PaneState> { new() { CurrentPath = GetDefaultInitialPath() } };
 
             var firstPane = CreatePane(paneStates[0].CurrentPath, paneStates[0].ViewMode);
-            var tab = new TabViewModel(firstPane, tabState.Header) { SplitOrientation = tabState.SplitOrientation };
+            var tab = new TabViewModel(firstPane, tabState.Header)
+            {
+                SplitOrientation = tabState.SplitOrientation,
+                IsPinned = tabState.IsPinned
+            };
 
             for (var i = 1; i < paneStates.Count; i++)
             {

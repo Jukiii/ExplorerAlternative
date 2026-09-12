@@ -23,6 +23,9 @@ public sealed class AppSettings
 
     public List<WorkspaceState> Workspaces { get; set; } = new();
 
+    /// <summary>仕様書37章「スマートタブ」。</summary>
+    public TabSettings Tabs { get; set; } = new();
+
     /// <summary>ピン留めファイル（仕様書51章）。</summary>
     public List<FavoriteEntry> PinnedFiles { get; set; } = new();
 

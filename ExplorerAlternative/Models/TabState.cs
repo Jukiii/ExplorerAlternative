@@ -14,4 +14,7 @@ public sealed class TabState
     public int ActivePaneIndex { get; set; }
 
     public Orientation SplitOrientation { get; set; } = Orientation.Horizontal;
+
+    /// <summary>仕様書10章「タブ固定」。</summary>
+    public bool IsPinned { get; set; }
 }

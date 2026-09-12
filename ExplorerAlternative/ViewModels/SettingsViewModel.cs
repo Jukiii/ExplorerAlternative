@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
 using ExplorerAlternative.Services.Abstractions;
@@ -16,6 +17,8 @@ public sealed class SettingsViewModel : ObservableObject
     private readonly IThemeService _themeService;
     private string _newExtension = string.Empty;
     private AppTheme _selectedTheme;
+    private double _activePaneHighlightOpacity;
+    private DuplicateTabBehavior _duplicateTabBehavior;
 
     public SettingsViewModel(ISettingsService settingsService, IDialogService dialogService, IThemeService themeService)
     {
@@ -23,6 +26,8 @@ public sealed class SettingsViewModel : ObservableObject
         _dialogService = dialogService;
         _themeService = themeService;
         _selectedTheme = settingsService.Current.Appearance.Theme;
+        _activePaneHighlightOpacity = settingsService.Current.Appearance.ActivePaneHighlightOpacity;
+        _duplicateTabBehavior = settingsService.Current.Tabs.DuplicateBehavior;
 
         foreach (var extension in settingsService.Current.TextFileExtensions)
         {
@@ -39,7 +44,39 @@ public sealed class SettingsViewModel : ObservableObject
         AddExternalToolCommand = new RelayCommand(_ => AddExternalTool());
         RemoveExternalToolCommand = new RelayCommand(p => ExternalTools.Remove((ExternalToolDefinition)p!));
         SetThemeCommand = new RelayCommand(p => SelectedTheme = (AppTheme)p!);
+        SetDuplicateTabBehaviorCommand = new RelayCommand(p => DuplicateTabBehavior = (DuplicateTabBehavior)p!);
         SaveCommand = new RelayCommand(_ => Save());
+    }
+
+    /// <summary>仕様書9章「アクティブペインの背景強調度」。変更と同時に即座に適用・保存する。</summary>
+    public double ActivePaneHighlightOpacity
+    {
+        get => _activePaneHighlightOpacity;
+        set
+        {
+            if (SetProperty(ref _activePaneHighlightOpacity, value))
+            {
+                Application.Current.Resources["ActivePaneHighlightOpacity"] = value;
+                _settingsService.Current.Appearance.ActivePaneHighlightOpacity = value;
+                _settingsService.Save();
+            }
+        }
+    }
+
+    public RelayCommand SetDuplicateTabBehaviorCommand { get; }
+
+    /// <summary>仕様書37章「スマートタブ」。変更と同時に即座に保存する。</summary>
+    public DuplicateTabBehavior DuplicateTabBehavior
+    {
+        get => _duplicateTabBehavior;
+        set
+        {
+            if (SetProperty(ref _duplicateTabBehavior, value))
+            {
+                _settingsService.Current.Tabs.DuplicateBehavior = value;
+                _settingsService.Save();
+            }
+        }
     }
 
     /// <summary>仕様書63章「外観 &gt; Light/Dark/System」。選択と同時に即座に適用・保存する。</summary>

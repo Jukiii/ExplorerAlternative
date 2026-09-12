@@ -17,12 +17,35 @@ public sealed class TabViewModel : ObservableObject
     private string _header;
     private int _activePaneIndex;
     private Orientation _splitOrientation = Orientation.Horizontal;
+    private bool _isPinned;
 
     public TabViewModel(PaneViewModel initialPane, string header)
     {
         _header = header;
         AddPane(initialPane);
+
+        TogglePinCommand = new RelayCommand(_ => IsPinned = !IsPinned);
+        SwapPanesCommand = new RelayCommand(_ => SwapPanes(), _ => Panes.Count == 2);
     }
+
+    public RelayCommand TogglePinCommand { get; }
+
+    public RelayCommand SwapPanesCommand { get; }
+
+    /// <summary>仕様書10章「タブ固定」。固定中のタブは閉じるボタンの代わりにピンアイコンを表示する。</summary>
+    public bool IsPinned
+    {
+        get => _isPinned;
+        set
+        {
+            if (SetProperty(ref _isPinned, value))
+            {
+                OnPropertyChanged(nameof(PinMenuHeader));
+            }
+        }
+    }
+
+    public string PinMenuHeader => IsPinned ? "固定を解除" : "固定";
 
     /// <summary>アクティブペインの現在フォルダが変わったときに発火する（ターミナル同期用）。</summary>
     public event Action<string>? ActivePanePathChanged;
@@ -91,6 +114,7 @@ public sealed class TabViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowPaneBorders));
         UpdateActiveFlags();
         RaiseGridLayoutChanged();
+        SwapPanesCommand?.RaiseCanExecuteChanged();
     }
 
     public void RemovePane(PaneViewModel pane)
@@ -121,6 +145,20 @@ public sealed class TabViewModel : ObservableObject
         OnPropertyChanged(nameof(CanClosePane));
         OnPropertyChanged(nameof(ShowPaneBorders));
         RaiseGridLayoutChanged();
+        SwapPanesCommand.RaiseCanExecuteChanged();
+    }
+
+    // 仕様書8章「左右/上下入れ替え」。アクティブペインは同じPaneViewModelを指し続けるよう追従させる。
+    private void SwapPanes()
+    {
+        if (Panes.Count != 2)
+        {
+            return;
+        }
+
+        var activePane = ActivePane;
+        Panes.Move(0, 1);
+        SetActivePane(activePane);
     }
 
     public void SetActivePane(PaneViewModel pane)

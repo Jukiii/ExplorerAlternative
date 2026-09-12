@@ -62,6 +62,7 @@ public sealed class PaneViewModel : ObservableObject
         SetViewModeCommand = new RelayCommand(p => CurrentViewMode = (ViewMode)p!);
         ToggleExpandCommand = new RelayCommand(p => ((FileSystemNodeViewModel)p!).IsExpanded ^= true);
         OpenCommand = new RelayCommand(_ => OpenSelection(), _ => PrimarySelectedNode is not null);
+        OpenInNewTabCommand = new RelayCommand(_ => OpenInNewTab(), _ => PrimarySelectedNode is { IsDirectory: true });
         NewFolderCommand = new RelayCommand(_ => CreateNewFolder());
         NewFileCommand = new RelayCommand(_ => CreateNewFile());
         ShowPropertiesCommand = new RelayCommand(_ => ShowPropertiesForSelection(), _ => PrimarySelectedNode is not null);
@@ -99,6 +100,9 @@ public sealed class PaneViewModel : ObservableObject
     /// <summary>ピン留めファイル（仕様書51章）への追加を、ナビゲーションペインへ委譲するための橋渡し。</summary>
     public event Action<FileSystemNodeViewModel>? PinFileRequested;
 
+    /// <summary>フォルダを新しいタブで開く（仕様書10章・37章）要求を、MainWindowViewModelへ委譲するための橋渡し。</summary>
+    public event Action<string>? OpenInNewTabRequested;
+
     public ObservableCollection<FileSystemNodeViewModel> RootNodes { get; } = new();
 
     public ObservableCollection<FileSystemNodeViewModel> VisibleNodes { get; } = new();
@@ -116,6 +120,8 @@ public sealed class PaneViewModel : ObservableObject
     public RelayCommand ToggleExpandCommand { get; }
 
     public RelayCommand OpenCommand { get; }
+
+    public RelayCommand OpenInNewTabCommand { get; }
 
     public RelayCommand NewFolderCommand { get; }
 
@@ -483,6 +489,18 @@ public sealed class PaneViewModel : ObservableObject
         {
             _dialogService.ShowError($"「{target.Name}」を開けませんでした。({ex.Message})");
         }
+    }
+
+    // 仕様書10章・37章：フォルダを新しいタブで開く。実際のタブ作成はMainWindowViewModelへ委譲する。
+    private void OpenInNewTab()
+    {
+        var target = PrimarySelectedNode;
+        if (target is null || !target.IsDirectory)
+        {
+            return;
+        }
+
+        OpenInNewTabRequested?.Invoke(target.FullPath);
     }
 
     private void CreateNewFolder()

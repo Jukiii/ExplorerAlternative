@@ -24,6 +24,7 @@ public partial class App : Application
 
         var themeService = new ThemeService();
         themeService.Apply(settingsService.Current.Appearance.Theme);
+        Resources["ActivePaneHighlightOpacity"] = settingsService.Current.Appearance.ActivePaneHighlightOpacity;
 
         // 新しく開かれるウィンドウ（設定・各種ダイアログ含む）すべてに対して、生成のたびに
         // ThemeServiceを個別に呼び出す必要がないよう、Window型のLoadedをクラスハンドラで

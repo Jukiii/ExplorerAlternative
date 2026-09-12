@@ -13,6 +13,8 @@
         <conv:DepthToIndentConverter x:Key="DepthToIndentConverter" />
         <ContextMenu x:Key="NodeContextMenu" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
             <MenuItem Header="開く" Command="{Binding OpenCommand}" />
+            <!-- 仕様書10章・37章：フォルダのみ有効（CanExecuteでIsDirectoryを判定）。 -->
+            <MenuItem Header="新しいタブで開く" Command="{Binding OpenInNewTabCommand}" />
             <MenuItem Header="新しいフォルダ" Command="{Binding NewFolderCommand}" />
             <MenuItem Header="新しいファイル" Command="{Binding NewFileCommand}" />
             <Separator />
@@ -98,6 +100,11 @@
         <KeyBinding Key="OemTilde" Modifiers="Control" Command="{Binding DataContext.ToggleTerminalCommand, ElementName=RootWindow}" />
         <KeyBinding Key="L" Modifiers="Control" Command="{Binding DataContext.ActiveTab.ActivePane.BeginAddressEditCommand, ElementName=RootWindow}" />
         <KeyBinding Key="F6" Command="{Binding DataContext.ActiveTab.ActivePane.BeginAddressEditCommand, ElementName=RootWindow}" />
+        <!-- 仕様書10章：タブ操作のショートカット。 -->
+        <KeyBinding Key="T" Modifiers="Control" Command="{Binding DataContext.AddTabCommand, ElementName=RootWindow}" />
+        <KeyBinding Key="W" Modifiers="Control" Command="{Binding DataContext.CloseTabCommand, ElementName=RootWindow}"
+                    CommandParameter="{Binding DataContext.ActiveTab, ElementName=RootWindow}" />
+        <KeyBinding Key="Tab" Modifiers="Control" Command="{Binding DataContext.NextTabCommand, ElementName=RootWindow}" />
     </Window.InputBindings>
 
     <Grid>
@@ -122,6 +129,7 @@
                         <MenuItem Header="右に分割" Command="{Binding SplitHorizontalCommand}" />
                         <MenuItem Header="下に分割" Command="{Binding SplitVerticalCommand}" />
                         <MenuItem Header="ペインを閉じる" Command="{Binding ClosePaneCommand}" />
+                        <MenuItem Header="ペインを入れ替え" Command="{Binding ActiveTab.SwapPanesCommand}" />
                         <Separator />
                         <MenuItem Header="ワークスペースを保存"
                                   Command="{Binding SaveWorkspaceCommand}"
@@ -148,14 +156,27 @@
                     </ListBox.ItemsPanel>
                     <ListBox.ItemTemplate>
                         <DataTemplate DataType="{x:Type vm:TabViewModel}">
-                            <DockPanel Margin="10,6" MinWidth="110" ToolTip="Ctrl+ドラッグで複製"
+                            <DockPanel Margin="10,6" MinWidth="110" ToolTip="Ctrl+ドラッグで複製 / 右クリックで固定"
                                        PreviewMouseLeftButtonDown="TabItem_PreviewMouseLeftButtonDown"
                                        PreviewMouseMove="TabItem_PreviewMouseMove"
                                        PreviewMouseLeftButtonUp="TabItem_PreviewMouseLeftButtonUp">
+                                <DockPanel.ContextMenu>
+                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                        <MenuItem Header="{Binding PinMenuHeader}" Command="{Binding TogglePinCommand}" />
+                                        <MenuItem Header="閉じる"
+                                                  Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  CommandParameter="{Binding}" />
+                                    </ContextMenu>
+                                </DockPanel.ContextMenu>
+                                <!-- 仕様書10章「タブ固定」：固定中は閉じるボタンの代わりにピンアイコンを表示する。 -->
                                 <Button DockPanel.Dock="Right" Content="✕" FontSize="10" Width="20" Height="20" Padding="0"
                                         Margin="8,0,0,0" ToolTip="タブを閉じる"
+                                        Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"
                                         Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                         CommandParameter="{Binding}" />
+                                <TextBlock DockPanel.Dock="Right" Text="📌" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="11"
+                                           ToolTip="固定されています"
+                                           Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibilityConverter}}" />
                                 <TextBlock Text="📁" Margin="0,0,6,0" VerticalAlignment="Center" FontSize="13" />
                                 <TextBlock Text="{Binding Header}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -539,6 +560,24 @@
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
+                                <Grid>
+                                    <!-- 仕様書9章：アクティブペインは枠線だけでなく背景でも強調する（強度は設定で調整可能）。 -->
+                                    <Border Background="{DynamicResource AccentBrush}" IsHitTestVisible="False">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Opacity" Value="0" />
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding IsActive}" Value="True" />
+                                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=DataContext.ActiveTab.ShowPaneBorders}" Value="True" />
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Opacity" Value="{DynamicResource ActivePaneHighlightOpacity}" />
+                                                    </MultiDataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
                                 <Grid AllowDrop="True" DragOver="PaneGrid_DragOver" Drop="PaneGrid_Drop">
                                     <!-- 階層表示 -->
                                     <ListBox x:Name="TreeListBox" ItemsSource="{Binding VisibleNodes}"
@@ -625,6 +664,7 @@
                                             </GridView>
                                         </ListView.View>
                                     </ListView>
+                                </Grid>
                                 </Grid>
                             </Border>
                         </DataTemplate>
