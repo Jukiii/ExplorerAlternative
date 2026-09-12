@@ -31,6 +31,7 @@ public sealed class NavigationPaneViewModel : ObservableObject
 
         NavigateToFavoriteCommand = new RelayCommand(p => _navigate(((FavoriteEntry)p!).Path));
         RemoveFavoriteCommand = new RelayCommand(p => RemoveFavorite((FavoriteEntry)p!));
+        RemoveTagCommand = new RelayCommand(p => RemoveTag((TagDefinition)p!));
         ToggleCollapsedCommand = new RelayCommand(_ => IsCollapsed = !IsCollapsed);
     }
 
@@ -41,6 +42,8 @@ public sealed class NavigationPaneViewModel : ObservableObject
     public RelayCommand NavigateToFavoriteCommand { get; }
 
     public RelayCommand RemoveFavoriteCommand { get; }
+
+    public RelayCommand RemoveTagCommand { get; }
 
     public RelayCommand ToggleCollapsedCommand { get; }
 
@@ -80,6 +83,20 @@ public sealed class NavigationPaneViewModel : ObservableObject
         var tag = new TagDefinition { Name = name };
         Tags.Add(tag);
         _settingsService.Current.TagDefinitions.Add(tag);
+        _settingsService.Save();
+    }
+
+    private void RemoveTag(TagDefinition tag)
+    {
+        Tags.Remove(tag);
+        _settingsService.Current.TagDefinitions.RemoveAll(t => t.Name == tag.Name);
+
+        foreach (var assignment in _settingsService.Current.TagAssignments)
+        {
+            assignment.Tags.Remove(tag.Name);
+        }
+
+        _settingsService.Current.TagAssignments.RemoveAll(a => a.Tags.Count == 0);
         _settingsService.Save();
     }
 }

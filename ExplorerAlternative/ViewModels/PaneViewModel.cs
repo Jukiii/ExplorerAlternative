@@ -68,6 +68,7 @@ public sealed class PaneViewModel : ObservableObject
         BulkRenameCommand = new RelayCommand(_ => BulkRenameSelection(), _ => SelectedNodes.Count > 1);
         GoBackCommand = new RelayCommand(_ => GoBack(), _ => CanGoBack);
         GoForwardCommand = new RelayCommand(_ => GoForward(), _ => CanGoForward);
+        ToggleTagCommand = new RelayCommand(p => ToggleTag((TagDefinition)p!), _ => SelectedNodes.Count > 0);
 
         LoadPath(_currentPath);
     }
@@ -117,6 +118,11 @@ public sealed class PaneViewModel : ObservableObject
     public RelayCommand GoBackCommand { get; }
 
     public RelayCommand GoForwardCommand { get; }
+
+    public RelayCommand ToggleTagCommand { get; }
+
+    /// <summary>コンテキストメニューの「タグ」サブメニューに表示する、登録済みタグ一覧。</summary>
+    public IReadOnlyList<TagDefinition> AvailableTags => _settingsService.Current.TagDefinitions;
 
     public bool CanGoBack => _backStack.Count > 0;
 
@@ -248,7 +254,7 @@ public sealed class PaneViewModel : ObservableObject
                 .OrderByDescending(e => e.IsDirectory)
                 .ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase))
             {
-                RootNodes.Add(new FileSystemNodeViewModel(entry, 0, _fileSystemService, _dialogService, RebuildVisibleNodes));
+                RootNodes.Add(new FileSystemNodeViewModel(entry, 0, _fileSystemService, _dialogService, _settingsService, RebuildVisibleNodes));
             }
 
             RebuildVisibleNodes();
@@ -580,6 +586,51 @@ public sealed class PaneViewModel : ObservableObject
 
         // フォルダを自分自身の子孫へ移動・コピーすることはできない。
         return normalizedDestination.StartsWith(normalizedSource + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // 仕様書6.2章：ファイル・フォルダへのタグ付与/解除。選択中に未付与のノードが1件でもあれば
+    // 選択全体に付与し、全て付与済みであれば選択全体から解除する（Finderのタグ操作に準拠）。
+    private void ToggleTag(TagDefinition tag)
+    {
+        if (SelectedNodes.Count == 0)
+        {
+            return;
+        }
+
+        var shouldAssign = SelectedNodes.Any(n => !n.Tags.Contains(tag.Name));
+
+        foreach (var node in SelectedNodes)
+        {
+            var assignment = _settingsService.Current.TagAssignments
+                .FirstOrDefault(a => string.Equals(a.Path, node.FullPath, StringComparison.OrdinalIgnoreCase));
+
+            if (shouldAssign)
+            {
+                if (assignment is null)
+                {
+                    assignment = new TagAssignment { Path = node.FullPath };
+                    _settingsService.Current.TagAssignments.Add(assignment);
+                }
+
+                if (!assignment.Tags.Contains(tag.Name))
+                {
+                    assignment.Tags.Add(tag.Name);
+                }
+            }
+            else if (assignment is not null)
+            {
+                assignment.Tags.Remove(tag.Name);
+
+                if (assignment.Tags.Count == 0)
+                {
+                    _settingsService.Current.TagAssignments.Remove(assignment);
+                }
+            }
+
+            node.RaiseTagsChanged();
+        }
+
+        _settingsService.Save();
     }
 
     public void RunExternalTool(ExternalToolDefinition tool)

@@ -8,6 +8,7 @@
         <conv:VcsKindToVisibilityConverter x:Key="VcsKindToVisibilityConverter" />
         <conv:SyncLabelConverter x:Key="SyncLabelConverter" />
         <conv:EnumEqualsConverter x:Key="EnumEqualsConverter" />
+        <conv:TagAssignedConverter x:Key="TagAssignedConverter" />
 
         <!-- カラーパレット -->
         <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#FFFFFF" />

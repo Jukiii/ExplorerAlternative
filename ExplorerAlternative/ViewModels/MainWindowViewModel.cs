@@ -54,6 +54,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OpenCheatSheetCommand = new RelayCommand(_ => _dialogService.ShowCheatSheet());
         OpenSettingsCommand = new RelayCommand(_ => OpenSettings());
         AddFavoriteCommand = new RelayCommand(_ => AddCurrentFolderToFavorites());
+        AddTagCommand = new RelayCommand(_ => AddNewTag());
         SaveWorkspaceCommand = new RelayCommand(p => SaveWorkspace((Window)p!));
         LoadWorkspaceCommand = new RelayCommand(p => LoadWorkspace((Window)p!));
         DuplicateTabCommand = new RelayCommand(p => DuplicateTab((TabViewModel)p!));
@@ -90,6 +91,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public RelayCommand OpenSettingsCommand { get; }
 
     public RelayCommand AddFavoriteCommand { get; }
+
+    public RelayCommand AddTagCommand { get; }
 
     public RelayCommand SaveWorkspaceCommand { get; }
 
@@ -286,6 +289,17 @@ public sealed class MainWindowViewModel : ObservableObject
 
         var name = Path.GetFileName(pane.CurrentPath.TrimEnd('\\'));
         NavigationPane.AddFavorite(string.IsNullOrEmpty(name) ? pane.CurrentPath : name, pane.CurrentPath);
+    }
+
+    private void AddNewTag()
+    {
+        var name = _dialogService.PromptText("新しいタグ", "タグ名を入力してください。");
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        NavigationPane.AddTag(name.Trim());
     }
 
     private void SaveWorkspace(Window window)

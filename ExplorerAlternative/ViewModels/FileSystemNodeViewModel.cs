@@ -13,6 +13,7 @@ public sealed class FileSystemNodeViewModel : ObservableObject
 {
     private readonly IFileSystemService _fileSystemService;
     private readonly IDialogService _dialogService;
+    private readonly ISettingsService _settingsService;
     private readonly Action? _onTreeChanged;
     private bool _isExpanded;
     private bool _isSelected;
@@ -23,12 +24,14 @@ public sealed class FileSystemNodeViewModel : ObservableObject
         int depth,
         IFileSystemService fileSystemService,
         IDialogService dialogService,
+        ISettingsService settingsService,
         Action? onTreeChanged = null)
     {
         Entry = entry;
         Depth = depth;
         _fileSystemService = fileSystemService;
         _dialogService = dialogService;
+        _settingsService = settingsService;
         _onTreeChanged = onTreeChanged;
 
         if (entry.IsDirectory)
@@ -62,6 +65,25 @@ public sealed class FileSystemNodeViewModel : ObservableObject
     public string SizeDisplay => IsDirectory || SizeBytes is null ? string.Empty : FormatSize(SizeBytes.Value);
 
     public string LastModifiedDisplay => LastModified?.ToString("yyyy/MM/dd HH:mm") ?? string.Empty;
+
+    /// <summary>仕様書6.2章：ファイル・フォルダに設定されたタグ。</summary>
+    public IReadOnlyList<string> Tags =>
+        (IReadOnlyList<string>?)_settingsService.Current.TagAssignments
+            .FirstOrDefault(a => string.Equals(a.Path, FullPath, StringComparison.OrdinalIgnoreCase))
+            ?.Tags
+        ?? Array.Empty<string>();
+
+    public bool HasTags => Tags.Count > 0;
+
+    public string TagsDisplay => HasTags ? $"🏷 {string.Join(", ", Tags)}" : string.Empty;
+
+    /// <summary>タグの付与・解除後、表示を更新するために呼び出す（ノードの再生成は不要）。</summary>
+    public void RaiseTagsChanged()
+    {
+        OnPropertyChanged(nameof(Tags));
+        OnPropertyChanged(nameof(HasTags));
+        OnPropertyChanged(nameof(TagsDisplay));
+    }
 
     public bool IsExpanded
     {
@@ -106,7 +128,7 @@ public sealed class FileSystemNodeViewModel : ObservableObject
 
             foreach (var entry in entries)
             {
-                Children.Add(new FileSystemNodeViewModel(entry, Depth + 1, _fileSystemService, _dialogService, _onTreeChanged));
+                Children.Add(new FileSystemNodeViewModel(entry, Depth + 1, _fileSystemService, _dialogService, _settingsService, _onTreeChanged));
             }
 
             _childrenLoaded = true;
