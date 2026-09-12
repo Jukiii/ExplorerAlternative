@@ -21,6 +21,17 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         PreviewKeyDown += MainWindow_PreviewKeyDown;
+        Closing += MainWindow_Closing;
+    }
+
+    // 仕様書40章：システムトレイに常駐中は、ウィンドウを閉じてもアプリを終了せずトレイへ格納する。
+    private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { ShouldHideToTrayOnClose: true })
+        {
+            e.Cancel = true;
+            Hide();
+        }
     }
 
     private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)

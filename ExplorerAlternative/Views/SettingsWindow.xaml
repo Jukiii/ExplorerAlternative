@@ -3,12 +3,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:models="clr-namespace:ExplorerAlternative.Models"
         Title="設定"
-        Height="660" Width="560"
+        Height="780" Width="560"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource WindowBackgroundBrush}"
         TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
     <Grid Margin="12">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -61,7 +62,28 @@
             </StackPanel>
         </GroupBox>
 
-        <GroupBox Grid.Row="2" Header="テキストとして扱う拡張子">
+        <GroupBox Grid.Row="2" Header="Windows連携（システムトレイ・グローバルホットキー）">
+            <StackPanel Margin="8">
+                <!-- 仕様書40章。ONの場合、ウィンドウを閉じるとトレイへ格納される（終了はトレイメニューから）。 -->
+                <CheckBox Content="システムトレイに常駐する" IsChecked="{Binding MinimizeToTray, Mode=TwoWay}" />
+                <!-- 仕様書41章。他アプリ使用中でもホットキーでウィンドウを呼び出せる。競合時はエラーを表示する。 -->
+                <CheckBox Content="グローバルホットキーを有効にする" Margin="0,12,0,4"
+                          IsChecked="{Binding GlobalHotkeyEnabled, Mode=TwoWay}" />
+                <StackPanel Orientation="Horizontal" Margin="16,0,0,0">
+                    <CheckBox Content="Ctrl" Margin="0,0,12,0" IsChecked="{Binding HotkeyCtrl, Mode=TwoWay}" />
+                    <CheckBox Content="Alt" Margin="0,0,12,0" IsChecked="{Binding HotkeyAlt, Mode=TwoWay}" />
+                    <CheckBox Content="Shift" Margin="0,0,12,0" IsChecked="{Binding HotkeyShift, Mode=TwoWay}" />
+                    <CheckBox Content="Win" Margin="0,0,12,0" IsChecked="{Binding HotkeyWin, Mode=TwoWay}" />
+                    <TextBlock Text="+" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBox Width="60" Text="{Binding HotkeyKeyText, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Content="適用" Width="70" Margin="12,0,0,0" Command="{Binding ApplyHotkeyCommand}" />
+                </StackPanel>
+                <TextBlock Text="キー名はWPFのKey列挙体の名前を入力してください（例：E、F12、D1）。"
+                           Margin="16,4,0,0" FontSize="11" Opacity="0.7" />
+            </StackPanel>
+        </GroupBox>
+
+        <GroupBox Grid.Row="3" Header="テキストとして扱う拡張子">
             <DockPanel Margin="8">
                 <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                     <TextBox Width="120" Text="{Binding NewExtension, UpdateSourceTrigger=PropertyChanged}" />
@@ -82,7 +104,7 @@
             </DockPanel>
         </GroupBox>
 
-        <GroupBox Grid.Row="3" Header="外部ツール">
+        <GroupBox Grid.Row="4" Header="外部ツール">
             <DockPanel Margin="8">
                 <Button DockPanel.Dock="Top" Content="外部ツールを追加..." HorizontalAlignment="Left" Margin="0,0,0,8"
                         Command="{Binding AddExternalToolCommand}" />
@@ -105,7 +127,7 @@
             </DockPanel>
         </GroupBox>
 
-        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="保存" Width="90" Margin="0,0,8,0" Command="{Binding SaveCommand}" Click="SaveButton_Click" />
             <Button Content="閉じる" Width="90" IsCancel="True" />
         </StackPanel>

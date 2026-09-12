@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
 using ExplorerAlternative.Services;
@@ -28,12 +29,16 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly ISshCredentialStore _sshCredentialStore;
     private readonly IFolderScanService _folderScanService;
     private readonly IExplorerIntegrationService _explorerIntegrationService;
+    private readonly ITrayIconService _trayIconService;
+    private readonly IGlobalHotkeyService _globalHotkeyService;
+    private readonly IJumpListService _jumpListService;
 
     private TabViewModel? _activeTab;
     private PreviewViewModel? _currentPreview;
     private List<FileSystemNodeViewModel> _previewNodes = new();
     private int _previewIndex = -1;
     private int _tabCounter;
+    private bool _isExiting;
 
     public MainWindowViewModel(
         IFileSystemService fileSystemService,
@@ -51,6 +56,9 @@ public sealed class MainWindowViewModel : ObservableObject
         ISshCredentialStore sshCredentialStore,
         IFolderScanService folderScanService,
         IExplorerIntegrationService explorerIntegrationService,
+        ITrayIconService trayIconService,
+        IGlobalHotkeyService globalHotkeyService,
+        IJumpListService jumpListService,
         string? startupPath = null)
     {
         _fileSystemService = fileSystemService;
@@ -67,6 +75,9 @@ public sealed class MainWindowViewModel : ObservableObject
         _sshCredentialStore = sshCredentialStore;
         _folderScanService = folderScanService;
         _explorerIntegrationService = explorerIntegrationService;
+        _trayIconService = trayIconService;
+        _globalHotkeyService = globalHotkeyService;
+        _jumpListService = jumpListService;
 
         NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, dialogService, NavigateActiveTo, OpenFile);
         NavigationPane.WorkspaceOpenRequested += name => LoadWorkspaceByName((Window)Application.Current!.MainWindow!, name);
@@ -98,6 +109,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OpenCommandPaletteCommand = new RelayCommand(_ => OpenCommandPalette());
 
         AddTab(ResolveStartupPath(startupPath));
+        RebuildJumpList();
     }
 
     public ObservableCollection<TabViewModel> Tabs { get; } = new();
@@ -288,6 +300,16 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         TerminalHost.SyncCurrentDirectory(path);
         NavigationPane.RecordRecentPlace(path);
+        RebuildJumpList();
+    }
+
+    // 仕様書39章：最近使った場所・お気に入り・ワークスペースが変化するたびに反映し直す。
+    private void RebuildJumpList()
+    {
+        _jumpListService.Rebuild(
+            NavigationPane.RecentPlaces.Select(f => (f.Name, f.Path)),
+            NavigationPane.Favorites.Select(f => (f.Name, f.Path)),
+            NavigationPane.Workspaces);
     }
 
     // 仕様書50章「最近使った場所」・22章「アプリで開く」相当：既定のアプリでファイルを開く。
@@ -492,8 +514,180 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void OpenSettings()
     {
-        var settingsViewModel = new SettingsViewModel(_settingsService, _dialogService, _themeService, _explorerIntegrationService);
+        var settingsViewModel = new SettingsViewModel(
+            _settingsService,
+            _dialogService,
+            _themeService,
+            _explorerIntegrationService,
+            SetTrayEnabled,
+            SetGlobalHotkeyEnabled);
         _dialogService.ShowSettings(settingsViewModel);
+    }
+
+    // 仕様書40章：システムトレイの常駐ON/OFF。
+    private void SetTrayEnabled(bool enabled)
+    {
+        if (Application.Current?.MainWindow is not { } window)
+        {
+            return;
+        }
+
+        if (enabled)
+        {
+            _trayIconService.Show(window, BuildTrayMenuItems(), () => ShowMainWindow(window), () => OpenSettingsFromTray(window), ExitApplication);
+        }
+        else
+        {
+            _trayIconService.Hide();
+        }
+    }
+
+    // 仕様書41章：グローバルホットキーの登録/解除。競合時はfalseを返す。
+    private bool SetGlobalHotkeyEnabled(bool enabled, ModifierKeys modifiers, Key key)
+    {
+        _globalHotkeyService.Unregister();
+
+        if (!enabled)
+        {
+            return true;
+        }
+
+        if (Application.Current?.MainWindow is not { } window)
+        {
+            return false;
+        }
+
+        return _globalHotkeyService.Register(window, modifiers, key, () => ShowMainWindow(window));
+    }
+
+    /// <summary>起動時（App.xaml.cs）に設定済みのトレイ・ホットキーを反映する。</summary>
+    public void InitializeWindowsIntegration(Window window)
+    {
+        var settings = _settingsService.Current.WindowsIntegration;
+
+        if (settings.MinimizeToTray)
+        {
+            _trayIconService.Show(window, BuildTrayMenuItems(), () => ShowMainWindow(window), () => OpenSettingsFromTray(window), ExitApplication);
+        }
+
+        if (settings.GlobalHotkeyEnabled)
+        {
+            var modifiers = Enum.TryParse<ModifierKeys>(settings.HotkeyModifiers, out var parsedModifiers)
+                ? parsedModifiers
+                : ModifierKeys.Control | ModifierKeys.Alt;
+            var key = Enum.TryParse<Key>(settings.HotkeyKey, ignoreCase: true, out var parsedKey) ? parsedKey : Key.E;
+
+            _globalHotkeyService.Register(window, modifiers, key, () => ShowMainWindow(window));
+        }
+    }
+
+    /// <summary>仕様書39章：ジャンプリストからのワークスペース直接起動（`--workspace 名前`）。</summary>
+    public void LoadWorkspaceFromStartup(Window window, string name) => LoadWorkspaceByName(window, name);
+
+    /// <summary>常駐中、ウィンドウを閉じた際にトレイへ格納すべきかどうか。</summary>
+    public bool ShouldHideToTrayOnClose => !_isExiting && _settingsService.Current.WindowsIntegration.MinimizeToTray && _trayIconService.IsVisible;
+
+    private void OpenSettingsFromTray(Window window)
+    {
+        ShowMainWindow(window);
+        OpenSettings();
+    }
+
+    private static void ShowMainWindow(Window window)
+    {
+        window.Show();
+
+        if (window.WindowState == WindowState.Minimized)
+        {
+            window.WindowState = WindowState.Normal;
+        }
+
+        window.Activate();
+    }
+
+    private void ExitApplication()
+    {
+        _isExiting = true;
+        _globalHotkeyService.Unregister();
+        _trayIconService.Hide();
+        Application.Current.Shutdown();
+    }
+
+    /// <summary>アプリ終了時（App.OnExit）にトレイアイコン・ホットキー登録を後始末する。</summary>
+    public void ShutdownWindowsIntegration()
+    {
+        _globalHotkeyService.Unregister();
+        _trayIconService.Hide();
+    }
+
+    // 仕様書40章：トレイメニュー本体。最近の場所・お気に入り・ワークスペースは
+    // サブメニューとして都度最新の内容を構築する。
+    private IReadOnlyList<TrayMenuItem> BuildTrayMenuItems()
+    {
+        Window? window = Application.Current?.MainWindow;
+
+        List<TrayMenuItem> BuildPathItems(IEnumerable<FavoriteEntry> entries) =>
+            entries.Select(entry => new TrayMenuItem
+            {
+                Text = entry.Name,
+                Execute = () =>
+                {
+                    if (window is not null)
+                    {
+                        ShowMainWindow(window);
+                    }
+
+                    NavigateActiveTo(entry.Path);
+                }
+            }).ToList();
+
+        var recentItems = BuildPathItems(NavigationPane.RecentPlaces);
+        var favoriteItems = BuildPathItems(NavigationPane.Favorites);
+        var workspaceItems = NavigationPane.Workspaces.Select(name => new TrayMenuItem
+        {
+            Text = name,
+            Execute = () =>
+            {
+                if (window is not null)
+                {
+                    ShowMainWindow(window);
+                    LoadWorkspaceByName(window, name);
+                }
+            }
+        }).ToList();
+
+        return new List<TrayMenuItem>
+        {
+            new() { Text = "最近の場所", Children = recentItems.Count > 0 ? recentItems : null },
+            new() { Text = "お気に入り", Children = favoriteItems.Count > 0 ? favoriteItems : null },
+            new() { Text = "ワークスペース", Children = workspaceItems.Count > 0 ? workspaceItems : null },
+            new()
+            {
+                Text = "SSH接続の管理...",
+                Execute = () =>
+                {
+                    if (window is not null)
+                    {
+                        ShowMainWindow(window);
+                    }
+
+                    OpenSshConnection();
+                }
+            },
+            new()
+            {
+                Text = "ターミナル表示/非表示",
+                Execute = () =>
+                {
+                    if (window is not null)
+                    {
+                        ShowMainWindow(window);
+                    }
+
+                    ToggleTerminalCommand.Execute(null);
+                }
+            }
+        };
     }
 
     // 仕様書44章：SSH接続の登録・管理ダイアログを開く。「接続」実行時は
@@ -604,6 +798,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         var name = Path.GetFileName(pane.CurrentPath.TrimEnd('\\'));
         NavigationPane.AddFavorite(string.IsNullOrEmpty(name) ? pane.CurrentPath : name, pane.CurrentPath);
+        RebuildJumpList();
     }
 
     private void AddNewTag()
@@ -650,6 +845,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         _workspaceService.SaveWorkspace(state);
         NavigationPane.RefreshWorkspaces(_workspaceService.GetWorkspaceNames());
+        RebuildJumpList();
         _dialogService.ShowInfo($"ワークスペース「{name}」を保存しました。");
     }
 

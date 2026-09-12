@@ -53,6 +53,26 @@ public partial class App : Application
         var versionControlOperationsService = new VersionControlOperationsService();
         var diffService = new DiffService();
         var explorerIntegrationService = new ExplorerIntegrationService();
+        var trayIconService = new TrayIconService();
+        var globalHotkeyService = new GlobalHotkeyService();
+        var jumpListService = new JumpListService();
+
+        // 仕様書39章：`--workspace 名前` はジャンプリストからのワークスペース直接起動。
+        // それ以外の第1引数は35章「Explorerから本アプリへフォルダを渡して開く」用のパス。
+        string? startupPath = null;
+        string? startupWorkspace = null;
+
+        if (e.Args.Length > 0)
+        {
+            if (e.Args[0] == "--workspace" && e.Args.Length > 1)
+            {
+                startupWorkspace = e.Args[1];
+            }
+            else
+            {
+                startupPath = e.Args[0];
+            }
+        }
 
         var mainWindowViewModel = new MainWindowViewModel(
             fileSystemService,
@@ -70,13 +90,23 @@ public partial class App : Application
             sshCredentialStore,
             folderScanService,
             explorerIntegrationService,
-            e.Args.Length > 0 ? e.Args[0] : null);
+            trayIconService,
+            globalHotkeyService,
+            jumpListService,
+            startupPath);
 
         _mainWindowViewModel = mainWindowViewModel;
 
         var mainWindow = new MainWindow { DataContext = mainWindowViewModel };
         MainWindow = mainWindow;
         mainWindow.Show();
+
+        if (startupWorkspace is not null)
+        {
+            mainWindowViewModel.LoadWorkspaceFromStartup(mainWindow, startupWorkspace);
+        }
+
+        mainWindowViewModel.InitializeWindowsIntegration(mainWindow);
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -90,6 +120,7 @@ public partial class App : Application
             // 終了時の保存失敗はアプリの終了を妨げない。
         }
 
+        _mainWindowViewModel?.ShutdownWindowsIntegration();
         _mainWindowViewModel?.TerminalHost.Dispose();
         base.OnExit(e);
     }

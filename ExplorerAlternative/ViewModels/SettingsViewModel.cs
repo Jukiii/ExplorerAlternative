@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows;
+using System.Windows.Input;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
 using ExplorerAlternative.Services.Abstractions;
@@ -16,28 +17,53 @@ public sealed class SettingsViewModel : ObservableObject
     private readonly IDialogService _dialogService;
     private readonly IThemeService _themeService;
     private readonly IExplorerIntegrationService _explorerIntegrationService;
+    private readonly Action<bool> _setTrayEnabled;
+    private readonly Func<bool, ModifierKeys, Key, bool> _setGlobalHotkey;
     private string _newExtension = string.Empty;
     private AppTheme _selectedTheme;
     private double _activePaneHighlightOpacity;
     private DuplicateTabBehavior _duplicateTabBehavior;
     private bool _loadTerminalProfile;
     private bool _explorerIntegrationEnabled;
+    private bool _minimizeToTray;
+    private bool _globalHotkeyEnabled;
+    private bool _hotkeyCtrl;
+    private bool _hotkeyAlt;
+    private bool _hotkeyShift;
+    private bool _hotkeyWin;
+    private string _hotkeyKeyText;
 
     public SettingsViewModel(
         ISettingsService settingsService,
         IDialogService dialogService,
         IThemeService themeService,
-        IExplorerIntegrationService explorerIntegrationService)
+        IExplorerIntegrationService explorerIntegrationService,
+        Action<bool> setTrayEnabled,
+        Func<bool, ModifierKeys, Key, bool> setGlobalHotkey)
     {
         _settingsService = settingsService;
         _dialogService = dialogService;
         _themeService = themeService;
         _explorerIntegrationService = explorerIntegrationService;
+        _setTrayEnabled = setTrayEnabled;
+        _setGlobalHotkey = setGlobalHotkey;
         _selectedTheme = settingsService.Current.Appearance.Theme;
         _activePaneHighlightOpacity = settingsService.Current.Appearance.ActivePaneHighlightOpacity;
         _duplicateTabBehavior = settingsService.Current.Tabs.DuplicateBehavior;
         _loadTerminalProfile = settingsService.Current.Terminal.LoadProfile;
         _explorerIntegrationEnabled = explorerIntegrationService.IsEnabled;
+
+        var windowsIntegration = settingsService.Current.WindowsIntegration;
+        _minimizeToTray = windowsIntegration.MinimizeToTray;
+        _globalHotkeyEnabled = windowsIntegration.GlobalHotkeyEnabled;
+        var savedModifiers = Enum.TryParse<ModifierKeys>(windowsIntegration.HotkeyModifiers, out var parsedModifiers)
+            ? parsedModifiers
+            : ModifierKeys.Control | ModifierKeys.Alt;
+        _hotkeyCtrl = savedModifiers.HasFlag(ModifierKeys.Control);
+        _hotkeyAlt = savedModifiers.HasFlag(ModifierKeys.Alt);
+        _hotkeyShift = savedModifiers.HasFlag(ModifierKeys.Shift);
+        _hotkeyWin = savedModifiers.HasFlag(ModifierKeys.Windows);
+        _hotkeyKeyText = windowsIntegration.HotkeyKey;
 
         foreach (var extension in settingsService.Current.TextFileExtensions)
         {
@@ -55,6 +81,7 @@ public sealed class SettingsViewModel : ObservableObject
         RemoveExternalToolCommand = new RelayCommand(p => ExternalTools.Remove((ExternalToolDefinition)p!));
         SetThemeCommand = new RelayCommand(p => SelectedTheme = (AppTheme)p!);
         SetDuplicateTabBehaviorCommand = new RelayCommand(p => DuplicateTabBehavior = (DuplicateTabBehavior)p!);
+        ApplyHotkeyCommand = new RelayCommand(_ => TryApplyHotkey());
         SaveCommand = new RelayCommand(_ => Save());
     }
 
@@ -109,6 +136,103 @@ public sealed class SettingsViewModel : ObservableObject
                     _explorerIntegrationService.Disable();
                 }
             }
+        }
+    }
+
+    /// <summary>仕様書40章「システムトレイ」の常駐ON/OFF。変更と同時に即座に反映・保存する。</summary>
+    public bool MinimizeToTray
+    {
+        get => _minimizeToTray;
+        set
+        {
+            if (SetProperty(ref _minimizeToTray, value))
+            {
+                _settingsService.Current.WindowsIntegration.MinimizeToTray = value;
+                _settingsService.Save();
+                _setTrayEnabled(value);
+            }
+        }
+    }
+
+    /// <summary>仕様書41章「グローバルホットキー」の有効/無効。</summary>
+    public bool GlobalHotkeyEnabled
+    {
+        get => _globalHotkeyEnabled;
+        set
+        {
+            if (SetProperty(ref _globalHotkeyEnabled, value))
+            {
+                TryApplyHotkey();
+            }
+        }
+    }
+
+    public bool HotkeyCtrl
+    {
+        get => _hotkeyCtrl;
+        set => SetProperty(ref _hotkeyCtrl, value);
+    }
+
+    public bool HotkeyAlt
+    {
+        get => _hotkeyAlt;
+        set => SetProperty(ref _hotkeyAlt, value);
+    }
+
+    public bool HotkeyShift
+    {
+        get => _hotkeyShift;
+        set => SetProperty(ref _hotkeyShift, value);
+    }
+
+    public bool HotkeyWin
+    {
+        get => _hotkeyWin;
+        set => SetProperty(ref _hotkeyWin, value);
+    }
+
+    /// <summary>グローバルホットキーのキー本体（WPFの<see cref="Key"/>名。例："E"、"F12"）。</summary>
+    public string HotkeyKeyText
+    {
+        get => _hotkeyKeyText;
+        set => SetProperty(ref _hotkeyKeyText, value);
+    }
+
+    public RelayCommand ApplyHotkeyCommand { get; }
+
+    // 仕様書41章：「競合時は警告」。RegisterHotKeyが失敗した場合はエラーを表示し、有効状態を元に戻す。
+    private void TryApplyHotkey()
+    {
+        if (!Enum.TryParse<Key>(HotkeyKeyText.Trim(), ignoreCase: true, out var key))
+        {
+            if (GlobalHotkeyEnabled)
+            {
+                _dialogService.ShowError($"「{HotkeyKeyText}」は有効なキー名ではありません。");
+                _globalHotkeyEnabled = false;
+                OnPropertyChanged(nameof(GlobalHotkeyEnabled));
+            }
+
+            return;
+        }
+
+        var modifiers = ModifierKeys.None;
+        if (HotkeyCtrl) modifiers |= ModifierKeys.Control;
+        if (HotkeyAlt) modifiers |= ModifierKeys.Alt;
+        if (HotkeyShift) modifiers |= ModifierKeys.Shift;
+        if (HotkeyWin) modifiers |= ModifierKeys.Windows;
+
+        var succeeded = _setGlobalHotkey(GlobalHotkeyEnabled, modifiers, key);
+
+        _settingsService.Current.WindowsIntegration.GlobalHotkeyEnabled = GlobalHotkeyEnabled && succeeded;
+        _settingsService.Current.WindowsIntegration.HotkeyModifiers = modifiers.ToString();
+        _settingsService.Current.WindowsIntegration.HotkeyKey = key.ToString();
+        _settingsService.Save();
+
+        if (GlobalHotkeyEnabled && !succeeded)
+        {
+            _dialogService.ShowError("指定したホットキーは他のアプリと競合しているため登録できませんでした。別の組み合わせを指定してください。");
+            _globalHotkeyEnabled = false;
+            OnPropertyChanged(nameof(GlobalHotkeyEnabled));
         }
     }
 

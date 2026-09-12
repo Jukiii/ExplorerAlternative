@@ -6,6 +6,17 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <!-- 仕様書40章「システムトレイ」：System.Windows.Forms.NotifyIconを使用するため。 -->
+    <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
+
+  <!-- UseWindowsForms有効時に暗黙的globalusingとして追加されるSystem.Windows.Forms /
+       System.Drawingは、WPF側の同名型（Application/Point/KeyEventArgs等）と衝突するため、
+       暗黙usingからは除外する（アセンブリ参照自体は残るので、必要なファイルでは
+       明示的にusingを書けば引き続き利用できる）。 -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
 
 </Project>
