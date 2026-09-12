@@ -41,4 +41,7 @@ public interface IDialogService
 
     /// <summary>プロパティダイアログ（仕様書48章）を表示する。</summary>
     void ShowProperties(PropertiesViewModel propertiesViewModel);
+
+    /// <summary>Diffウィンドウ（仕様書23章・25章）を非モーダルで表示する。</summary>
+    void ShowDiff(DiffViewModel diffViewModel);
 }

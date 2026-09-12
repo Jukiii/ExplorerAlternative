@@ -14,4 +14,6 @@
     <SolidColorBrush x:Key="TerminalForegroundBrush" Color="#D4D4D4" />
     <SolidColorBrush x:Key="TerminalAccentBrush" Color="#3DDC97" />
     <SolidColorBrush x:Key="VcsBannerBackgroundBrush" Color="#1F3324" />
+    <SolidColorBrush x:Key="DiffRemovedBackgroundBrush" Color="#3D1F1F" />
+    <SolidColorBrush x:Key="DiffAddedBackgroundBrush" Color="#1F3D1F" />
 </ResourceDictionary>

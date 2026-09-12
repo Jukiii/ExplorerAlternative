@@ -66,6 +66,73 @@ public sealed class VersionControlOperationsService : IVersionControlOperationsS
         return WithWorkingDirectory(vcsInfo.RootPath!, "svn update");
     }
 
+    public string BuildFetchCommand(VersionControlInfo vcsInfo)
+    {
+        EnsureGit(vcsInfo);
+        return WithWorkingDirectory(vcsInfo.RootPath!, "git fetch");
+    }
+
+    public string BuildStashCommand(VersionControlInfo vcsInfo)
+    {
+        EnsureGit(vcsInfo);
+        return WithWorkingDirectory(vcsInfo.RootPath!, "git stash");
+    }
+
+    public string BuildStashPopCommand(VersionControlInfo vcsInfo)
+    {
+        EnsureGit(vcsInfo);
+        return WithWorkingDirectory(vcsInfo.RootPath!, "git stash pop");
+    }
+
+    public string BuildDiscardCommand(VersionControlInfo vcsInfo, string fullFilePath)
+    {
+        EnsureManaged(vcsInfo);
+
+        var command = vcsInfo.Kind == VersionControlKind.Git
+            ? $"git checkout -- \"{fullFilePath}\""
+            : $"svn revert \"{fullFilePath}\"";
+        return WithWorkingDirectory(vcsInfo.RootPath!, command);
+    }
+
+    public string BuildCheckoutBranchCommand(VersionControlInfo vcsInfo, string branchName)
+    {
+        EnsureGit(vcsInfo);
+        return WithWorkingDirectory(vcsInfo.RootPath!, $"git checkout \"{branchName}\"");
+    }
+
+    public string BuildCreateBranchCommand(VersionControlInfo vcsInfo, string branchName)
+    {
+        EnsureGit(vcsInfo);
+        return WithWorkingDirectory(vcsInfo.RootPath!, $"git checkout -b \"{branchName}\"");
+    }
+
+    public string BuildMergeCommand(VersionControlInfo vcsInfo, string branchName)
+    {
+        EnsureGit(vcsInfo);
+        return WithWorkingDirectory(vcsInfo.RootPath!, $"git merge \"{branchName}\"");
+    }
+
+    public string BuildRebaseCommand(VersionControlInfo vcsInfo, string branchName)
+    {
+        EnsureGit(vcsInfo);
+        return WithWorkingDirectory(vcsInfo.RootPath!, $"git rebase \"{branchName}\"");
+    }
+
+    public string BuildInitCommand(string folderPath)
+    {
+        return WithWorkingDirectory(folderPath, "git init");
+    }
+
+    public string BuildCloneCommand(string folderPath, string repositoryUrl)
+    {
+        if (string.IsNullOrWhiteSpace(repositoryUrl))
+        {
+            throw new AppOperationException("Clone元のURLを入力してください。");
+        }
+
+        return WithWorkingDirectory(folderPath, $"git clone \"{repositoryUrl}\"");
+    }
+
     private static void EnsureManaged(VersionControlInfo vcsInfo)
     {
         if (vcsInfo.Kind == VersionControlKind.None || vcsInfo.RootPath is null)

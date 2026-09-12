@@ -25,8 +25,13 @@ public sealed class PaneViewModel : ObservableObject
     private readonly ISettingsService _settingsService;
     private readonly IPatchService _patchService;
     private readonly IVersionControlOperationsService _versionControlOperationsService;
+    private readonly IDiffService _diffService;
     private readonly Stack<string> _backStack = new();
     private readonly Stack<string> _forwardStack = new();
+
+    // 仕様書25章「比較対象として保持」。複数タブ・複数ペインをまたいで1つだけ保持すればよいため、
+    // 専用のサービスを新設せずインスタンス間で共有するstaticフィールドとしている。
+    private static string? _heldComparisonPath;
 
     private string _currentPath;
     private ViewMode _currentViewMode;
@@ -34,6 +39,7 @@ public sealed class PaneViewModel : ObservableObject
     private string _addressEditText = string.Empty;
     private FileSystemNodeViewModel? _primarySelectedNode;
     private VersionControlInfo _vcsInfo = VersionControlInfo.None;
+    private IReadOnlyDictionary<string, string> _vcsStatusByPath = new Dictionary<string, string>();
     private bool _isActive;
 
     public PaneViewModel(
@@ -44,6 +50,7 @@ public sealed class PaneViewModel : ObservableObject
         ISettingsService settingsService,
         IPatchService patchService,
         IVersionControlOperationsService versionControlOperationsService,
+        IDiffService diffService,
         string initialPath,
         ViewMode initialViewMode)
     {
@@ -54,6 +61,7 @@ public sealed class PaneViewModel : ObservableObject
         _settingsService = settingsService;
         _patchService = patchService;
         _versionControlOperationsService = versionControlOperationsService;
+        _diffService = diffService;
         _currentPath = initialPath;
         _currentViewMode = initialViewMode;
 
@@ -90,6 +98,23 @@ public sealed class PaneViewModel : ObservableObject
         PushCommand = new RelayCommand(_ => Push(), _ => VcsInfo.Kind == VersionControlKind.Git);
         PullCommand = new RelayCommand(_ => Pull(), _ => VcsInfo.Kind == VersionControlKind.Git);
         UpdateCommand = new RelayCommand(_ => Update(), _ => VcsInfo.Kind == VersionControlKind.Svn);
+        FetchCommand = new RelayCommand(_ => Fetch(), _ => VcsInfo.Kind == VersionControlKind.Git);
+        StashCommand = new RelayCommand(_ => Stash(), _ => VcsInfo.Kind == VersionControlKind.Git);
+        StashPopCommand = new RelayCommand(_ => StashPop(), _ => VcsInfo.Kind == VersionControlKind.Git);
+        DiscardChangesCommand = new RelayCommand(_ => DiscardChanges(), _ => VcsInfo.Kind != VersionControlKind.None && PrimarySelectedNode is { IsDirectory: false });
+        ShowBranchesCommand = new RelayCommand(_ => ShowBranches(), _ => VcsInfo.Kind == VersionControlKind.Git);
+        CreateBranchCommand = new RelayCommand(_ => CreateBranch(), _ => VcsInfo.Kind == VersionControlKind.Git);
+        MergeCommand = new RelayCommand(_ => Merge(), _ => VcsInfo.Kind == VersionControlKind.Git);
+        RebaseCommand = new RelayCommand(_ => Rebase(), _ => VcsInfo.Kind == VersionControlKind.Git);
+        InitRepositoryCommand = new RelayCommand(_ => InitRepository(), _ => VcsInfo.Kind == VersionControlKind.None);
+        CloneRepositoryCommand = new RelayCommand(_ => CloneRepository());
+        ShowDiffCommand = new RelayCommand(_ => ShowDiff(), _ => VcsInfo.Kind != VersionControlKind.None && PrimarySelectedNode is { IsDirectory: false });
+        HoldForComparisonCommand = new RelayCommand(_ => HoldForComparison(), _ => PrimarySelectedNode is { IsDirectory: false });
+        CompareWithHeldCommand = new RelayCommand(
+            _ => CompareWithHeld(),
+            _ => PrimarySelectedNode is { IsDirectory: false } node &&
+                 _heldComparisonPath is not null &&
+                 !string.Equals(_heldComparisonPath, node.FullPath, StringComparison.OrdinalIgnoreCase));
 
         LoadPath(_currentPath);
     }
@@ -183,6 +208,40 @@ public sealed class PaneViewModel : ObservableObject
     public RelayCommand PullCommand { get; }
 
     public RelayCommand UpdateCommand { get; }
+
+    public RelayCommand FetchCommand { get; }
+
+    public RelayCommand StashCommand { get; }
+
+    public RelayCommand StashPopCommand { get; }
+
+    /// <summary>仕様書21章「Discard Changes」・22章「Revert」。</summary>
+    public RelayCommand DiscardChangesCommand { get; }
+
+    /// <summary>仕様書21章「ブランチ一覧・Checkout」。</summary>
+    public RelayCommand ShowBranchesCommand { get; }
+
+    /// <summary>仕様書21章「新規ブランチ作成」。</summary>
+    public RelayCommand CreateBranchCommand { get; }
+
+    public RelayCommand MergeCommand { get; }
+
+    public RelayCommand RebaseCommand { get; }
+
+    /// <summary>仕様書21章「Initialize」。管理外フォルダでのみ有効。</summary>
+    public RelayCommand InitRepositoryCommand { get; }
+
+    /// <summary>仕様書21章「Clone」。</summary>
+    public RelayCommand CloneRepositoryCommand { get; }
+
+    /// <summary>仕様書23章「Show Diff」：選択ファイルをコミット済み内容と比較する。</summary>
+    public RelayCommand ShowDiffCommand { get; }
+
+    /// <summary>仕様書25章「比較対象として保持」。</summary>
+    public RelayCommand HoldForComparisonCommand { get; }
+
+    /// <summary>仕様書25章「比較対象と比較」。</summary>
+    public RelayCommand CompareWithHeldCommand { get; }
 
     /// <summary>コンテキストメニューの「タグ」サブメニューに表示する、登録済みタグ一覧。</summary>
     public IReadOnlyList<TagDefinition> AvailableTags => _settingsService.Current.TagDefinitions;
@@ -293,6 +352,8 @@ public sealed class PaneViewModel : ObservableObject
         LoadPath(target);
     }
 
+    private string GetVcsStatus(string fullPath) => _vcsStatusByPath.TryGetValue(fullPath, out var status) ? status : string.Empty;
+
     private void RaiseHistoryChanged()
     {
         OnPropertyChanged(nameof(CanGoBack));
@@ -312,19 +373,21 @@ public sealed class PaneViewModel : ObservableObject
 
             CurrentPath = path;
 
+            VcsInfo = IsPathComputerRoot(path) ? VersionControlInfo.None : _versionControlService.Detect(path);
+            _vcsStatusByPath = _versionControlService.GetFileStatuses(VcsInfo);
+
             RootNodes.Clear();
 
             foreach (var entry in entries
                 .OrderByDescending(e => e.IsDirectory)
                 .ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase))
             {
-                RootNodes.Add(new FileSystemNodeViewModel(entry, 0, _fileSystemService, _dialogService, _settingsService, RebuildVisibleNodes));
+                RootNodes.Add(new FileSystemNodeViewModel(entry, 0, _fileSystemService, _dialogService, _settingsService, GetVcsStatus, RebuildVisibleNodes));
             }
 
             RebuildVisibleNodes();
             RebuildBreadcrumb();
 
-            VcsInfo = IsPathComputerRoot(path) ? VersionControlInfo.None : _versionControlService.Detect(path);
             CreatePatchCommand.RaiseCanExecuteChanged();
             ApplyPatchCommand.RaiseCanExecuteChanged();
             StageAllCommand.RaiseCanExecuteChanged();
@@ -332,6 +395,14 @@ public sealed class PaneViewModel : ObservableObject
             PushCommand.RaiseCanExecuteChanged();
             PullCommand.RaiseCanExecuteChanged();
             UpdateCommand.RaiseCanExecuteChanged();
+            FetchCommand.RaiseCanExecuteChanged();
+            StashCommand.RaiseCanExecuteChanged();
+            StashPopCommand.RaiseCanExecuteChanged();
+            ShowBranchesCommand.RaiseCanExecuteChanged();
+            CreateBranchCommand.RaiseCanExecuteChanged();
+            MergeCommand.RaiseCanExecuteChanged();
+            RebaseCommand.RaiseCanExecuteChanged();
+            InitRepositoryCommand.RaiseCanExecuteChanged();
 
             PathChanged?.Invoke(path);
         }
@@ -982,6 +1053,207 @@ public sealed class PaneViewModel : ObservableObject
     private void Pull() => RunVcsCommand(() => _versionControlOperationsService.BuildPullCommand(VcsInfo));
 
     private void Update() => RunVcsCommand(() => _versionControlOperationsService.BuildUpdateCommand(VcsInfo));
+
+    private void Fetch() => RunVcsCommand(() => _versionControlOperationsService.BuildFetchCommand(VcsInfo));
+
+    private void Stash() => RunVcsCommand(() => _versionControlOperationsService.BuildStashCommand(VcsInfo));
+
+    private void StashPop() => RunVcsCommand(() => _versionControlOperationsService.BuildStashPopCommand(VcsInfo));
+
+    // 仕様書21章「Discard Changes」・22章「Revert」。破棄は元に戻せないため確認する（27章）。
+    private void DiscardChanges()
+    {
+        var target = PrimarySelectedNode;
+        if (target is null)
+        {
+            return;
+        }
+
+        if (!_dialogService.Confirm($"「{target.Name}」への変更を破棄します。この操作は元に戻せません。よろしいですか？"))
+        {
+            return;
+        }
+
+        RunVcsCommand(() => _versionControlOperationsService.BuildDiscardCommand(VcsInfo, target.FullPath));
+    }
+
+    // 仕様書21章「ブランチ一覧・Checkout」。未コミット変更がある場合は安全確認する。
+    private void ShowBranches()
+    {
+        var branches = _versionControlService.GetBranches(VcsInfo);
+        if (branches.Count == 0)
+        {
+            _dialogService.ShowInfo("ブランチが見つかりませんでした。");
+            return;
+        }
+
+        var selected = _dialogService.SelectFromList("ブランチを切り替え", "チェックアウトするブランチを選択してください。", branches);
+        if (selected is null)
+        {
+            return;
+        }
+
+        if (HasUncommittedChanges() && !_dialogService.Confirm("未コミットの変更があります。ブランチを切り替えるとコミットされていない変更に影響する場合があります。続行しますか？"))
+        {
+            return;
+        }
+
+        RunVcsCommand(() => _versionControlOperationsService.BuildCheckoutBranchCommand(VcsInfo, selected));
+    }
+
+    private void CreateBranch()
+    {
+        var name = _dialogService.PromptText("新規ブランチ作成", "ブランチ名を入力してください。");
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        RunVcsCommand(() => _versionControlOperationsService.BuildCreateBranchCommand(VcsInfo, name));
+    }
+
+    private void Merge()
+    {
+        var branches = _versionControlService.GetBranches(VcsInfo);
+        var selected = _dialogService.SelectFromList("Merge", "マージするブランチを選択してください。", branches);
+        if (selected is null)
+        {
+            return;
+        }
+
+        RunVcsCommand(() => _versionControlOperationsService.BuildMergeCommand(VcsInfo, selected));
+    }
+
+    private void Rebase()
+    {
+        var branches = _versionControlService.GetBranches(VcsInfo);
+        var selected = _dialogService.SelectFromList("Rebase", "Rebase先のブランチを選択してください。", branches);
+        if (selected is null)
+        {
+            return;
+        }
+
+        RunVcsCommand(() => _versionControlOperationsService.BuildRebaseCommand(VcsInfo, selected));
+    }
+
+    private bool HasUncommittedChanges() => _vcsStatusByPath.Count > 0;
+
+    // 仕様書21章「Initialize」。現在のフォルダをGitリポジトリとして初期化する。
+    private void InitRepository()
+    {
+        if (!_dialogService.Confirm($"「{CurrentPath}」をGitリポジトリとして初期化します。よろしいですか？"))
+        {
+            return;
+        }
+
+        try
+        {
+            RunTerminalCommandRequested?.Invoke(_versionControlOperationsService.BuildInitCommand(CurrentPath));
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+    }
+
+    // 仕様書21章「Clone」。現在のフォルダへリポジトリをCloneする。
+    private void CloneRepository()
+    {
+        var url = _dialogService.PromptText("Clone", "Clone元のリポジトリURLを入力してください。");
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return;
+        }
+
+        try
+        {
+            RunTerminalCommandRequested?.Invoke(_versionControlOperationsService.BuildCloneCommand(CurrentPath, url));
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+    }
+
+    // 仕様書23章「Show Diff」：選択ファイルのコミット済み内容と現在の内容を比較する。
+    private void ShowDiff()
+    {
+        var target = PrimarySelectedNode;
+        if (target is null)
+        {
+            return;
+        }
+
+        var committedText = _versionControlService.GetCommittedFileContent(VcsInfo, target.FullPath);
+
+        string currentText;
+        try
+        {
+            currentText = _fileSystemService.ReadTextPreview(target.FullPath, 5_000_000, out _);
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+            return;
+        }
+
+        var diffViewModel = DiffViewModel.Create(
+            target.Name,
+            committedText is null ? "(新規)" : "コミット済み",
+            "現在の内容",
+            committedText ?? string.Empty,
+            currentText,
+            _diffService,
+            _dialogService);
+
+        _dialogService.ShowDiff(diffViewModel);
+    }
+
+    // 仕様書25章「比較対象として保持」・「比較対象と比較」。Git管理外でも利用できる。
+    private void HoldForComparison()
+    {
+        var target = PrimarySelectedNode;
+        if (target is null)
+        {
+            return;
+        }
+
+        _heldComparisonPath = target.FullPath;
+    }
+
+    private void CompareWithHeld()
+    {
+        var target = PrimarySelectedNode;
+        if (target is null || _heldComparisonPath is null)
+        {
+            return;
+        }
+
+        string leftText;
+        string rightText;
+
+        try
+        {
+            leftText = _fileSystemService.ReadTextPreview(_heldComparisonPath, 5_000_000, out _);
+            rightText = _fileSystemService.ReadTextPreview(target.FullPath, 5_000_000, out _);
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+            return;
+        }
+
+        var diffViewModel = DiffViewModel.Create(
+            $"{Path.GetFileName(_heldComparisonPath)} ⇔ {target.Name}",
+            _heldComparisonPath,
+            target.FullPath,
+            leftText,
+            rightText,
+            _diffService,
+            _dialogService);
+
+        _dialogService.ShowDiff(diffViewModel);
+    }
 
     private void RunVcsCommand(Func<string> buildCommand)
     {

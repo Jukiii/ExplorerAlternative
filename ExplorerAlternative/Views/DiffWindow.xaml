@@ -1,0 +1,91 @@
+<Window x:Class="ExplorerAlternative.Views.DiffWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:ExplorerAlternative.ViewModels"
+        xmlns:models="clr-namespace:ExplorerAlternative.Models"
+        Title="Diff"
+        Height="600" Width="900"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Row="0" Margin="0,0,0,8">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="◀ 前の差分" Padding="8,2" Margin="4,0,0,0" Command="{Binding PreviousDiffCommand}" />
+                <Button Content="次の差分 ▶" Padding="8,2" Margin="4,0,0,0" Command="{Binding NextDiffCommand}" />
+                <Button Content="保存..." Padding="8,2" Margin="12,0,0,0" Command="{Binding SaveDiffCommand}" />
+            </StackPanel>
+            <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="16" VerticalAlignment="Center" />
+        </DockPanel>
+
+        <Grid Grid.Row="1" Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="{Binding LeftLabel}" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" />
+            <TextBlock Grid.Column="1" Text="{Binding RightLabel}" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" Margin="8,0,0,0" />
+        </Grid>
+
+        <ListBox x:Name="RowsListBox" Grid.Row="2" ItemsSource="{Binding Rows}" BorderThickness="1"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Focusable" Value="False" />
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:DiffRowViewModel}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="1" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Padding="4,1">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding LeftKind}" Value="{x:Static models:DiffLineKind.Removed}">
+                                            <Setter Property="Background" Value="{DynamicResource DiffRemovedBackgroundBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding LeftNumber}" Width="40" Foreground="{DynamicResource TextSecondaryBrush}" TextAlignment="Right" Margin="0,0,8,0" />
+                                <TextBlock Text="{Binding LeftText}" TextWrapping="NoWrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" Background="{DynamicResource BorderBrush2}" />
+
+                        <Border Grid.Column="2" Padding="4,1">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding RightKind}" Value="{x:Static models:DiffLineKind.Added}">
+                                            <Setter Property="Background" Value="{DynamicResource DiffAddedBackgroundBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding RightNumber}" Width="40" Foreground="{DynamicResource TextSecondaryBrush}" TextAlignment="Right" Margin="0,0,8,0" />
+                                <TextBlock Text="{Binding RightText}" TextWrapping="NoWrap" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Grid>
+</Window>

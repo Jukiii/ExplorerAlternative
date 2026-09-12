@@ -109,4 +109,10 @@ public sealed class DialogService : IDialogService
         var window = new PropertiesDialog(propertiesViewModel) { Owner = Application.Current?.MainWindow };
         window.ShowDialog();
     }
+
+    public void ShowDiff(DiffViewModel diffViewModel)
+    {
+        var window = new DiffWindow(diffViewModel) { Owner = Application.Current?.MainWindow };
+        window.Show();
+    }
 }

@@ -41,6 +41,10 @@
             <MenuItem Header="ピン留めに追加" Command="{Binding PinFileCommand}" />
             <MenuItem Header="プロパティ" Command="{Binding ShowPropertiesCommand}" />
             <Separator />
+            <!-- 仕様書25章：任意の2ファイル比較（Git管理外でも利用可能）。 -->
+            <MenuItem Header="比較対象として保持" Command="{Binding HoldForComparisonCommand}" />
+            <MenuItem Header="比較対象と比較" Command="{Binding CompareWithHeldCommand}" />
+            <Separator />
             <!-- 仕様書6.2章：ファイル・フォルダへのタグ付与。チェック状態は選択の代表ノード
                  （PrimarySelectedNode）が持つタグから判定する。 -->
             <MenuItem Header="タグ" ItemsSource="{Binding AvailableTags}">
@@ -79,15 +83,30 @@
             <MenuItem Header="Patchを作成..." Command="{Binding CreatePatchCommand}" />
             <MenuItem Header="Patchを適用..." Command="{Binding ApplyPatchCommand}" />
             <Separator />
-            <!-- 仕様書13章・20章：Git/SVN操作。プッシュ/プルはGit、更新はSVNのときのみ有効になる。 -->
+            <!-- 仕様書13章・20章・21章・22章：Git/SVN操作。Git専用の項目はGitのときのみ有効になる。 -->
             <MenuItem Header="Git/SVN操作">
+                <MenuItem Header="Show Diff" Command="{Binding ShowDiffCommand}" />
+                <MenuItem Header="変更を破棄 (Discard/Revert)" Command="{Binding DiscardChangesCommand}" />
+                <Separator />
                 <MenuItem Header="変更をステージ" Command="{Binding StageAllCommand}" />
                 <MenuItem Header="コミット..." Command="{Binding CommitCommand}" />
                 <Separator />
                 <MenuItem Header="プッシュ" Command="{Binding PushCommand}" />
                 <MenuItem Header="プル" Command="{Binding PullCommand}" />
+                <MenuItem Header="Fetch" Command="{Binding FetchCommand}" />
+                <Separator />
+                <MenuItem Header="ブランチを切り替え..." Command="{Binding ShowBranchesCommand}" />
+                <MenuItem Header="新規ブランチ作成..." Command="{Binding CreateBranchCommand}" />
+                <MenuItem Header="Merge..." Command="{Binding MergeCommand}" />
+                <MenuItem Header="Rebase..." Command="{Binding RebaseCommand}" />
+                <Separator />
+                <MenuItem Header="Stash" Command="{Binding StashCommand}" />
+                <MenuItem Header="Stash Pop" Command="{Binding StashPopCommand}" />
                 <Separator />
                 <MenuItem Header="更新 (svn update)" Command="{Binding UpdateCommand}" />
+                <Separator />
+                <MenuItem Header="Initialize (git init)" Command="{Binding InitRepositoryCommand}" />
+                <MenuItem Header="Clone..." Command="{Binding CloneRepositoryCommand}" />
             </MenuItem>
         </ContextMenu>
     </Window.Resources>
@@ -612,6 +631,12 @@
                                                             CommandParameter="{Binding}" />
                                                     <TextBlock Text="{Binding IconGlyph}" FontSize="14" Margin="2,0,6,0" VerticalAlignment="Center" />
                                                     <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                                    <!-- 仕様書21章「Explorer上：M Modified / A Added / D Deleted / U Untracked / R Renamed」。 -->
+                                                    <Border Margin="6,0,0,0" Padding="4,0" CornerRadius="2" VerticalAlignment="Center"
+                                                            Background="{DynamicResource PanelBackgroundBrush}"
+                                                            Visibility="{Binding HasVcsStatus, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <TextBlock Text="{Binding VcsStatus}" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
+                                                    </Border>
                                                     <TextBlock Text="{Binding TagsDisplay}" Margin="8,0,0,0" FontSize="11" VerticalAlignment="Center"
                                                                Foreground="{DynamicResource TextSecondaryBrush}"
                                                                Visibility="{Binding HasTags, Converter={StaticResource BoolToVisibilityConverter}}" />
@@ -663,6 +688,7 @@
                                                 </GridViewColumn>
                                                 <GridViewColumn Header="サイズ" Width="90" DisplayMemberBinding="{Binding SizeDisplay}" />
                                                 <GridViewColumn Header="更新日時" Width="140" DisplayMemberBinding="{Binding LastModifiedDisplay}" />
+                                                <GridViewColumn Header="Git" Width="50" DisplayMemberBinding="{Binding VcsStatus}" />
                                                 <GridViewColumn Header="タグ" Width="140" DisplayMemberBinding="{Binding TagsDisplay}" />
                                             </GridView>
                                         </ListView.View>

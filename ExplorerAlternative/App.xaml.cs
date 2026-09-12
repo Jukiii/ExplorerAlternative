@@ -49,6 +49,7 @@ public partial class App : Application
         var patchService = new PatchService();
         var sshService = new SshService();
         var versionControlOperationsService = new VersionControlOperationsService();
+        var diffService = new DiffService();
 
         var mainWindowViewModel = new MainWindowViewModel(
             fileSystemService,
@@ -61,7 +62,8 @@ public partial class App : Application
             themeService,
             patchService,
             sshService,
-            versionControlOperationsService);
+            versionControlOperationsService,
+            diffService);
 
         _mainWindowViewModel = mainWindowViewModel;
 

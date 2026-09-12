@@ -14,6 +14,7 @@ public sealed class FileSystemNodeViewModel : ObservableObject
     private readonly IFileSystemService _fileSystemService;
     private readonly IDialogService _dialogService;
     private readonly ISettingsService _settingsService;
+    private readonly Func<string, string>? _vcsStatusLookup;
     private readonly Action? _onTreeChanged;
     private bool _isExpanded;
     private bool _isSelected;
@@ -25,6 +26,7 @@ public sealed class FileSystemNodeViewModel : ObservableObject
         IFileSystemService fileSystemService,
         IDialogService dialogService,
         ISettingsService settingsService,
+        Func<string, string>? vcsStatusLookup = null,
         Action? onTreeChanged = null)
     {
         Entry = entry;
@@ -32,6 +34,7 @@ public sealed class FileSystemNodeViewModel : ObservableObject
         _fileSystemService = fileSystemService;
         _dialogService = dialogService;
         _settingsService = settingsService;
+        _vcsStatusLookup = vcsStatusLookup;
         _onTreeChanged = onTreeChanged;
 
         if (entry.IsDirectory)
@@ -78,6 +81,11 @@ public sealed class FileSystemNodeViewModel : ObservableObject
     public bool HasTags => Tags.Count > 0;
 
     public string TagsDisplay => HasTags ? $"🏷 {string.Join(", ", Tags)}" : string.Empty;
+
+    /// <summary>仕様書21章「Explorer上：M Modified / A Added / D Deleted / U Untracked / R Renamed」。</summary>
+    public string VcsStatus => _vcsStatusLookup?.Invoke(FullPath) ?? string.Empty;
+
+    public bool HasVcsStatus => VcsStatus.Length > 0;
 
     /// <summary>タグの付与・解除後、表示を更新するために呼び出す（ノードの再生成は不要）。</summary>
     public void RaiseTagsChanged()
@@ -130,7 +138,7 @@ public sealed class FileSystemNodeViewModel : ObservableObject
 
             foreach (var entry in entries)
             {
-                Children.Add(new FileSystemNodeViewModel(entry, Depth + 1, _fileSystemService, _dialogService, _settingsService, _onTreeChanged));
+                Children.Add(new FileSystemNodeViewModel(entry, Depth + 1, _fileSystemService, _dialogService, _settingsService, _vcsStatusLookup, _onTreeChanged));
             }
 
             _childrenLoaded = true;

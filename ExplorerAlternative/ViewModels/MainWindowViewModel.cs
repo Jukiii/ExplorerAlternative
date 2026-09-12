@@ -24,6 +24,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IPatchService _patchService;
     private readonly ISshService _sshService;
     private readonly IVersionControlOperationsService _versionControlOperationsService;
+    private readonly IDiffService _diffService;
 
     private TabViewModel? _activeTab;
     private PreviewViewModel? _currentPreview;
@@ -42,7 +43,8 @@ public sealed class MainWindowViewModel : ObservableObject
         IThemeService themeService,
         IPatchService patchService,
         ISshService sshService,
-        IVersionControlOperationsService versionControlOperationsService)
+        IVersionControlOperationsService versionControlOperationsService,
+        IDiffService diffService)
     {
         _fileSystemService = fileSystemService;
         _dialogService = dialogService;
@@ -54,6 +56,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _patchService = patchService;
         _sshService = sshService;
         _versionControlOperationsService = versionControlOperationsService;
+        _diffService = diffService;
 
         NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, NavigateActiveTo, OpenFile);
         NavigationPane.WorkspaceOpenRequested += name => LoadWorkspaceByName((Window)Application.Current!.MainWindow!, name);
@@ -256,6 +259,7 @@ public sealed class MainWindowViewModel : ObservableObject
             _settingsService,
             _patchService,
             _versionControlOperationsService,
+            _diffService,
             initialPath,
             initialViewMode);
 

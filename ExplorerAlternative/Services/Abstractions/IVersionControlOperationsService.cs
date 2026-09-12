@@ -23,4 +23,34 @@ public interface IVersionControlOperationsService
 
     /// <summary>更新コマンドを組み立てる（SVNのみ、svn update）。</summary>
     string BuildUpdateCommand(VersionControlInfo vcsInfo);
+
+    /// <summary>Fetchコマンドを組み立てる（Gitのみ）。</summary>
+    string BuildFetchCommand(VersionControlInfo vcsInfo);
+
+    /// <summary>Stashコマンドを組み立てる（Gitのみ）。</summary>
+    string BuildStashCommand(VersionControlInfo vcsInfo);
+
+    /// <summary>Stash Popコマンドを組み立てる（Gitのみ）。</summary>
+    string BuildStashPopCommand(VersionControlInfo vcsInfo);
+
+    /// <summary>変更の破棄コマンドを組み立てる（Discard Changes / svn revert）。</summary>
+    string BuildDiscardCommand(VersionControlInfo vcsInfo, string fullFilePath);
+
+    /// <summary>ブランチ切り替えコマンドを組み立てる（Gitのみ）。</summary>
+    string BuildCheckoutBranchCommand(VersionControlInfo vcsInfo, string branchName);
+
+    /// <summary>新規ブランチ作成コマンドを組み立てる（Gitのみ）。</summary>
+    string BuildCreateBranchCommand(VersionControlInfo vcsInfo, string branchName);
+
+    /// <summary>Mergeコマンドを組み立てる（Gitのみ）。</summary>
+    string BuildMergeCommand(VersionControlInfo vcsInfo, string branchName);
+
+    /// <summary>Rebaseコマンドを組み立てる（Gitのみ）。</summary>
+    string BuildRebaseCommand(VersionControlInfo vcsInfo, string branchName);
+
+    /// <summary>指定フォルダをGitリポジトリとして初期化するコマンドを組み立てる。</summary>
+    string BuildInitCommand(string folderPath);
+
+    /// <summary>指定フォルダへリポジトリをCloneするコマンドを組み立てる。</summary>
+    string BuildCloneCommand(string folderPath, string repositoryUrl);
 }

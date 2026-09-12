@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Services.Abstractions;
 
@@ -154,5 +155,211 @@ public sealed class VersionControlService : IVersionControlService
         var output = process.StandardOutput.ReadToEnd();
         process.WaitForExit(3000);
         return output.Trim();
+    }
+
+    // 終了コードを問わない（例：git show/svn cat はファイルが管理外だと非0で終わる）。
+    private static (string Output, bool Success) RunCommandAllowFailure(string workingDirectory, string fileName, string arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            Arguments = arguments,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            return (string.Empty, false);
+        }
+
+        var output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit(5000);
+        return (output, process.ExitCode == 0);
+    }
+
+    public IReadOnlyDictionary<string, string> GetFileStatuses(VersionControlInfo vcsInfo)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (vcsInfo.Kind == VersionControlKind.None || vcsInfo.RootPath is null)
+        {
+            return result;
+        }
+
+        try
+        {
+            // 注意：RunCommand()はコンソール出力全体をTrim()するため、`git status --porcelain`の
+            // 1行目先頭にある意味のある半角スペース（インデックス側が未変更であることを示す）が
+            // 削れて列がずれてしまう。ここでは列位置が壊れないRunCommandAllowFailure()を使う。
+            if (vcsInfo.Kind == VersionControlKind.Git)
+            {
+                var (output, _) = RunCommandAllowFailure(vcsInfo.RootPath, "git", "status --porcelain");
+                ParseGitStatus(vcsInfo.RootPath, output, result);
+            }
+            else
+            {
+                var (output, _) = RunCommandAllowFailure(vcsInfo.RootPath, "svn", "status");
+                ParseSvnStatus(vcsInfo.RootPath, output, result);
+            }
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            // 実行ファイルが見つからない等は状態バッジなしとして扱う（27章：クラッシュさせない）。
+        }
+
+        return result;
+    }
+
+    private static void ParseGitStatus(string root, string output, Dictionary<string, string> result)
+    {
+        foreach (var rawLine in output.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r');
+            if (line.Length < 4)
+            {
+                continue;
+            }
+
+            var indexStatus = line[0];
+            var worktreeStatus = line[1];
+            var relativePath = line[3..];
+
+            var arrowIndex = relativePath.IndexOf(" -> ", StringComparison.Ordinal);
+            if (arrowIndex >= 0)
+            {
+                relativePath = relativePath[(arrowIndex + 4)..];
+            }
+
+            relativePath = relativePath.Trim('"');
+            var badge = MapGitBadge(indexStatus, worktreeStatus);
+            if (badge is null)
+            {
+                continue;
+            }
+
+            var fullPath = Path.GetFullPath(Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+            result[fullPath] = badge;
+        }
+    }
+
+    private static string? MapGitBadge(char indexStatus, char worktreeStatus)
+    {
+        if (indexStatus == '?' && worktreeStatus == '?')
+        {
+            return "U";
+        }
+
+        if (indexStatus == 'R' || worktreeStatus == 'R')
+        {
+            return "R";
+        }
+
+        if (indexStatus == 'A' || worktreeStatus == 'A')
+        {
+            return "A";
+        }
+
+        if (indexStatus == 'D' || worktreeStatus == 'D')
+        {
+            return "D";
+        }
+
+        if (indexStatus == 'M' || worktreeStatus == 'M')
+        {
+            return "M";
+        }
+
+        return null;
+    }
+
+    private static void ParseSvnStatus(string root, string output, Dictionary<string, string> result)
+    {
+        foreach (var rawLine in output.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r');
+            if (line.Length <= 8)
+            {
+                continue;
+            }
+
+            var status = line[0];
+            var badge = status switch
+            {
+                'M' => "M",
+                'A' => "A",
+                'D' => "D",
+                '?' => "U",
+                _ => (string?)null
+            };
+
+            if (badge is null)
+            {
+                continue;
+            }
+
+            var relativePath = line[8..].Trim();
+            if (relativePath.Length == 0)
+            {
+                continue;
+            }
+
+            var fullPath = Path.GetFullPath(Path.IsPathRooted(relativePath) ? relativePath : Path.Combine(root, relativePath));
+            result[fullPath] = badge;
+        }
+    }
+
+    public IReadOnlyList<string> GetBranches(VersionControlInfo vcsInfo)
+    {
+        if (vcsInfo.Kind != VersionControlKind.Git || vcsInfo.RootPath is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            var output = RunCommand(vcsInfo.RootPath, "git", "branch -a --format=%(refname:short)");
+            return output
+                .Split('\n')
+                .Select(l => l.Trim())
+                .Where(l => l.Length > 0 && !l.Contains("->", StringComparison.Ordinal))
+                .Distinct()
+                .ToList();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    public string? GetCommittedFileContent(VersionControlInfo vcsInfo, string fullFilePath)
+    {
+        if (vcsInfo.Kind == VersionControlKind.None || vcsInfo.RootPath is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (vcsInfo.Kind == VersionControlKind.Git)
+            {
+                var relativePath = Path.GetRelativePath(vcsInfo.RootPath, fullFilePath).Replace(Path.DirectorySeparatorChar, '/');
+                var (output, success) = RunCommandAllowFailure(vcsInfo.RootPath, "git", $"show HEAD:\"{relativePath}\"");
+                return success ? output : null;
+            }
+            else
+            {
+                var (output, success) = RunCommandAllowFailure(vcsInfo.RootPath, "svn", $"cat \"{fullFilePath}\"");
+                return success ? output : null;
+            }
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return null;
+        }
     }
 }
