@@ -4,7 +4,9 @@
         Title="ショートカット一覧"
         Height="360" Width="420"
         WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
     <Grid Margin="12">
         <ListView x:Name="ShortcutList">
             <ListView.View>

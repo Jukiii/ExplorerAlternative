@@ -19,5 +19,7 @@ public sealed class AppSettings
 
     public ViewSettings View { get; set; } = new();
 
+    public AppearanceSettings Appearance { get; set; } = new();
+
     public List<WorkspaceState> Workspaces { get; set; } = new();
 }

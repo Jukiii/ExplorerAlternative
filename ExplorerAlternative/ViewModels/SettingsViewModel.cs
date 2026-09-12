@@ -13,12 +13,16 @@ public sealed class SettingsViewModel : ObservableObject
 {
     private readonly ISettingsService _settingsService;
     private readonly IDialogService _dialogService;
+    private readonly IThemeService _themeService;
     private string _newExtension = string.Empty;
+    private AppTheme _selectedTheme;
 
-    public SettingsViewModel(ISettingsService settingsService, IDialogService dialogService)
+    public SettingsViewModel(ISettingsService settingsService, IDialogService dialogService, IThemeService themeService)
     {
         _settingsService = settingsService;
         _dialogService = dialogService;
+        _themeService = themeService;
+        _selectedTheme = settingsService.Current.Appearance.Theme;
 
         foreach (var extension in settingsService.Current.TextFileExtensions)
         {
@@ -34,8 +38,26 @@ public sealed class SettingsViewModel : ObservableObject
         RemoveExtensionCommand = new RelayCommand(p => TextFileExtensions.Remove((string)p!));
         AddExternalToolCommand = new RelayCommand(_ => AddExternalTool());
         RemoveExternalToolCommand = new RelayCommand(p => ExternalTools.Remove((ExternalToolDefinition)p!));
+        SetThemeCommand = new RelayCommand(p => SelectedTheme = (AppTheme)p!);
         SaveCommand = new RelayCommand(_ => Save());
     }
+
+    /// <summary>仕様書63章「外観 &gt; Light/Dark/System」。選択と同時に即座に適用・保存する。</summary>
+    public AppTheme SelectedTheme
+    {
+        get => _selectedTheme;
+        set
+        {
+            if (SetProperty(ref _selectedTheme, value))
+            {
+                _themeService.Apply(value);
+                _settingsService.Current.Appearance.Theme = value;
+                _settingsService.Save();
+            }
+        }
+    }
+
+    public RelayCommand SetThemeCommand { get; }
 
     public ObservableCollection<string> TextFileExtensions { get; } = new();
 

@@ -22,6 +22,9 @@ public partial class App : Application
         settingsService.Load();
         _settingsService = settingsService;
 
+        var themeService = new ThemeService();
+        themeService.Apply(settingsService.Current.Appearance.Theme);
+
         var terminalService = new PowerShellTerminalService(settingsService.Current.Terminal.ShellExecutable);
         _terminalService = terminalService;
 
@@ -34,7 +37,8 @@ public partial class App : Application
             externalToolService,
             settingsService,
             terminalService,
-            workspaceService);
+            workspaceService,
+            themeService);
 
         var mainWindow = new MainWindow { DataContext = mainWindowViewModel };
         MainWindow = mainWindow;

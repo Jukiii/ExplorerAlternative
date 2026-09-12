@@ -4,7 +4,9 @@
         xmlns:vm="clr-namespace:ExplorerAlternative.ViewModels"
         Title="プレビュー"
         Height="480" Width="640"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
     <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />

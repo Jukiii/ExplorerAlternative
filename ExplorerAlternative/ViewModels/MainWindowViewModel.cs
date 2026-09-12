@@ -20,6 +20,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IExternalToolService _externalToolService;
     private readonly ISettingsService _settingsService;
     private readonly IWorkspaceService _workspaceService;
+    private readonly IThemeService _themeService;
 
     private TabViewModel? _activeTab;
     private bool _isPreviewOpen;
@@ -32,7 +33,8 @@ public sealed class MainWindowViewModel : ObservableObject
         IExternalToolService externalToolService,
         ISettingsService settingsService,
         IPowerShellTerminalService terminalService,
-        IWorkspaceService workspaceService)
+        IWorkspaceService workspaceService,
+        IThemeService themeService)
     {
         _fileSystemService = fileSystemService;
         _dialogService = dialogService;
@@ -40,6 +42,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _externalToolService = externalToolService;
         _settingsService = settingsService;
         _workspaceService = workspaceService;
+        _themeService = themeService;
 
         NavigationPane = new NavigationPaneViewModel(settingsService, NavigateActiveTo);
         Terminal = new TerminalViewModel(terminalService, settingsService.Current.Terminal.SyncByDefault);
@@ -275,7 +278,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void OpenSettings()
     {
-        var settingsViewModel = new SettingsViewModel(_settingsService, _dialogService);
+        var settingsViewModel = new SettingsViewModel(_settingsService, _dialogService, _themeService);
         _dialogService.ShowSettings(settingsViewModel);
     }
 
