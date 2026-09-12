@@ -45,6 +45,7 @@ public partial class App : Application
         var workspaceService = new WorkspaceService(settingsService);
         var patchService = new PatchService();
         var sshService = new SshService();
+        var versionControlOperationsService = new VersionControlOperationsService();
 
         var mainWindowViewModel = new MainWindowViewModel(
             fileSystemService,
@@ -56,7 +57,8 @@ public partial class App : Application
             workspaceService,
             themeService,
             patchService,
-            sshService);
+            sshService,
+            versionControlOperationsService);
 
         var mainWindow = new MainWindow { DataContext = mainWindowViewModel };
         MainWindow = mainWindow;

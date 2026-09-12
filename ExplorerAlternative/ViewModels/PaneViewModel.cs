@@ -23,6 +23,7 @@ public sealed class PaneViewModel : ObservableObject
     private readonly IExternalToolService _externalToolService;
     private readonly ISettingsService _settingsService;
     private readonly IPatchService _patchService;
+    private readonly IVersionControlOperationsService _versionControlOperationsService;
     private readonly Stack<string> _backStack = new();
     private readonly Stack<string> _forwardStack = new();
 
@@ -41,6 +42,7 @@ public sealed class PaneViewModel : ObservableObject
         IExternalToolService externalToolService,
         ISettingsService settingsService,
         IPatchService patchService,
+        IVersionControlOperationsService versionControlOperationsService,
         string initialPath,
         ViewMode initialViewMode)
     {
@@ -50,6 +52,7 @@ public sealed class PaneViewModel : ObservableObject
         _externalToolService = externalToolService;
         _settingsService = settingsService;
         _patchService = patchService;
+        _versionControlOperationsService = versionControlOperationsService;
         _currentPath = initialPath;
         _currentViewMode = initialViewMode;
 
@@ -74,11 +77,19 @@ public sealed class PaneViewModel : ObservableObject
         ToggleTagCommand = new RelayCommand(p => ToggleTag((TagDefinition)p!), _ => SelectedNodes.Count > 0);
         CreatePatchCommand = new RelayCommand(_ => CreatePatch(), _ => VcsInfo.Kind != VersionControlKind.None);
         ApplyPatchCommand = new RelayCommand(_ => ApplyPatch(), _ => VcsInfo.Kind != VersionControlKind.None);
+        StageAllCommand = new RelayCommand(_ => StageAll(), _ => VcsInfo.Kind != VersionControlKind.None);
+        CommitCommand = new RelayCommand(_ => Commit(), _ => VcsInfo.Kind != VersionControlKind.None);
+        PushCommand = new RelayCommand(_ => Push(), _ => VcsInfo.Kind == VersionControlKind.Git);
+        PullCommand = new RelayCommand(_ => Pull(), _ => VcsInfo.Kind == VersionControlKind.Git);
+        UpdateCommand = new RelayCommand(_ => Update(), _ => VcsInfo.Kind == VersionControlKind.Svn);
 
         LoadPath(_currentPath);
     }
 
     public event Action<string>? PathChanged;
+
+    /// <summary>Git/SVN操作コマンドを統合ターミナル（9章）で実行してもらうための橋渡し。</summary>
+    public event Action<string>? RunTerminalCommandRequested;
 
     public ObservableCollection<FileSystemNodeViewModel> RootNodes { get; } = new();
 
@@ -129,6 +140,16 @@ public sealed class PaneViewModel : ObservableObject
     public RelayCommand CreatePatchCommand { get; }
 
     public RelayCommand ApplyPatchCommand { get; }
+
+    public RelayCommand StageAllCommand { get; }
+
+    public RelayCommand CommitCommand { get; }
+
+    public RelayCommand PushCommand { get; }
+
+    public RelayCommand PullCommand { get; }
+
+    public RelayCommand UpdateCommand { get; }
 
     /// <summary>コンテキストメニューの「タグ」サブメニューに表示する、登録済みタグ一覧。</summary>
     public IReadOnlyList<TagDefinition> AvailableTags => _settingsService.Current.TagDefinitions;
@@ -272,6 +293,11 @@ public sealed class PaneViewModel : ObservableObject
             VcsInfo = IsPathComputerRoot(path) ? VersionControlInfo.None : _versionControlService.Detect(path);
             CreatePatchCommand.RaiseCanExecuteChanged();
             ApplyPatchCommand.RaiseCanExecuteChanged();
+            StageAllCommand.RaiseCanExecuteChanged();
+            CommitCommand.RaiseCanExecuteChanged();
+            PushCommand.RaiseCanExecuteChanged();
+            PullCommand.RaiseCanExecuteChanged();
+            UpdateCommand.RaiseCanExecuteChanged();
 
             PathChanged?.Invoke(path);
         }
@@ -740,6 +766,39 @@ public sealed class PaneViewModel : ObservableObject
             _patchService.ApplyPatch(VcsInfo, patchPath);
             RefreshCurrentFolder();
             _dialogService.ShowInfo("Patchを適用しました。");
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+    }
+
+    // 仕様書13章・20章：Git/SVN操作。コマンドの組み立てはサービスに委譲し、実行は
+    // 統合ターミナル（9章）で行う（資格情報プロンプト等の対話にも対応できるようにするため）。
+    private void StageAll() => RunVcsCommand(() => _versionControlOperationsService.BuildStageCommand(VcsInfo));
+
+    private void Commit()
+    {
+        var message = _dialogService.PromptText("コミット", "コミットメッセージを入力してください。");
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        RunVcsCommand(() => _versionControlOperationsService.BuildCommitCommand(VcsInfo, message));
+    }
+
+    private void Push() => RunVcsCommand(() => _versionControlOperationsService.BuildPushCommand(VcsInfo));
+
+    private void Pull() => RunVcsCommand(() => _versionControlOperationsService.BuildPullCommand(VcsInfo));
+
+    private void Update() => RunVcsCommand(() => _versionControlOperationsService.BuildUpdateCommand(VcsInfo));
+
+    private void RunVcsCommand(Func<string> buildCommand)
+    {
+        try
+        {
+            RunTerminalCommandRequested?.Invoke(buildCommand());
         }
         catch (AppOperationException ex)
         {

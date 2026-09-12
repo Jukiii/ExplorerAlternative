@@ -60,6 +60,17 @@
             <!-- 仕様書14章：Git/SVN管理下のフォルダでのみ有効になる（CanExecuteでVcsInfo.Kindを判定）。 -->
             <MenuItem Header="Patchを作成..." Command="{Binding CreatePatchCommand}" />
             <MenuItem Header="Patchを適用..." Command="{Binding ApplyPatchCommand}" />
+            <Separator />
+            <!-- 仕様書13章・20章：Git/SVN操作。プッシュ/プルはGit、更新はSVNのときのみ有効になる。 -->
+            <MenuItem Header="Git/SVN操作">
+                <MenuItem Header="変更をステージ" Command="{Binding StageAllCommand}" />
+                <MenuItem Header="コミット..." Command="{Binding CommitCommand}" />
+                <Separator />
+                <MenuItem Header="プッシュ" Command="{Binding PushCommand}" />
+                <MenuItem Header="プル" Command="{Binding PullCommand}" />
+                <Separator />
+                <MenuItem Header="更新 (svn update)" Command="{Binding UpdateCommand}" />
+            </MenuItem>
         </ContextMenu>
     </Window.Resources>
 

@@ -23,6 +23,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IThemeService _themeService;
     private readonly IPatchService _patchService;
     private readonly ISshService _sshService;
+    private readonly IVersionControlOperationsService _versionControlOperationsService;
 
     private TabViewModel? _activeTab;
     private bool _isPreviewOpen;
@@ -38,7 +39,8 @@ public sealed class MainWindowViewModel : ObservableObject
         IWorkspaceService workspaceService,
         IThemeService themeService,
         IPatchService patchService,
-        ISshService sshService)
+        ISshService sshService,
+        IVersionControlOperationsService versionControlOperationsService)
     {
         _fileSystemService = fileSystemService;
         _dialogService = dialogService;
@@ -49,6 +51,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _themeService = themeService;
         _patchService = patchService;
         _sshService = sshService;
+        _versionControlOperationsService = versionControlOperationsService;
 
         NavigationPane = new NavigationPaneViewModel(settingsService, NavigateActiveTo);
         Terminal = new TerminalViewModel(terminalService, settingsService.Current.Terminal.SyncByDefault);
@@ -201,15 +204,27 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private PaneViewModel CreatePane(string initialPath, ViewMode initialViewMode)
     {
-        return new PaneViewModel(
+        var pane = new PaneViewModel(
             _fileSystemService,
             _dialogService,
             _versionControlService,
             _externalToolService,
             _settingsService,
             _patchService,
+            _versionControlOperationsService,
             initialPath,
             initialViewMode);
+
+        pane.RunTerminalCommandRequested += RunTerminalCommand;
+        return pane;
+    }
+
+    // 仕様書13章・20章：Git/SVN操作コマンドを統合ターミナル（9章）上で実行する。
+    // 資格情報の入力待ちなどの対話にも、通常のターミナル操作と同じ画面で対応できる。
+    private void RunTerminalCommand(string command)
+    {
+        Terminal.IsVisible = true;
+        Terminal.SendRawCommand(command);
     }
 
     private void DuplicateTab(TabViewModel source)
