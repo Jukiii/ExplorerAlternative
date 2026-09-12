@@ -15,15 +15,18 @@
         <TextBlock Grid.Row="0" Text="{Binding Title}" FontWeight="Bold" FontSize="16" Margin="0,0,0,8" />
 
         <Grid Grid.Row="1">
+            <!-- 注意: Visibilityをここでローカル値として指定すると、Style内のDataTriggerより
+                 優先されてしまい常にCollapsedのままになる（プレビューが表示されない不具合の原因だった）。
+                 既定値は必ずStyle内のSetterとして指定すること。 -->
             <TextBox x:Name="TextViewer"
                      Text="{Binding TextContent, Mode=OneWay}"
                      IsReadOnly="True"
                      TextWrapping="Wrap"
                      VerticalScrollBarVisibility="Auto"
-                     FontFamily="Consolas"
-                     Visibility="Collapsed">
+                     FontFamily="Consolas">
                 <TextBox.Style>
                     <Style TargetType="TextBox">
+                        <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding Kind}" Value="{x:Static vm:PreviewKind.Text}">
                                 <Setter Property="Visibility" Value="Visible" />
@@ -38,10 +41,10 @@
 
             <RichTextBox x:Name="MarkdownViewer"
                          IsReadOnly="True"
-                         VerticalScrollBarVisibility="Auto"
-                         Visibility="Collapsed">
+                         VerticalScrollBarVisibility="Auto">
                 <RichTextBox.Style>
                     <Style TargetType="RichTextBox">
+                        <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding Kind}" Value="{x:Static vm:PreviewKind.Markdown}">
                                 <Setter Property="Visibility" Value="Visible" />
@@ -53,9 +56,10 @@
 
             <TextBlock x:Name="FolderViewer"
                        Text="{Binding FolderSummary}"
-                       Visibility="Collapsed">
+                       FontSize="14">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding Kind}" Value="{x:Static vm:PreviewKind.Folder}">
                                 <Setter Property="Visibility" Value="Visible" />
