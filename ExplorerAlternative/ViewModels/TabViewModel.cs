@@ -66,6 +66,9 @@ public sealed class TabViewModel : ObservableObject
 
     public bool CanClosePane => Panes.Count > 1;
 
+    /// <summary>ペインが1件のみのときはアクティブ枠を表示する意味がないため隠す。</summary>
+    public bool ShowPaneBorders => Panes.Count > 1;
+
     /// <summary>UniformGridのColumns算出用（横分割時のみ2列、それ以外は1列）。</summary>
     public int GridColumns => SplitOrientation == Orientation.Horizontal && Panes.Count > 1 ? 2 : 1;
 
@@ -85,6 +88,7 @@ public sealed class TabViewModel : ObservableObject
         OnPropertyChanged(nameof(ActivePane));
         OnPropertyChanged(nameof(CanSplit));
         OnPropertyChanged(nameof(CanClosePane));
+        OnPropertyChanged(nameof(ShowPaneBorders));
         UpdateActiveFlags();
         RaiseGridLayoutChanged();
     }
@@ -115,6 +119,7 @@ public sealed class TabViewModel : ObservableObject
         UpdateActiveFlags();
         OnPropertyChanged(nameof(CanSplit));
         OnPropertyChanged(nameof(CanClosePane));
+        OnPropertyChanged(nameof(ShowPaneBorders));
         RaiseGridLayoutChanged();
     }
 

@@ -11,15 +11,15 @@
 
         <!-- カラーパレット -->
         <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#FFFFFF" />
-        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#F3F3F3" />
-        <SolidColorBrush x:Key="ToolbarBackgroundBrush" Color="#FAFAFA" />
-        <SolidColorBrush x:Key="BorderBrush2" Color="#E1E1E1" />
-        <SolidColorBrush x:Key="AccentBrush" Color="#0078D4" />
-        <SolidColorBrush x:Key="AccentLightBrush" Color="#E5F1FB" />
-        <SolidColorBrush x:Key="HoverBrush" Color="#F0F0F0" />
-        <SolidColorBrush x:Key="PressedBrush" Color="#E3E3E3" />
-        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#202020" />
-        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#6B6B6B" />
+        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#EDEDED" />
+        <SolidColorBrush x:Key="ToolbarBackgroundBrush" Color="#F5F5F5" />
+        <SolidColorBrush x:Key="BorderBrush2" Color="#C9C9C9" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#0067C0" />
+        <SolidColorBrush x:Key="AccentLightBrush" Color="#CFE8FC" />
+        <SolidColorBrush x:Key="HoverBrush" Color="#E4E4E4" />
+        <SolidColorBrush x:Key="PressedBrush" Color="#D3D3D3" />
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A1A1A" />
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#4E4E4E" />
         <SolidColorBrush x:Key="TerminalBackgroundBrush" Color="#1E1E1E" />
         <SolidColorBrush x:Key="TerminalForegroundBrush" Color="#D4D4D4" />
         <SolidColorBrush x:Key="TerminalAccentBrush" Color="#3DDC97" />
@@ -101,8 +101,13 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
                         <Border x:Name="Bd" Background="{StaticResource PanelBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush2}" BorderThickness="1,1,1,0"
                                 CornerRadius="6,6,0,0" Padding="2">
-                            <ContentPresenter />
+                            <Grid>
+                                <ContentPresenter />
+                                <Border x:Name="ActiveIndicator" Height="3" VerticalAlignment="Bottom"
+                                        Background="{StaticResource AccentBrush}" Visibility="Collapsed" />
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -110,6 +115,8 @@
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource WindowBackgroundBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BorderBrush2}" />
+                                <Setter TargetName="ActiveIndicator" Property="Visibility" Value="Visible" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

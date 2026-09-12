@@ -301,9 +301,15 @@
                                     <Style TargetType="Border">
                                         <Setter Property="BorderBrush" Value="Transparent" />
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                            <!-- ペインが2件以上に分割されているときだけアクティブ枠を表示する
+                                                 （1ペインのみの通常時に常時青枠が出るのを防ぐ）。 -->
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding IsActive}" Value="True" />
+                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=DataContext.ActiveTab.ShowPaneBorders}" Value="True" />
+                                                </MultiDataTrigger.Conditions>
                                                 <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-                                            </DataTrigger>
+                                            </MultiDataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
