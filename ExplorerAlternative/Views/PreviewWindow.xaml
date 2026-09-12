@@ -25,7 +25,10 @@
                      IsReadOnly="True"
                      TextWrapping="Wrap"
                      VerticalScrollBarVisibility="Auto"
-                     FontFamily="Consolas">
+                     FontFamily="Consolas"
+                     Background="{DynamicResource WindowBackgroundBrush}"
+                     Foreground="{DynamicResource TextPrimaryBrush}"
+                     BorderThickness="0">
                 <TextBox.Style>
                     <Style TargetType="TextBox">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -43,7 +46,10 @@
 
             <RichTextBox x:Name="MarkdownViewer"
                          IsReadOnly="True"
-                         VerticalScrollBarVisibility="Auto">
+                         VerticalScrollBarVisibility="Auto"
+                         Background="{DynamicResource WindowBackgroundBrush}"
+                         Foreground="{DynamicResource TextPrimaryBrush}"
+                         BorderThickness="0">
                 <RichTextBox.Style>
                     <Style TargetType="RichTextBox">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -58,7 +64,8 @@
 
             <TextBlock x:Name="FolderViewer"
                        Text="{Binding FolderSummary}"
-                       FontSize="14">
+                       FontSize="14"
+                       Foreground="{DynamicResource TextPrimaryBrush}">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
                         <Setter Property="Visibility" Value="Collapsed" />

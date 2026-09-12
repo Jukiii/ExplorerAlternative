@@ -215,6 +215,8 @@
 
                 <TextBox x:Name="AddressEditTextBox" Text="{Binding AddressEditText, UpdateSourceTrigger=PropertyChanged}"
                          VerticalContentAlignment="Center" Margin="10,0,0,0" Padding="6,4"
+                         Background="{DynamicResource WindowBackgroundBrush}"
+                         Foreground="{DynamicResource TextPrimaryBrush}"
                          BorderBrush="{DynamicResource AccentBrush}"
                          IsVisibleChanged="AddressEditTextBox_IsVisibleChanged">
                     <TextBox.Style>
@@ -358,6 +360,7 @@
                                 <Grid AllowDrop="True" DragOver="PaneGrid_DragOver" Drop="PaneGrid_Drop">
                                     <!-- 階層表示 -->
                                     <ListBox x:Name="TreeListBox" ItemsSource="{Binding VisibleNodes}"
+                                             Background="Transparent"
                                              SelectionMode="Extended" BorderThickness="0" Padding="6"
                                              ItemContainerStyle="{StaticResource FileRowItemStyle}"
                                              SelectionChanged="TreeListBox_SelectionChanged"
@@ -367,7 +370,7 @@
                                              PreviewMouseMove="NodeListBox_PreviewMouseMove"
                                              ContextMenu="{StaticResource NodeContextMenu}">
                                         <ListBox.Style>
-                                            <Style TargetType="ListBox">
+                                            <Style TargetType="ListBox" BasedOn="{StaticResource {x:Type ListBox}}">
                                                 <Setter Property="Visibility" Value="Collapsed" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding CurrentViewMode}" Value="{x:Static models:ViewMode.Tree}">
@@ -395,6 +398,7 @@
 
                                     <!-- 詳細表示 -->
                                     <ListView x:Name="DetailListView" ItemsSource="{Binding RootNodes}"
+                                              Background="Transparent"
                                               SelectionMode="Extended" BorderThickness="0"
                                               ItemContainerStyle="{StaticResource DetailRowItemStyle}"
                                               SelectionChanged="TreeListBox_SelectionChanged"
@@ -404,7 +408,7 @@
                                               PreviewMouseMove="NodeListBox_PreviewMouseMove"
                                               ContextMenu="{StaticResource NodeContextMenu}">
                                         <ListView.Style>
-                                            <Style TargetType="ListView">
+                                            <Style TargetType="ListView" BasedOn="{StaticResource {x:Type ListView}}">
                                                 <Setter Property="Visibility" Value="Collapsed" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding CurrentViewMode}" Value="{x:Static models:ViewMode.Detail}">
