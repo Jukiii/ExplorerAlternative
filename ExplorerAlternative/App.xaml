@@ -1,0 +1,11 @@
+﻿<Application x:Class="ExplorerAlternative.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:ExplorerAlternative"
+             xmlns:conv="clr-namespace:ExplorerAlternative.Converters">
+    <Application.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        <conv:VcsKindToVisibilityConverter x:Key="VcsKindToVisibilityConverter" />
+        <conv:SyncLabelConverter x:Key="SyncLabelConverter" />
+    </Application.Resources>
+</Application>

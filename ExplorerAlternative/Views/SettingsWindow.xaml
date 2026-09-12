@@ -1,0 +1,63 @@
+<Window x:Class="ExplorerAlternative.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="設定"
+        Height="480" Width="520"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <GroupBox Grid.Row="0" Header="テキストとして扱う拡張子">
+            <DockPanel Margin="8">
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBox Width="120" Text="{Binding NewExtension, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Content="追加" Width="60" Margin="8,0,0,0" Command="{Binding AddExtensionCommand}" />
+                </StackPanel>
+                <ListBox ItemsSource="{Binding TextFileExtensions}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel>
+                                <Button Content="削除" DockPanel.Dock="Right"
+                                        Command="{Binding DataContext.RemoveExtensionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" />
+                                <TextBlock Text="{Binding}" VerticalAlignment="Center" Margin="4,0" />
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </GroupBox>
+
+        <GroupBox Grid.Row="1" Header="外部ツール">
+            <DockPanel Margin="8">
+                <Button DockPanel.Dock="Top" Content="外部ツールを追加..." HorizontalAlignment="Left" Margin="0,0,0,8"
+                        Command="{Binding AddExternalToolCommand}" />
+                <ListBox ItemsSource="{Binding ExternalTools}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel>
+                                <Button Content="削除" DockPanel.Dock="Right"
+                                        Command="{Binding DataContext.RemoveExternalToolCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" />
+                                <TextBlock Margin="4,0" VerticalAlignment="Center">
+                                    <Run Text="{Binding Name, Mode=OneWay}" FontWeight="Bold" />
+                                    <Run Text=" - " />
+                                    <Run Text="{Binding ExecutablePath, Mode=OneWay}" />
+                                </TextBlock>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </GroupBox>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="保存" Width="90" Margin="0,0,8,0" Command="{Binding SaveCommand}" Click="SaveButton_Click" />
+            <Button Content="閉じる" Width="90" IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

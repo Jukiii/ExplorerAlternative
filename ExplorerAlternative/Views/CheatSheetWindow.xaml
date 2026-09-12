@@ -1,0 +1,18 @@
+<Window x:Class="ExplorerAlternative.Views.CheatSheetWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ショートカット一覧"
+        Height="360" Width="420"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+    <Grid Margin="12">
+        <ListView x:Name="ShortcutList">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="操作" Width="220" DisplayMemberBinding="{Binding Action}" />
+                    <GridViewColumn Header="ショートカット" Width="150" DisplayMemberBinding="{Binding Gesture}" />
+                </GridView>
+            </ListView.View>
+        </ListView>
+    </Grid>
+</Window>

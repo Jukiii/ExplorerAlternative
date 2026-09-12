@@ -1,0 +1,17 @@
+# Build outputs
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+
+# Rider / VS Code
+.idea/
+
+# Claude Code local settings (not meant to be shared)
+.claude/settings.local.json
+
+# OS
+Thumbs.db
+.DS_Store
