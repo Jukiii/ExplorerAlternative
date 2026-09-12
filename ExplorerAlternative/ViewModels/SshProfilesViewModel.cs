@@ -10,19 +10,27 @@ namespace ExplorerAlternative.ViewModels;
 /// SSH接続の登録・管理ダイアログ（仕様書44章「SSH接続先を登録・管理」）。
 /// 接続実行そのものはRequestConnectで呼び出し側（MainWindowViewModel）へ委譲し、
 /// 統合ターミナル（9章）上でOpenSSHクライアントを起動してもらう。
+/// パスワードはsettings.jsonに含めず、Windows Credential Manager
+/// （<see cref="ISshCredentialStore"/>）にのみ保存する。
 /// </summary>
 public sealed class SshProfilesViewModel : ObservableObject
 {
     private readonly ISettingsService _settingsService;
     private readonly IDialogService _dialogService;
     private readonly ISshService _sshService;
+    private readonly ISshCredentialStore _credentialStore;
     private SshConnectionProfile? _selectedProfile;
 
-    public SshProfilesViewModel(ISettingsService settingsService, IDialogService dialogService, ISshService sshService)
+    public SshProfilesViewModel(
+        ISettingsService settingsService,
+        IDialogService dialogService,
+        ISshService sshService,
+        ISshCredentialStore credentialStore)
     {
         _settingsService = settingsService;
         _dialogService = dialogService;
         _sshService = sshService;
+        _credentialStore = credentialStore;
 
         foreach (var profile in settingsService.Current.SshProfiles)
         {
@@ -59,8 +67,8 @@ public sealed class SshProfilesViewModel : ObservableObject
 
     public RelayCommand ConnectCommand { get; }
 
-    /// <summary>「接続」実行時に、組み立てたsshコマンドを呼び出し側へ通知する。</summary>
-    public event Action<string>? RequestConnect;
+    /// <summary>「接続」実行時に、組み立てたsshコマンドと（保存されていれば）パスワードを呼び出し側へ通知する。</summary>
+    public event Action<string, string?>? RequestConnect;
 
     public event Action? RequestClose;
 
@@ -81,6 +89,12 @@ public sealed class SshProfilesViewModel : ObservableObject
         var profile = editViewModel.ToProfile();
         Profiles.Add(profile);
         SelectedProfile = profile;
+
+        if (!string.IsNullOrEmpty(editViewModel.Password))
+        {
+            _credentialStore.SavePassword(profile.Id, editViewModel.Password);
+        }
+
         Save();
     }
 
@@ -92,7 +106,8 @@ public sealed class SshProfilesViewModel : ObservableObject
             return;
         }
 
-        var editViewModel = SshConnectionViewModel.FromProfile(target);
+        var hasStoredPassword = _credentialStore.TryGetPassword(target.Id) is not null;
+        var editViewModel = SshConnectionViewModel.FromProfile(target, hasStoredPassword);
         if (!_dialogService.ShowSshConnection(editViewModel))
         {
             return;
@@ -108,6 +123,17 @@ public sealed class SshProfilesViewModel : ObservableObject
         var updated = editViewModel.ToProfile();
         Profiles[index] = updated;
         SelectedProfile = updated;
+
+        if (editViewModel.ClearStoredPassword)
+        {
+            _credentialStore.DeletePassword(updated.Id);
+        }
+
+        if (!string.IsNullOrEmpty(editViewModel.Password))
+        {
+            _credentialStore.SavePassword(updated.Id, editViewModel.Password);
+        }
+
         Save();
     }
 
@@ -126,6 +152,7 @@ public sealed class SshProfilesViewModel : ObservableObject
 
         Profiles.Remove(target);
         SelectedProfile = null;
+        _credentialStore.DeletePassword(target.Id);
         Save();
     }
 
@@ -140,7 +167,8 @@ public sealed class SshProfilesViewModel : ObservableObject
         try
         {
             var command = _sshService.BuildConnectCommand(target);
-            RequestConnect?.Invoke(command);
+            var password = _credentialStore.TryGetPassword(target.Id);
+            RequestConnect?.Invoke(command, password);
             RequestClose?.Invoke();
         }
         catch (AppOperationException ex)

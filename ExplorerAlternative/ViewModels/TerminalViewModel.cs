@@ -15,6 +15,7 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
     private bool _isActive;
     private string _outputText = string.Empty;
     private string _inputText = string.Empty;
+    private string? _pendingPassword;
 
     public TerminalViewModel(IPowerShellTerminalService terminalService, bool syncByDefault, string name)
     {
@@ -85,6 +86,17 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
         _terminalService.SendCommand(command);
     }
 
+    /// <summary>
+    /// 仕様書44章：SSH接続時、Windows Credential Managerに保存済みのパスワードがあれば
+    /// 自動入力する。出力に"password"（大文字小文字不問、"passphrase"とは区別）を含む行が
+    /// 現れた最初の1回だけ、パスワードを（画面には表示せず）送信する。
+    /// </summary>
+    public void SendRawCommand(string command, string? password)
+    {
+        _pendingPassword = string.IsNullOrEmpty(password) ? null : password;
+        SendRawCommand(command);
+    }
+
     /// <summary>仕様書19章：ファイル・フォルダのドラッグ＆ドロップによるパス入力。</summary>
     public void InsertPathIntoInput(string path)
     {
@@ -102,6 +114,15 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
     private void AppendOutput(string line)
     {
         OutputText += line + Environment.NewLine;
+
+        if (_pendingPassword is not null &&
+            line.Contains("password", StringComparison.OrdinalIgnoreCase) &&
+            !line.Contains("passphrase", StringComparison.OrdinalIgnoreCase))
+        {
+            var password = _pendingPassword;
+            _pendingPassword = null;
+            _terminalService.SendCommand(password);
+        }
     }
 
     public void Dispose() => _terminalService.Dispose();

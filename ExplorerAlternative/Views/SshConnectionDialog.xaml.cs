@@ -14,6 +14,12 @@ public partial class SshConnectionDialog : Window
 
     private void ConnectButton_Click(object sender, RoutedEventArgs e)
     {
+        // PasswordBox.Passwordはセキュリティ上バインドできないため、保存確定時にここで読み取る。
+        if (DataContext is SshConnectionViewModel viewModel)
+        {
+            viewModel.Password = PasswordBoxControl.Password;
+        }
+
         DialogResult = true;
     }
 

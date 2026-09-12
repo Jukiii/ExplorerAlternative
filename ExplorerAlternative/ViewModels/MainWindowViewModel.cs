@@ -25,6 +25,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly ISshService _sshService;
     private readonly IVersionControlOperationsService _versionControlOperationsService;
     private readonly IDiffService _diffService;
+    private readonly ISshCredentialStore _sshCredentialStore;
 
     private TabViewModel? _activeTab;
     private PreviewViewModel? _currentPreview;
@@ -44,7 +45,8 @@ public sealed class MainWindowViewModel : ObservableObject
         IPatchService patchService,
         ISshService sshService,
         IVersionControlOperationsService versionControlOperationsService,
-        IDiffService diffService)
+        IDiffService diffService,
+        ISshCredentialStore sshCredentialStore)
     {
         _fileSystemService = fileSystemService;
         _dialogService = dialogService;
@@ -57,6 +59,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _sshService = sshService;
         _versionControlOperationsService = versionControlOperationsService;
         _diffService = diffService;
+        _sshCredentialStore = sshCredentialStore;
 
         NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, NavigateActiveTo, OpenFile);
         NavigationPane.WorkspaceOpenRequested += name => LoadWorkspaceByName((Window)Application.Current!.MainWindow!, name);
@@ -454,8 +457,8 @@ public sealed class MainWindowViewModel : ObservableObject
     // 統合ターミナル(9章)上でssh接続を確立する。
     private void OpenSshConnection()
     {
-        var profilesViewModel = new SshProfilesViewModel(_settingsService, _dialogService, _sshService);
-        profilesViewModel.RequestConnect += command => TerminalHost.SendRawCommand(command);
+        var profilesViewModel = new SshProfilesViewModel(_settingsService, _dialogService, _sshService, _sshCredentialStore);
+        profilesViewModel.RequestConnect += (command, password) => TerminalHost.SendRawCommand(command, password);
         _dialogService.ShowSshProfiles(profilesViewModel);
     }
 

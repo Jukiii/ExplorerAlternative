@@ -2,13 +2,15 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="SSH接続の登録"
-        Height="340" Width="420"
+        Height="420" Width="440"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{DynamicResource WindowBackgroundBrush}"
         TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
     <Grid Margin="16">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -49,11 +51,31 @@
             <Button Grid.Column="1" Content="参照..." Width="70" Click="BrowseButton_Click" />
         </Grid>
 
-        <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" VerticalAlignment="Top"
-                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
-                   Text="パスワード・パスフレーズはここには保存されません。鍵のパスフレーズは接続時にOpenSSH（ターミナル）が対話的に確認します。" />
+        <TextBlock Grid.Row="5" Grid.Column="0" Text="パスワード(任意)" VerticalAlignment="Center" Margin="0,0,8,10" />
+        <PasswordBox x:Name="PasswordBoxControl" Grid.Row="5" Grid.Column="1" Padding="4" Margin="0,0,0,4" />
 
-        <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <StackPanel Grid.Row="6" Grid.Column="1" Margin="0,0,0,10">
+            <StackPanel.Style>
+                <Style TargetType="StackPanel">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasStoredPassword}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Style>
+            <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"
+                       Text="※ 保存済みのパスワードがあります。空欄のまま保存すると変更しません。" />
+            <CheckBox Content="保存済みのパスワードを削除する" Margin="0,4,0,0"
+                      IsChecked="{Binding ClearStoredPassword, Mode=TwoWay}" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" VerticalAlignment="Top"
+                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
+                   Text="パスワードを入力するとWindows Credential Manager（資格情報マネージャー）へ安全に保存されます。settings.json等への平文保存は行いません。未入力の場合、鍵のパスフレーズは接続時にOpenSSH（ターミナル）が対話的に確認します。" />
+
+        <StackPanel Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="保存" Width="90" Margin="0,0,8,0" IsDefault="True" Click="ConnectButton_Click" />
             <Button Content="キャンセル" Width="90" IsCancel="True" />
         </StackPanel>

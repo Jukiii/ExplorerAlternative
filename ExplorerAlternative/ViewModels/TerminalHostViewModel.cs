@@ -80,6 +80,13 @@ public sealed class TerminalHostViewModel : ObservableObject, IDisposable
         ActiveTerminal?.SendRawCommand(command);
     }
 
+    /// <summary>仕様書44章：SSH接続時、保存済みパスワードがあれば自動入力する。</summary>
+    public void SendRawCommand(string command, string? password)
+    {
+        Show();
+        ActiveTerminal?.SendRawCommand(command, password);
+    }
+
     private void AddTerminal()
     {
         _counter++;
