@@ -277,7 +277,7 @@
                 </DockPanel>
             </Border>
 
-            <GridSplitter Grid.Column="1" Width="1" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush2}"
+            <GridSplitter Grid.Column="1" Width="3" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush2}"
                           Visibility="{Binding NavigationPane.IsCollapsed, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}" />
 
             <Button Grid.Column="0" Content="»" Width="22" Height="22" Padding="0" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="4"

@@ -11,15 +11,15 @@
 
         <!-- カラーパレット -->
         <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#FFFFFF" />
-        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#EDEDED" />
-        <SolidColorBrush x:Key="ToolbarBackgroundBrush" Color="#F5F5F5" />
-        <SolidColorBrush x:Key="BorderBrush2" Color="#C9C9C9" />
-        <SolidColorBrush x:Key="AccentBrush" Color="#0067C0" />
-        <SolidColorBrush x:Key="AccentLightBrush" Color="#CFE8FC" />
-        <SolidColorBrush x:Key="HoverBrush" Color="#E4E4E4" />
-        <SolidColorBrush x:Key="PressedBrush" Color="#D3D3D3" />
-        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A1A1A" />
-        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#4E4E4E" />
+        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#E2E2E2" />
+        <SolidColorBrush x:Key="ToolbarBackgroundBrush" Color="#E8E8E8" />
+        <SolidColorBrush x:Key="BorderBrush2" Color="#A6A6A6" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#005FB8" />
+        <SolidColorBrush x:Key="AccentLightBrush" Color="#BEDDF7" />
+        <SolidColorBrush x:Key="HoverBrush" Color="#D6D6D6" />
+        <SolidColorBrush x:Key="PressedBrush" Color="#C4C4C4" />
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#141414" />
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#3D3D3D" />
         <SolidColorBrush x:Key="TerminalBackgroundBrush" Color="#1E1E1E" />
         <SolidColorBrush x:Key="TerminalForegroundBrush" Color="#D4D4D4" />
         <SolidColorBrush x:Key="TerminalAccentBrush" Color="#3DDC97" />
