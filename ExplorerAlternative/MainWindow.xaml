@@ -45,6 +45,8 @@
         <KeyBinding Key="Left" Modifiers="Alt" Command="{Binding DataContext.GoBackCommand, ElementName=RootWindow}" />
         <KeyBinding Key="Right" Modifiers="Alt" Command="{Binding DataContext.GoForwardCommand, ElementName=RootWindow}" />
         <KeyBinding Key="OemTilde" Modifiers="Control" Command="{Binding DataContext.ToggleTerminalCommand, ElementName=RootWindow}" />
+        <KeyBinding Key="L" Modifiers="Control" Command="{Binding DataContext.ActiveTab.ActivePane.BeginAddressEditCommand, ElementName=RootWindow}" />
+        <KeyBinding Key="F6" Command="{Binding DataContext.ActiveTab.ActivePane.BeginAddressEditCommand, ElementName=RootWindow}" />
     </Window.InputBindings>
 
     <Grid>
@@ -188,9 +190,10 @@
                     </Grid>
                 </Border>
 
-                <TextBox Text="{Binding AddressEditText, UpdateSourceTrigger=PropertyChanged}"
+                <TextBox x:Name="AddressEditTextBox" Text="{Binding AddressEditText, UpdateSourceTrigger=PropertyChanged}"
                          VerticalContentAlignment="Center" Margin="10,0,0,0" Padding="6,4"
-                         BorderBrush="{StaticResource AccentBrush}">
+                         BorderBrush="{StaticResource AccentBrush}"
+                         IsVisibleChanged="AddressEditTextBox_IsVisibleChanged">
                     <TextBox.Style>
                         <Style TargetType="TextBox">
                             <Setter Property="Visibility" Value="Collapsed" />
@@ -326,6 +329,7 @@
                                              ItemContainerStyle="{StaticResource FileRowItemStyle}"
                                              SelectionChanged="TreeListBox_SelectionChanged"
                                              MouseDoubleClick="NodeListBox_MouseDoubleClick"
+                                             PreviewKeyDown="TreeListBox_PreviewKeyDown"
                                              ContextMenu="{StaticResource NodeContextMenu}">
                                         <ListBox.Style>
                                             <Style TargetType="ListBox">
@@ -357,6 +361,7 @@
                                               ItemContainerStyle="{StaticResource DetailRowItemStyle}"
                                               SelectionChanged="TreeListBox_SelectionChanged"
                                               MouseDoubleClick="NodeListBox_MouseDoubleClick"
+                                              PreviewKeyDown="NodeListBox_PreviewKeyDown"
                                               ContextMenu="{StaticResource NodeContextMenu}">
                                         <ListView.Style>
                                             <Style TargetType="ListView">

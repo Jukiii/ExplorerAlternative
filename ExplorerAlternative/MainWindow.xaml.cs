@@ -63,6 +63,72 @@ public partial class MainWindow : Window
         }
     }
 
+    // 仕様書7章：Enter(開く)/F2(名前変更)/Delete(削除) は階層表示・詳細表示の両方で共通。
+    private void NodeListBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not FrameworkElement element || element.DataContext is not PaneViewModel pane)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Enter when pane.OpenCommand.CanExecute(null):
+                pane.OpenCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            case Key.F2 when pane.RenameCommand.CanExecute(null):
+                pane.RenameCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            case Key.Delete when pane.DeleteCommand.CanExecute(null):
+                pane.DeleteCommand.Execute(null);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    // 仕様書7章：階層表示のみ →(展開)/←(折りたたみ) に対応。
+    private void TreeListBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        NodeListBox_PreviewKeyDown(sender, e);
+
+        if (e.Handled || sender is not FrameworkElement element || element.DataContext is not PaneViewModel pane)
+        {
+            return;
+        }
+
+        var node = pane.PrimarySelectedNode;
+        if (node is null || !node.IsDirectory)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Right && !node.IsExpanded)
+        {
+            node.IsExpanded = true;
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Left && node.IsExpanded)
+        {
+            node.IsExpanded = false;
+            e.Handled = true;
+        }
+    }
+
+    private void AddressEditTextBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is not TextBox textBox || e.NewValue is not true)
+        {
+            return;
+        }
+
+        textBox.Focus();
+        textBox.SelectAll();
+    }
+
     private void TerminalOutputTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         (sender as TextBox)?.ScrollToEnd();

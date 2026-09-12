@@ -128,6 +128,9 @@
         <Style x:Key="FileRowItemStyle" TargetType="ListBoxItem">
             <Setter Property="Padding" Value="4,5" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <!-- IsSelectedをFileSystemNodeViewModel側に保持することで、展開/折りたたみに伴う
+                 VisibleNodesの再構築（Clear+再追加）でListBox内部の選択状態が消えても復元できる。 -->
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
@@ -153,6 +156,7 @@
         <Style x:Key="DetailRowItemStyle" TargetType="ListViewItem">
             <Setter Property="Padding" Value="4,5" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListViewItem">
