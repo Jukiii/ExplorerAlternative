@@ -25,6 +25,20 @@ public partial class App : Application
         var themeService = new ThemeService();
         themeService.Apply(settingsService.Current.Appearance.Theme);
 
+        // 新しく開かれるウィンドウ（設定・各種ダイアログ含む）すべてに対して、生成のたびに
+        // ThemeServiceを個別に呼び出す必要がないよう、Window型のLoadedをクラスハンドラで
+        // 一括購読し、タイトルバーの明暗を自動的に追従させる（Loaded時点でHWNDは確定済み）。
+        EventManager.RegisterClassHandler(
+            typeof(Window),
+            FrameworkElement.LoadedEvent,
+            new RoutedEventHandler((sender, _) =>
+            {
+                if (sender is Window window)
+                {
+                    themeService.ApplyTitleBarToWindow(window);
+                }
+            }));
+
         var terminalService = new PowerShellTerminalService(settingsService.Current.Terminal.ShellExecutable);
         _terminalService = terminalService;
 
