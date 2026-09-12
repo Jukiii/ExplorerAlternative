@@ -11,4 +11,6 @@ public sealed class FileSystemEntry
     public long? SizeBytes { get; init; }
 
     public DateTime? LastModified { get; init; }
+
+    public DateTime? Created { get; init; }
 }

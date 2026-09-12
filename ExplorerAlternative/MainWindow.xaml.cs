@@ -45,6 +45,16 @@ public partial class MainWindow : Window
         }
     }
 
+    // 仕様書11章：パンくずドロップダウンの右クリック＝部分パス置換（下層を維持）。
+    private void BreadcrumbDropdownItem_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: BreadcrumbDropdownItem item } && item.NavigatePartialCommand.CanExecute(null))
+        {
+            item.NavigatePartialCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
     private void TreeListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (sender is not ListBox listBox || listBox.DataContext is not PaneViewModel pane)
@@ -278,6 +288,46 @@ public partial class MainWindow : Window
         var sameDrive = string.Equals(System.IO.Path.GetPathRoot(sourcePaths[0]), destinationRoot, StringComparison.OrdinalIgnoreCase);
 
         return sameDrive ? DragDropEffects.Move : DragDropEffects.Copy;
+    }
+
+    // 仕様書4章：メインペインからフォルダをお気に入りへドラッグ&ドロップして追加する。
+    private void FavoritesListBox_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = TryGetDroppedFolder(e, out _) ? DragDropEffects.Link : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void FavoritesListBox_Drop(object sender, DragEventArgs e)
+    {
+        if (!TryGetDroppedFolder(e, out var folderPath) || DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var name = System.IO.Path.GetFileName(folderPath.TrimEnd('\\'));
+        viewModel.NavigationPane.AddFavorite(string.IsNullOrEmpty(name) ? folderPath : name, folderPath);
+        e.Handled = true;
+    }
+
+    private static bool TryGetDroppedFolder(DragEventArgs e, out string folderPath)
+    {
+        folderPath = string.Empty;
+
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            return false;
+        }
+
+        var paths = (string[])e.Data.GetData(DataFormats.FileDrop)!;
+        var folder = paths.FirstOrDefault(System.IO.Directory.Exists);
+
+        if (folder is null)
+        {
+            return false;
+        }
+
+        folderPath = folder;
+        return true;
     }
 
     private void AddressEditTextBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)

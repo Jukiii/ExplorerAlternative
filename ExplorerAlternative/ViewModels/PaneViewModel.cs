@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
@@ -62,6 +63,10 @@ public sealed class PaneViewModel : ObservableObject
         ToggleExpandCommand = new RelayCommand(p => ((FileSystemNodeViewModel)p!).IsExpanded ^= true);
         OpenCommand = new RelayCommand(_ => OpenSelection(), _ => PrimarySelectedNode is not null);
         NewFolderCommand = new RelayCommand(_ => CreateNewFolder());
+        NewFileCommand = new RelayCommand(_ => CreateNewFile());
+        ShowPropertiesCommand = new RelayCommand(_ => ShowPropertiesForSelection(), _ => PrimarySelectedNode is not null);
+        CopyPathCommand = new RelayCommand(p => CopyPath((string)p!), _ => PrimarySelectedNode is not null);
+        PinFileCommand = new RelayCommand(_ => PinSelectedFile(), _ => PrimarySelectedNode is { IsDirectory: false });
         RenameCommand = new RelayCommand(_ => RenameSelection(), _ => PrimarySelectedNode is not null);
         DeleteCommand = new RelayCommand(_ => DeleteSelection(), _ => SelectedNodes.Count > 0);
         CopyCommand = new RelayCommand(_ => CopySelectionToClipboard(isCut: false), _ => SelectedNodes.Count > 0);
@@ -91,6 +96,9 @@ public sealed class PaneViewModel : ObservableObject
     /// <summary>Git/SVN操作コマンドを統合ターミナル（9章）で実行してもらうための橋渡し。</summary>
     public event Action<string>? RunTerminalCommandRequested;
 
+    /// <summary>ピン留めファイル（仕様書51章）への追加を、ナビゲーションペインへ委譲するための橋渡し。</summary>
+    public event Action<FileSystemNodeViewModel>? PinFileRequested;
+
     public ObservableCollection<FileSystemNodeViewModel> RootNodes { get; } = new();
 
     public ObservableCollection<FileSystemNodeViewModel> VisibleNodes { get; } = new();
@@ -110,6 +118,14 @@ public sealed class PaneViewModel : ObservableObject
     public RelayCommand OpenCommand { get; }
 
     public RelayCommand NewFolderCommand { get; }
+
+    public RelayCommand NewFileCommand { get; }
+
+    public RelayCommand ShowPropertiesCommand { get; }
+
+    public RelayCommand CopyPathCommand { get; }
+
+    public RelayCommand PinFileCommand { get; }
 
     public RelayCommand RenameCommand { get; }
 
@@ -345,7 +361,8 @@ public sealed class PaneViewModel : ObservableObject
     private void RebuildBreadcrumb()
     {
         BreadcrumbSegments.Clear();
-        BreadcrumbSegments.Add(CreateSegment("PC", string.Empty));
+        // 「PC」自身は親を持たないため、そのドロップダウンには自分の子（＝ドライブ一覧）を表示する。
+        BreadcrumbSegments.Add(CreateSegment("PC", string.Empty, parentPath: null, remainder: string.Empty));
 
         if (IsAtComputerRoot)
         {
@@ -358,7 +375,8 @@ public sealed class PaneViewModel : ObservableObject
             return;
         }
 
-        BreadcrumbSegments.Add(CreateSegment(root.TrimEnd('\\'), root));
+        var driveRoot = root.TrimEnd('\\');
+        BreadcrumbSegments.Add(CreateSegment(driveRoot, root, parentPath: string.Empty, remainder: ComputeRemainder(root)));
 
         var relative = CurrentPath[root.Length..];
         var parts = relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
@@ -366,14 +384,40 @@ public sealed class PaneViewModel : ObservableObject
 
         foreach (var part in parts)
         {
+            var parentPath = accumulated;
             accumulated = Path.Combine(accumulated, part);
-            BreadcrumbSegments.Add(CreateSegment(part, accumulated));
+            BreadcrumbSegments.Add(CreateSegment(part, accumulated, parentPath, ComputeRemainder(accumulated)));
         }
     }
 
-    private BreadcrumbSegmentViewModel CreateSegment(string name, string path)
+    // 仕様書11章：パンくずドロップダウンの右クリック「部分置換」用に、指定した階層より下の
+    // パスを算出する（例：現在パスが C:\aa\2026\05 で階層が C:\aa の場合は "2026\05"）。
+    private string ComputeRemainder(string segmentPath)
     {
-        return new BreadcrumbSegmentViewModel(name, path, p => NavigateTo(p), LoadDropdownChildren);
+        return CurrentPath.Length > segmentPath.Length
+            ? CurrentPath[segmentPath.Length..].TrimStart(Path.DirectorySeparatorChar)
+            : string.Empty;
+    }
+
+    private BreadcrumbSegmentViewModel CreateSegment(string name, string path, string? parentPath, string remainder)
+    {
+        return new BreadcrumbSegmentViewModel(name, path, parentPath, remainder, p => NavigateTo(p), NavigateToPartial, LoadDropdownChildren);
+    }
+
+    // 仕様書11章：右クリックでの部分パス置換。下層が存在しない場合は安全にそのフォルダへ移動する。
+    private void NavigateToPartial(string basePath, string remainder)
+    {
+        if (!string.IsNullOrEmpty(remainder))
+        {
+            var candidate = Path.Combine(basePath, remainder);
+            if (_fileSystemService.DirectoryExists(candidate))
+            {
+                NavigateTo(candidate);
+                return;
+            }
+        }
+
+        NavigateTo(basePath);
     }
 
     private IReadOnlyList<(string Name, string Path)> LoadDropdownChildren(string path)
@@ -458,6 +502,80 @@ public sealed class PaneViewModel : ObservableObject
         {
             _dialogService.ShowError(ex.Message);
         }
+    }
+
+    // 仕様書48章：新規ファイル作成。
+    private void CreateNewFile()
+    {
+        var name = _dialogService.PromptText("新しいファイル", "ファイル名を入力してください。", "新しいファイル.txt");
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        try
+        {
+            _fileSystemService.CreateFile(CurrentPath, name);
+            RefreshCurrentFolder();
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+    }
+
+    // 仕様書48章：プロパティ表示。
+    private void ShowPropertiesForSelection()
+    {
+        var target = PrimarySelectedNode;
+        if (target is null)
+        {
+            return;
+        }
+
+        var viewModel = PropertiesViewModel.Create(target, _fileSystemService);
+        _dialogService.ShowProperties(viewModel);
+    }
+
+    // 仕様書28章：各種パスコピー。kindは"FullPath"/"FileName"/"FolderPath"/"RelativePath"/"Uri"。
+    private void CopyPath(string kind)
+    {
+        var target = PrimarySelectedNode;
+        if (target is null)
+        {
+            return;
+        }
+
+        var text = kind switch
+        {
+            "FullPath" => target.FullPath,
+            "FileName" => target.Name,
+            "FolderPath" => Path.GetDirectoryName(target.FullPath) ?? target.FullPath,
+            "RelativePath" => Path.GetRelativePath(CurrentPath, target.FullPath),
+            "Uri" => new Uri(target.FullPath).AbsoluteUri,
+            _ => target.FullPath
+        };
+
+        try
+        {
+            Clipboard.SetText(text);
+        }
+        catch (ExternalException)
+        {
+            _dialogService.ShowError("パスをコピーできませんでした。");
+        }
+    }
+
+    // 仕様書51章：ピン留めファイルへの追加はナビゲーションペイン（MainWindowViewModel経由）へ委譲する。
+    private void PinSelectedFile()
+    {
+        var target = PrimarySelectedNode;
+        if (target is null || target.IsDirectory)
+        {
+            return;
+        }
+
+        PinFileRequested?.Invoke(target);
     }
 
     private void RenameSelection()

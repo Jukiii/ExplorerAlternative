@@ -103,4 +103,10 @@ public sealed class DialogService : IDialogService
         var window = new SshConnectionDialog(sshConnectionViewModel) { Owner = Application.Current?.MainWindow };
         return window.ShowDialog() == true;
     }
+
+    public void ShowProperties(PropertiesViewModel propertiesViewModel)
+    {
+        var window = new PropertiesDialog(propertiesViewModel) { Owner = Application.Current?.MainWindow };
+        window.ShowDialog();
+    }
 }

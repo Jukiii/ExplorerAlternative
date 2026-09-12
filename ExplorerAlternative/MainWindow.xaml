@@ -14,6 +14,7 @@
         <ContextMenu x:Key="NodeContextMenu" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
             <MenuItem Header="開く" Command="{Binding OpenCommand}" />
             <MenuItem Header="新しいフォルダ" Command="{Binding NewFolderCommand}" />
+            <MenuItem Header="新しいファイル" Command="{Binding NewFileCommand}" />
             <Separator />
             <MenuItem Header="コピー" Command="{Binding CopyCommand}" />
             <MenuItem Header="移動 (切り取り)" Command="{Binding CutCommand}" />
@@ -22,6 +23,18 @@
             <MenuItem Header="名前の変更" Command="{Binding RenameCommand}" />
             <MenuItem Header="一括名前変更..." Command="{Binding BulkRenameCommand}" />
             <MenuItem Header="削除" Command="{Binding DeleteCommand}" />
+            <Separator />
+            <!-- 仕様書28章：パスコピー。 -->
+            <MenuItem Header="パスをコピー">
+                <MenuItem Header="フルパスをコピー" Command="{Binding CopyPathCommand}" CommandParameter="FullPath" />
+                <MenuItem Header="ファイル名をコピー" Command="{Binding CopyPathCommand}" CommandParameter="FileName" />
+                <MenuItem Header="フォルダパスをコピー" Command="{Binding CopyPathCommand}" CommandParameter="FolderPath" />
+                <MenuItem Header="相対パスをコピー" Command="{Binding CopyPathCommand}" CommandParameter="RelativePath" />
+                <MenuItem Header="URIをコピー" Command="{Binding CopyPathCommand}" CommandParameter="Uri" />
+            </MenuItem>
+            <!-- 仕様書51章：ピン留めファイル（フォルダは対象外）。 -->
+            <MenuItem Header="ピン留めに追加" Command="{Binding PinFileCommand}" />
+            <MenuItem Header="プロパティ" Command="{Binding ShowPropertiesCommand}" />
             <Separator />
             <!-- 仕様書6.2章：ファイル・フォルダへのタグ付与。チェック状態は選択の代表ノード
                  （PrimarySelectedNode）が持つタグから判定する。 -->
@@ -211,9 +224,12 @@
                                                              BorderThickness="0">
                                                         <ListBox.ItemTemplate>
                                                             <DataTemplate DataType="{x:Type vm:BreadcrumbDropdownItem}">
+                                                                <!-- 仕様書11章：左クリック＝パス全体を置換、右クリック＝下層を維持したまま部分置換。 -->
                                                                 <Button Content="{Binding Name}" Command="{Binding NavigateCommand}"
+                                                                        ToolTip="左クリック: このフォルダへ移動 / 右クリック: 現在の下層パスを維持したまま置換"
                                                                         HorizontalContentAlignment="Left"
-                                                                        HorizontalAlignment="Stretch" />
+                                                                        HorizontalAlignment="Stretch"
+                                                                        PreviewMouseRightButtonUp="BreadcrumbDropdownItem_PreviewMouseRightButtonUp" />
                                                             </DataTemplate>
                                                         </ListBox.ItemTemplate>
                                                     </ListBox>
@@ -277,64 +293,213 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- ナビゲーションペイン -->
-            <Border Grid.Column="0" Width="210" Background="{DynamicResource PanelBackgroundBrush}"
+            <!-- ナビゲーションペイン（仕様書4章・6章） -->
+            <Border Grid.Column="0" Width="230" Background="{DynamicResource PanelBackgroundBrush}"
                     Visibility="{Binding NavigationPane.IsCollapsed, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
                 <DockPanel Margin="10">
                     <Button DockPanel.Dock="Top" Content="« 折りたたむ" HorizontalAlignment="Left"
                             Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"
                             Command="{Binding NavigationPane.ToggleCollapsedCommand}" />
 
-                    <TextBlock DockPanel.Dock="Top" Text="お気に入り" FontWeight="SemiBold" Margin="2,14,0,4" />
-                    <ListBox DockPanel.Dock="Top" ItemsSource="{Binding NavigationPane.Favorites}" MaxHeight="200"
-                             BorderThickness="0" Background="Transparent"
-                             ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate DataType="{x:Type models:FavoriteEntry}">
-                                <DockPanel>
-                                    <Button DockPanel.Dock="Right" Content="✕" FontSize="9" Width="20" Height="20" Padding="0"
-                                            Command="{Binding DataContext.NavigationPane.RemoveFavoriteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}" />
-                                    <Button Content="{Binding Name}" HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
-                                            Command="{Binding DataContext.NavigationPane.NavigateToFavoriteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}">
-                                        <Button.ContentTemplate>
-                                            <DataTemplate>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="⭐" Margin="0,0,6,0" FontSize="11" />
-                                                    <TextBlock Text="{Binding}" />
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </Button.ContentTemplate>
-                                    </Button>
-                                </DockPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <!-- クイックアクセス（仕様書4章：Home/Desktop/Downloads/Documents/Pictures/Music/Videos） -->
+                            <TextBlock Text="クイックアクセス" FontWeight="SemiBold" Margin="2,14,0,4" />
+                            <ListBox ItemsSource="{Binding NavigationPane.QuickAccess}"
+                                     BorderThickness="0" Background="Transparent"
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:FavoriteEntry}">
+                                        <Button Content="{Binding Name}" HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
+                                                Command="{Binding DataContext.NavigationPane.NavigateToEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}">
+                                            <Button.ContentTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="📁" Margin="0,0,6,0" FontSize="11" />
+                                                        <TextBlock Text="{Binding}" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </Button.ContentTemplate>
+                                        </Button>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
 
-                    <DockPanel DockPanel.Dock="Top" Margin="2,14,0,4">
-                        <Button DockPanel.Dock="Right" Content="+" Width="20" Height="20" Padding="0" FontWeight="Bold"
-                                ToolTip="新しいタグを追加" Command="{Binding AddTagCommand}" />
-                        <TextBlock Text="タグ" FontWeight="SemiBold" VerticalAlignment="Center" />
-                    </DockPanel>
-                    <ListBox DockPanel.Dock="Top" ItemsSource="{Binding NavigationPane.Tags}"
-                             BorderThickness="0" Background="Transparent"
-                             ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate DataType="{x:Type models:TagDefinition}">
-                                <DockPanel Margin="4,3">
-                                    <Button DockPanel.Dock="Right" Content="✕" FontSize="9" Width="20" Height="20" Padding="0"
-                                            ToolTip="タグを削除"
-                                            Command="{Binding DataContext.NavigationPane.RemoveTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}" />
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="🏷" Margin="0,0,6,0" FontSize="11" />
-                                        <TextBlock Text="{Binding Name}" />
-                                    </StackPanel>
-                                </DockPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                            <!-- ドライブ（仕様書4章） -->
+                            <TextBlock Text="ドライブ" FontWeight="SemiBold" Margin="2,14,0,4" />
+                            <ListBox ItemsSource="{Binding NavigationPane.Drives}"
+                                     BorderThickness="0" Background="Transparent"
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:FavoriteEntry}">
+                                        <Button Content="{Binding Name}" HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
+                                                Command="{Binding DataContext.NavigationPane.NavigateToEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}">
+                                            <Button.ContentTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="💽" Margin="0,0,6,0" FontSize="11" />
+                                                        <TextBlock Text="{Binding}" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </Button.ContentTemplate>
+                                        </Button>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- お気に入り（仕様書4章・36章）：並び替え・削除・フォルダのドラッグ&ドロップ追加に対応。 -->
+                            <TextBlock Text="お気に入り" FontWeight="SemiBold" Margin="2,14,0,4" />
+                            <ListBox ItemsSource="{Binding NavigationPane.Favorites}" MaxHeight="200"
+                                     BorderThickness="0" Background="Transparent"
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
+                                     AllowDrop="True"
+                                     DragOver="FavoritesListBox_DragOver"
+                                     Drop="FavoritesListBox_Drop">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:FavoriteEntry}">
+                                        <DockPanel>
+                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                <Button Content="▲" FontSize="8" Width="18" Height="20" Padding="0" ToolTip="上へ移動"
+                                                        Command="{Binding DataContext.NavigationPane.MoveFavoriteUpCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}" />
+                                                <Button Content="▼" FontSize="8" Width="18" Height="20" Padding="0" ToolTip="下へ移動"
+                                                        Command="{Binding DataContext.NavigationPane.MoveFavoriteDownCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}" />
+                                                <Button Content="✕" FontSize="9" Width="20" Height="20" Padding="0" ToolTip="お気に入りから削除"
+                                                        Command="{Binding DataContext.NavigationPane.RemoveFavoriteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}" />
+                                            </StackPanel>
+                                            <Button Content="{Binding Name}" HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
+                                                    Command="{Binding DataContext.NavigationPane.NavigateToEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}">
+                                                <Button.ContentTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="⭐" Margin="0,0,6,0" FontSize="11" />
+                                                            <TextBlock Text="{Binding}" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </Button.ContentTemplate>
+                                            </Button>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- 最近使った場所（仕様書50章） -->
+                            <DockPanel Margin="2,14,0,4">
+                                <Button DockPanel.Dock="Right" Content="クリア" FontSize="9" Padding="4,0"
+                                        ToolTip="最近使った場所をクリア" Command="{Binding NavigationPane.ClearRecentPlacesCommand}" />
+                                <TextBlock Text="最近使った場所" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <ListBox ItemsSource="{Binding NavigationPane.RecentPlaces}" MaxHeight="160"
+                                     BorderThickness="0" Background="Transparent"
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:FavoriteEntry}">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="✕" FontSize="9" Width="20" Height="20" Padding="0"
+                                                    ToolTip="一覧から削除"
+                                                    Command="{Binding DataContext.NavigationPane.RemoveRecentPlaceCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button Content="{Binding Name}" ToolTip="{Binding Path}"
+                                                    HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
+                                                    Command="{Binding DataContext.NavigationPane.NavigateToEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}">
+                                                <Button.ContentTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="🕘" Margin="0,0,6,0" FontSize="11" />
+                                                            <TextBlock Text="{Binding}" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </Button.ContentTemplate>
+                                            </Button>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- ピン留めファイル（仕様書51章） -->
+                            <TextBlock Text="ピン留めファイル" FontWeight="SemiBold" Margin="2,14,0,4" />
+                            <ListBox ItemsSource="{Binding NavigationPane.PinnedFiles}" MaxHeight="160"
+                                     BorderThickness="0" Background="Transparent"
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:FavoriteEntry}">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="✕" FontSize="9" Width="20" Height="20" Padding="0"
+                                                    ToolTip="ピン留めから削除"
+                                                    Command="{Binding DataContext.NavigationPane.RemovePinnedFileCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button Content="{Binding Name}" ToolTip="{Binding Path}"
+                                                    HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
+                                                    Command="{Binding DataContext.NavigationPane.OpenPinnedFileCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}">
+                                                <Button.ContentTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="📌" Margin="0,0,6,0" FontSize="11" />
+                                                            <TextBlock Text="{Binding}" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </Button.ContentTemplate>
+                                            </Button>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <DockPanel Margin="2,14,0,4">
+                                <Button DockPanel.Dock="Right" Content="+" Width="20" Height="20" Padding="0" FontWeight="Bold"
+                                        ToolTip="新しいタグを追加" Command="{Binding AddTagCommand}" />
+                                <TextBlock Text="タグ" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <ListBox ItemsSource="{Binding NavigationPane.Tags}"
+                                     BorderThickness="0" Background="Transparent"
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:TagDefinition}">
+                                        <DockPanel Margin="4,3">
+                                            <Button DockPanel.Dock="Right" Content="✕" FontSize="9" Width="20" Height="20" Padding="0"
+                                                    ToolTip="タグを削除"
+                                                    Command="{Binding DataContext.NavigationPane.RemoveTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" />
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🏷" Margin="0,0,6,0" FontSize="11" />
+                                                <TextBlock Text="{Binding Name}" />
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- ワークスペース（仕様書43章） -->
+                            <TextBlock Text="ワークスペース" FontWeight="SemiBold" Margin="2,14,0,4" />
+                            <ListBox ItemsSource="{Binding NavigationPane.Workspaces}" MaxHeight="140"
+                                     BorderThickness="0" Background="Transparent"
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding}" HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
+                                                Command="{Binding DataContext.NavigationPane.LoadWorkspaceCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}">
+                                            <Button.ContentTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="🗂" Margin="0,0,6,0" FontSize="11" />
+                                                        <TextBlock Text="{Binding}" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </Button.ContentTemplate>
+                                        </Button>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </ScrollViewer>
                 </DockPanel>
             </Border>
 

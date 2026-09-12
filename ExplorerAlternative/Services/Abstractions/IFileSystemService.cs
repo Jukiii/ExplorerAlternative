@@ -17,6 +17,8 @@ public interface IFileSystemService
 
     void CreateDirectory(string parentPath, string name);
 
+    void CreateFile(string parentPath, string name);
+
     void Rename(string fullPath, string newName);
 
     void Delete(IEnumerable<string> fullPaths);

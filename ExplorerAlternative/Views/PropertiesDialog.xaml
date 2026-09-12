@@ -1,0 +1,51 @@
+<Window x:Class="ExplorerAlternative.Views.PropertiesDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="プロパティ"
+        Height="320" Width="420"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="90" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="名前" Margin="0,0,8,10" />
+        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Name}" TextWrapping="Wrap" Margin="0,0,0,10" FontWeight="Bold" />
+
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="場所" Margin="0,0,8,10" />
+        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FullPath}" TextWrapping="Wrap" Margin="0,0,0,10" />
+
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="種類" Margin="0,0,8,10" />
+        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding TypeLabel}" Margin="0,0,0,10" />
+
+        <TextBlock Grid.Row="3" Grid.Column="0" Text="サイズ" Margin="0,0,8,10" />
+        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SizeLabel}" TextWrapping="Wrap" Margin="0,0,0,10" />
+
+        <TextBlock Grid.Row="4" Grid.Column="0" Text="作成日時" Margin="0,0,8,10" />
+        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding CreatedLabel}" Margin="0,0,0,10" />
+
+        <TextBlock Grid.Row="5" Grid.Column="0" Text="更新日時" Margin="0,0,8,10" />
+        <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding ModifiedLabel}" Margin="0,0,0,10" />
+
+        <TextBlock Grid.Row="6" Grid.Column="0" Text="属性" Margin="0,0,8,10" VerticalAlignment="Top" />
+        <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding AttributesLabel}" Margin="0,0,0,10" VerticalAlignment="Top" />
+
+        <StackPanel Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="閉じる" Width="90" IsDefault="True" IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

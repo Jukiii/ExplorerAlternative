@@ -38,4 +38,7 @@ public interface IDialogService
 
     /// <summary>SSH接続ダイアログ（仕様書15章）を表示する。「接続」で確定された場合はtrueを返す。</summary>
     bool ShowSshConnection(SshConnectionViewModel sshConnectionViewModel);
+
+    /// <summary>プロパティダイアログ（仕様書48章）を表示する。</summary>
+    void ShowProperties(PropertiesViewModel propertiesViewModel);
 }

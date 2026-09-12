@@ -53,7 +53,8 @@ public sealed class MainWindowViewModel : ObservableObject
         _sshService = sshService;
         _versionControlOperationsService = versionControlOperationsService;
 
-        NavigationPane = new NavigationPaneViewModel(settingsService, NavigateActiveTo);
+        NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, NavigateActiveTo, OpenFile);
+        NavigationPane.WorkspaceOpenRequested += name => LoadWorkspaceByName((Window)Application.Current!.MainWindow!, name);
         Terminal = new TerminalViewModel(terminalService, settingsService.Current.Terminal.SyncByDefault);
 
         AddTabCommand = new RelayCommand(_ => AddTab(GetDefaultInitialPath()));
@@ -200,6 +201,24 @@ public sealed class MainWindowViewModel : ObservableObject
     private void OnActivePanePathChanged(string path)
     {
         Terminal.SyncCurrentDirectory(path);
+        NavigationPane.RecordRecentPlace(path);
+    }
+
+    // 仕様書50章「最近使った場所」・22章「アプリで開く」相当：既定のアプリでファイルを開く。
+    private void OpenFile(string path)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            _dialogService.ShowError($"ファイルを開けませんでした。({ex.Message})");
+        }
     }
 
     private PaneViewModel CreatePane(string initialPath, ViewMode initialViewMode)
@@ -216,6 +235,7 @@ public sealed class MainWindowViewModel : ObservableObject
             initialViewMode);
 
         pane.RunTerminalCommandRequested += RunTerminalCommand;
+        pane.PinFileRequested += node => NavigationPane.AddPinnedFile(node.Name, node.FullPath);
         return pane;
     }
 
@@ -388,6 +408,7 @@ public sealed class MainWindowViewModel : ObservableObject
         };
 
         _workspaceService.SaveWorkspace(state);
+        NavigationPane.RefreshWorkspaces(_workspaceService.GetWorkspaceNames());
         _dialogService.ShowInfo($"ワークスペース「{name}」を保存しました。");
     }
 
@@ -406,7 +427,13 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
-        var state = _workspaceService.GetWorkspace(selected);
+        LoadWorkspaceByName(window, selected);
+    }
+
+    // 仕様書43章：左ペインの「ワークスペース」一覧からの直接読み込みにも使う。
+    private void LoadWorkspaceByName(Window window, string name)
+    {
+        var state = _workspaceService.GetWorkspace(name);
         if (state is null)
         {
             return;

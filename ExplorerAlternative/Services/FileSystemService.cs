@@ -47,7 +47,8 @@ public sealed class FileSystemService : IFileSystemService
                     Name = info.Name,
                     FullPath = info.FullName,
                     IsDirectory = true,
-                    LastModified = SafeGetLastWriteTime(info)
+                    LastModified = SafeGetLastWriteTime(info),
+                    Created = SafeGetCreationTime(info)
                 });
             }
 
@@ -60,7 +61,8 @@ public sealed class FileSystemService : IFileSystemService
                     FullPath = info.FullName,
                     IsDirectory = false,
                     SizeBytes = SafeGetLength(info),
-                    LastModified = SafeGetLastWriteTime(info)
+                    LastModified = SafeGetLastWriteTime(info),
+                    Created = SafeGetCreationTime(info)
                 });
             }
 
@@ -105,6 +107,25 @@ public sealed class FileSystemService : IFileSystemService
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             throw new AppOperationException($"フォルダ「{name}」を作成できませんでした。", ex);
+        }
+    }
+
+    public void CreateFile(string parentPath, string name)
+    {
+        try
+        {
+            var path = Path.Combine(parentPath, name);
+
+            if (File.Exists(path) || Directory.Exists(path))
+            {
+                throw new AppOperationException($"「{name}」は既に存在します。");
+            }
+
+            using var _ = File.Create(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            throw new AppOperationException($"ファイル「{name}」を作成できませんでした。", ex);
         }
     }
 
@@ -242,6 +263,18 @@ public sealed class FileSystemService : IFileSystemService
         try
         {
             return info.LastWriteTime;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    private static DateTime? SafeGetCreationTime(FileSystemInfo info)
+    {
+        try
+        {
+            return info.CreationTime;
         }
         catch (IOException)
         {

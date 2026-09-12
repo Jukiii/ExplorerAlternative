@@ -54,6 +54,8 @@ public sealed class FileSystemNodeViewModel : ObservableObject
 
     public DateTime? LastModified => Entry.LastModified;
 
+    public DateTime? Created => Entry.Created;
+
     public ObservableCollection<FileSystemNodeViewModel>? Children { get; }
 
     /// <summary>仕様書4.2章：折りたたみは "&gt;"、展開は "v"。+/-は使用しない。</summary>
