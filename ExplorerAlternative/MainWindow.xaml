@@ -160,7 +160,7 @@
                                   Command="{Binding LoadWorkspaceCommand}"
                                   CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}" />
                         <Separator />
-                        <MenuItem Header="SSH接続..." Command="{Binding OpenSshConnectionCommand}" />
+                        <MenuItem Header="SSH接続の管理..." Command="{Binding OpenSshConnectionCommand}" />
                         <Separator />
                         <MenuItem Header="設定..." Command="{Binding OpenSettingsCommand}" />
                         <MenuItem Header="ショートカット一覧" Command="{Binding OpenCheatSheetCommand}" />

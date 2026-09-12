@@ -36,8 +36,11 @@ public interface IDialogService
     /// <summary>ファイル選択ダイアログ（仕様書14.2章のPatch適用元選択などに使用）を表示する。キャンセル時はnull。</summary>
     string? ShowOpenFileDialog(string title, string filter);
 
-    /// <summary>SSH接続ダイアログ（仕様書15章）を表示する。「接続」で確定された場合はtrueを返す。</summary>
+    /// <summary>SSH接続プロファイルの追加・編集ダイアログ（仕様書44章）を表示する。「保存」で確定された場合はtrueを返す。</summary>
     bool ShowSshConnection(SshConnectionViewModel sshConnectionViewModel);
+
+    /// <summary>SSH接続の登録・管理ダイアログ（仕様書44章）を表示する。</summary>
+    void ShowSshProfiles(SshProfilesViewModel sshProfilesViewModel);
 
     /// <summary>プロパティダイアログ（仕様書48章）を表示する。</summary>
     void ShowProperties(PropertiesViewModel propertiesViewModel);

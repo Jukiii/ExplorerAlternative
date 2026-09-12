@@ -104,6 +104,12 @@ public sealed class DialogService : IDialogService
         return window.ShowDialog() == true;
     }
 
+    public void ShowSshProfiles(SshProfilesViewModel sshProfilesViewModel)
+    {
+        var window = new SshProfilesDialog(sshProfilesViewModel) { Owner = Application.Current?.MainWindow };
+        window.ShowDialog();
+    }
+
     public void ShowProperties(PropertiesViewModel propertiesViewModel)
     {
         var window = new PropertiesDialog(propertiesViewModel) { Owner = Application.Current?.MainWindow };

@@ -1,14 +1,15 @@
 <Window x:Class="ExplorerAlternative.Views.SshConnectionDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="SSH接続"
-        Height="300" Width="420"
+        Title="SSH接続の登録"
+        Height="340" Width="420"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{DynamicResource WindowBackgroundBrush}"
         TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
     <Grid Margin="16">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -21,20 +22,24 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <TextBlock Grid.Row="0" Grid.Column="0" Text="ホスト" VerticalAlignment="Center" Margin="0,0,8,10" />
-        <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="表示名" VerticalAlignment="Center" Margin="0,0,8,10" />
+        <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
                  Padding="4" Margin="0,0,0,10" />
 
-        <TextBlock Grid.Row="1" Grid.Column="0" Text="ポート" VerticalAlignment="Center" Margin="0,0,8,10" />
-        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}"
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="ホスト" VerticalAlignment="Center" Margin="0,0,8,10" />
+        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"
                  Padding="4" Margin="0,0,0,10" />
 
-        <TextBlock Grid.Row="2" Grid.Column="0" Text="ユーザー名" VerticalAlignment="Center" Margin="0,0,8,10" />
-        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}"
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="ポート" VerticalAlignment="Center" Margin="0,0,8,10" />
+        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}"
                  Padding="4" Margin="0,0,0,10" />
 
-        <TextBlock Grid.Row="3" Grid.Column="0" Text="秘密鍵(任意)" VerticalAlignment="Center" Margin="0,0,8,10" />
-        <Grid Grid.Row="3" Grid.Column="1" Margin="0,0,0,10">
+        <TextBlock Grid.Row="3" Grid.Column="0" Text="ユーザー名" VerticalAlignment="Center" Margin="0,0,8,10" />
+        <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}"
+                 Padding="4" Margin="0,0,0,10" />
+
+        <TextBlock Grid.Row="4" Grid.Column="0" Text="秘密鍵(任意)" VerticalAlignment="Center" Margin="0,0,8,10" />
+        <Grid Grid.Row="4" Grid.Column="1" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -44,8 +49,12 @@
             <Button Grid.Column="1" Content="参照..." Width="70" Click="BrowseButton_Click" />
         </Grid>
 
-        <StackPanel Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="接続" Width="90" Margin="0,0,8,0" IsDefault="True" Click="ConnectButton_Click" />
+        <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" VerticalAlignment="Top"
+                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
+                   Text="パスワード・パスフレーズはここには保存されません。鍵のパスフレーズは接続時にOpenSSH（ターミナル）が対話的に確認します。" />
+
+        <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="保存" Width="90" Margin="0,0,8,0" IsDefault="True" Click="ConnectButton_Click" />
             <Button Content="キャンセル" Width="90" IsCancel="True" />
         </StackPanel>
     </Grid>

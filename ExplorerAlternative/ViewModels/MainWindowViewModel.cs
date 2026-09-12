@@ -450,30 +450,13 @@ public sealed class MainWindowViewModel : ObservableObject
         _dialogService.ShowSettings(settingsViewModel);
     }
 
-    // 仕様書15章：SSH接続情報を入力し、統合ターミナル(9章)上でssh接続を確立する。
+    // 仕様書44章：SSH接続の登録・管理ダイアログを開く。「接続」実行時は
+    // 統合ターミナル(9章)上でssh接続を確立する。
     private void OpenSshConnection()
     {
-        var sshViewModel = new SshConnectionViewModel();
-        if (!_dialogService.ShowSshConnection(sshViewModel))
-        {
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(sshViewModel.Host))
-        {
-            _dialogService.ShowError("接続先ホストを入力してください。");
-            return;
-        }
-
-        try
-        {
-            var command = _sshService.BuildConnectCommand(sshViewModel.ToProfile());
-            TerminalHost.SendRawCommand(command);
-        }
-        catch (AppOperationException ex)
-        {
-            _dialogService.ShowError(ex.Message);
-        }
+        var profilesViewModel = new SshProfilesViewModel(_settingsService, _dialogService, _sshService);
+        profilesViewModel.RequestConnect += command => TerminalHost.SendRawCommand(command);
+        _dialogService.ShowSshProfiles(profilesViewModel);
     }
 
     private void AddCurrentFolderToFavorites()
