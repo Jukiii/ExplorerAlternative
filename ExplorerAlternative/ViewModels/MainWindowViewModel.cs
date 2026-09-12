@@ -47,7 +47,7 @@ public sealed class MainWindowViewModel : ObservableObject
         CloseTabCommand = new RelayCommand(p => CloseTab((TabViewModel)p!), _ => Tabs.Count > 1);
         GoUpCommand = new RelayCommand(_ => ActiveTab?.ActivePane.GoUpCommand.Execute(null));
         TogglePreviewCommand = new RelayCommand(_ => TogglePreview());
-        ToggleTerminalCommand = new RelayCommand(_ => Terminal.ToggleVisibilityCommand.Execute(null));
+        ToggleTerminalCommand = new RelayCommand(_ => ToggleTerminal());
         OpenCheatSheetCommand = new RelayCommand(_ => _dialogService.ShowCheatSheet());
         OpenSettingsCommand = new RelayCommand(_ => OpenSettings());
         AddFavoriteCommand = new RelayCommand(_ => AddCurrentFolderToFavorites());
@@ -169,6 +169,16 @@ public sealed class MainWindowViewModel : ObservableObject
     private void OnActivePanePathChanged(string path)
     {
         Terminal.SyncCurrentDirectory(path);
+    }
+
+    private void ToggleTerminal()
+    {
+        Terminal.ToggleVisibilityCommand.Execute(null);
+
+        if (Terminal.IsVisible && ActiveTab is not null && !ActiveTab.ActivePane.IsAtComputerRoot)
+        {
+            Terminal.SyncCurrentDirectory(ActiveTab.ActivePane.CurrentPath);
+        }
     }
 
     private void TogglePreview()

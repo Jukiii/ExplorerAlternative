@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Services.Abstractions;
 
@@ -11,7 +12,14 @@ namespace ExplorerAlternative.Services;
 /// </summary>
 public sealed class SettingsService : ISettingsService
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
+    // 列挙型は数値ではなく名前で保存する。数値保存だと将来enumの項目を増減・並び替えた際に
+    // 既存のsettings.jsonの値がずれて誤った列挙値を読み込んでしまう（実際にViewMode.Listを
+    // 廃止した際に発生した）。
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     private readonly string _settingsFilePath;
 
@@ -38,7 +46,7 @@ public sealed class SettingsService : ISettingsService
         try
         {
             var json = File.ReadAllText(_settingsFilePath);
-            Current = JsonSerializer.Deserialize<AppSettings>(json) ?? CreateDefault();
+            Current = JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions) ?? CreateDefault();
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {

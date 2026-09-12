@@ -56,6 +56,13 @@ public sealed class FileSystemNodeViewModel : ObservableObject
     /// <summary>仕様書4.2章：折りたたみは "&gt;"、展開は "v"。+/-は使用しない。</summary>
     public string ExpandSymbol => IsDirectory ? (IsExpanded ? "v" : ">") : string.Empty;
 
+    /// <summary>一覧表示用のアイコン（フォルダ/開いたフォルダ/ファイル）。</summary>
+    public string IconGlyph => IsDirectory ? (IsExpanded ? "📂" : "📁") : "📄";
+
+    public string SizeDisplay => IsDirectory || SizeBytes is null ? string.Empty : FormatSize(SizeBytes.Value);
+
+    public string LastModifiedDisplay => LastModified?.ToString("yyyy/MM/dd HH:mm") ?? string.Empty;
+
     public bool IsExpanded
     {
         get => _isExpanded;
@@ -64,6 +71,7 @@ public sealed class FileSystemNodeViewModel : ObservableObject
             if (SetProperty(ref _isExpanded, value))
             {
                 OnPropertyChanged(nameof(ExpandSymbol));
+                OnPropertyChanged(nameof(IconGlyph));
 
                 if (value && IsDirectory && !_childrenLoaded)
                 {
@@ -117,5 +125,20 @@ public sealed class FileSystemNodeViewModel : ObservableObject
         {
             LoadChildren();
         }
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        string[] units = { "B", "KB", "MB", "GB", "TB" };
+        double size = bytes;
+        var unitIndex = 0;
+
+        while (size >= 1024 && unitIndex < units.Length - 1)
+        {
+            size /= 1024;
+            unitIndex++;
+        }
+
+        return unitIndex == 0 ? $"{size:0} {units[unitIndex]}" : $"{size:0.#} {units[unitIndex]}";
     }
 }
