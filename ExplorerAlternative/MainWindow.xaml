@@ -236,7 +236,7 @@
         </Border>
 
         <!-- Git/SVN情報 -->
-        <Border Grid.Row="2" Background="#EEF7EE" Padding="10,5"
+        <Border Grid.Row="2" Background="{DynamicResource VcsBannerBackgroundBrush}" Padding="10,5"
                 BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,0,0,1"
                 DataContext="{Binding ActiveTab.ActivePane}"
                 Visibility="{Binding VcsInfo.Kind, Converter={StaticResource VcsKindToVisibilityConverter}}">
