@@ -11,17 +11,17 @@ public sealed class DialogService : IDialogService
 
     public void ShowError(string message)
     {
-        MessageBox.Show(message, "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+        MessageBox.Show(Application.Current?.MainWindow!, message, "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
     public void ShowInfo(string message)
     {
-        MessageBox.Show(message, "情報", MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageBox.Show(Application.Current?.MainWindow!, message, "情報", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     public bool Confirm(string message)
     {
-        return MessageBox.Show(message, "確認", MessageBoxButton.YesNo, MessageBoxImage.Question)
+        return MessageBox.Show(Application.Current?.MainWindow!, message, "確認", MessageBoxButton.YesNo, MessageBoxImage.Question)
             == MessageBoxResult.Yes;
     }
 
@@ -77,5 +77,11 @@ public sealed class DialogService : IDialogService
     {
         var window = new SettingsWindow(settingsViewModel) { Owner = Application.Current?.MainWindow };
         window.ShowDialog();
+    }
+
+    public bool ShowBulkRename(BulkRenameViewModel bulkRenameViewModel)
+    {
+        var window = new BulkRenameDialog(bulkRenameViewModel) { Owner = Application.Current?.MainWindow };
+        return window.ShowDialog() == true;
     }
 }

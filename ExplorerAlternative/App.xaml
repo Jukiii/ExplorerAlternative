@@ -1,4 +1,4 @@
-﻿<Application x:Class="ExplorerAlternative.App"
+<Application x:Class="ExplorerAlternative.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:ExplorerAlternative"
@@ -7,5 +7,183 @@
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         <conv:VcsKindToVisibilityConverter x:Key="VcsKindToVisibilityConverter" />
         <conv:SyncLabelConverter x:Key="SyncLabelConverter" />
+        <conv:EnumEqualsConverter x:Key="EnumEqualsConverter" />
+
+        <!-- カラーパレット -->
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#F3F3F3" />
+        <SolidColorBrush x:Key="ToolbarBackgroundBrush" Color="#FAFAFA" />
+        <SolidColorBrush x:Key="BorderBrush2" Color="#E1E1E1" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#0078D4" />
+        <SolidColorBrush x:Key="AccentLightBrush" Color="#E5F1FB" />
+        <SolidColorBrush x:Key="HoverBrush" Color="#F0F0F0" />
+        <SolidColorBrush x:Key="PressedBrush" Color="#E3E3E3" />
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#202020" />
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#6B6B6B" />
+        <SolidColorBrush x:Key="TerminalBackgroundBrush" Color="#1E1E1E" />
+        <SolidColorBrush x:Key="TerminalForegroundBrush" Color="#D4D4D4" />
+        <SolidColorBrush x:Key="TerminalAccentBrush" Color="#3DDC97" />
+
+        <!-- 既定のウィンドウ外観 -->
+        <Style TargetType="Window">
+            <Setter Property="Background" Value="{StaticResource WindowBackgroundBrush}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="TextElement.Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        </Style>
+
+        <!-- フラットなボタン（ツールバー・ダイアログ共通） -->
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
+                                Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource PressedBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- セグメント/トグル系ボタン（表示モード切替・同期ON/OFF・パンくずの▾など） -->
+        <Style TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
+                                Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentBrush}" />
+                                <Setter Property="Foreground" Value="White" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- タブストリップの1タブ -->
+        <Style x:Key="TabItemContainerStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="4,6,0,0" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="{StaticResource PanelBackgroundBrush}"
+                                CornerRadius="6,6,0,0" Padding="2">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource WindowBackgroundBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ファイル/フォルダ一覧の行（階層表示・詳細表示共通） -->
+        <Style x:Key="FileRowItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="4,5" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentLightBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 詳細表示（ListView+GridView）の行。GridViewRowPresenterを保持しないと
+             列が描画されずToString()が表示されてしまうため、FileRowItemStyleとは
+             別のListViewItem専用スタイルにする。 -->
+        <Style x:Key="DetailRowItemStyle" TargetType="ListViewItem">
+            <Setter Property="Padding" Value="4,5" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <GridViewRowPresenter Content="{TemplateBinding Content}"
+                                                   Columns="{TemplateBinding GridView.ColumnCollection}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentLightBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ナビゲーションペイン（お気に入り／タグ）の行 -->
+        <Style x:Key="NavListBoxItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="2" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Application.Resources>
 </Application>

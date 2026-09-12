@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
 using ExplorerAlternative.Services;
@@ -47,12 +48,17 @@ public sealed class MainWindowViewModel : ObservableObject
         CloseTabCommand = new RelayCommand(p => CloseTab((TabViewModel)p!), _ => Tabs.Count > 1);
         GoUpCommand = new RelayCommand(_ => ActiveTab?.ActivePane.GoUpCommand.Execute(null));
         TogglePreviewCommand = new RelayCommand(_ => TogglePreview());
-        ToggleTerminalCommand = new RelayCommand(_ => Terminal.ToggleVisibilityCommand.Execute(null));
+        ToggleTerminalCommand = new RelayCommand(_ => ToggleTerminal());
         OpenCheatSheetCommand = new RelayCommand(_ => _dialogService.ShowCheatSheet());
         OpenSettingsCommand = new RelayCommand(_ => OpenSettings());
         AddFavoriteCommand = new RelayCommand(_ => AddCurrentFolderToFavorites());
         SaveWorkspaceCommand = new RelayCommand(p => SaveWorkspace((Window)p!));
         LoadWorkspaceCommand = new RelayCommand(p => LoadWorkspace((Window)p!));
+        DuplicateTabCommand = new RelayCommand(p => DuplicateTab((TabViewModel)p!));
+        SplitHorizontalCommand = new RelayCommand(_ => SplitPane(Orientation.Horizontal), _ => ActiveTab?.CanSplit == true);
+        SplitVerticalCommand = new RelayCommand(_ => SplitPane(Orientation.Vertical), _ => ActiveTab?.CanSplit == true);
+        ClosePaneCommand = new RelayCommand(_ => ClosePane(), _ => ActiveTab?.CanClosePane == true);
+        SetActivePaneCommand = new RelayCommand(p => SetActivePane((PaneViewModel)p!));
 
         AddTab(GetDefaultInitialPath());
     }
@@ -83,6 +89,16 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand LoadWorkspaceCommand { get; }
 
+    public RelayCommand DuplicateTabCommand { get; }
+
+    public RelayCommand SplitHorizontalCommand { get; }
+
+    public RelayCommand SplitVerticalCommand { get; }
+
+    public RelayCommand ClosePaneCommand { get; }
+
+    public RelayCommand SetActivePaneCommand { get; }
+
     public TabViewModel? ActiveTab
     {
         get => _activeTab;
@@ -95,16 +111,14 @@ public sealed class MainWindowViewModel : ObservableObject
 
             if (_activeTab is not null)
             {
-                _activeTab.ActivePane.PathChanged -= OnActivePanePathChanged;
-                _activeTab.ActivePane.IsActive = false;
+                _activeTab.ActivePanePathChanged -= OnActivePanePathChanged;
             }
 
             _activeTab = value;
 
             if (_activeTab is not null)
             {
-                _activeTab.ActivePane.PathChanged += OnActivePanePathChanged;
-                _activeTab.ActivePane.IsActive = true;
+                _activeTab.ActivePanePathChanged += OnActivePanePathChanged;
                 Terminal.SyncCurrentDirectory(_activeTab.ActivePane.CurrentPath);
             }
 
@@ -119,14 +133,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void AddTab(string initialPath)
     {
-        var pane = new PaneViewModel(
-            _fileSystemService,
-            _dialogService,
-            _versionControlService,
-            _externalToolService,
-            _settingsService,
-            initialPath,
-            _settingsService.Current.View.DefaultViewMode);
+        var pane = CreatePane(initialPath, _settingsService.Current.View.DefaultViewMode);
 
         _tabCounter++;
         var tab = new TabViewModel(pane, BuildTabHeader(initialPath));
@@ -169,6 +176,72 @@ public sealed class MainWindowViewModel : ObservableObject
     private void OnActivePanePathChanged(string path)
     {
         Terminal.SyncCurrentDirectory(path);
+    }
+
+    private PaneViewModel CreatePane(string initialPath, ViewMode initialViewMode)
+    {
+        return new PaneViewModel(
+            _fileSystemService,
+            _dialogService,
+            _versionControlService,
+            _externalToolService,
+            _settingsService,
+            initialPath,
+            initialViewMode);
+    }
+
+    private void DuplicateTab(TabViewModel source)
+    {
+        var basePane = source.ActivePane;
+        var newPane = CreatePane(basePane.CurrentPath, basePane.CurrentViewMode);
+        var newTab = new TabViewModel(newPane, source.Header);
+
+        var index = Tabs.IndexOf(source);
+        Tabs.Insert(index + 1, newTab);
+        ActiveTab = newTab;
+    }
+
+    private void SplitPane(Orientation orientation)
+    {
+        var tab = ActiveTab;
+        if (tab is null || !tab.CanSplit)
+        {
+            return;
+        }
+
+        var basePane = tab.ActivePane;
+        var newPane = CreatePane(basePane.CurrentPath, basePane.CurrentViewMode);
+        tab.SplitOrientation = orientation;
+        tab.AddPane(newPane);
+        Terminal.SyncCurrentDirectory(newPane.CurrentPath);
+    }
+
+    private void ClosePane()
+    {
+        var tab = ActiveTab;
+        if (tab is null || !tab.CanClosePane)
+        {
+            return;
+        }
+
+        tab.RemovePane(tab.ActivePane);
+        Terminal.SyncCurrentDirectory(tab.ActivePane.CurrentPath);
+    }
+
+    private void SetActivePane(PaneViewModel pane)
+    {
+        ActiveTab?.SetActivePane(pane);
+        Terminal.SyncCurrentDirectory(pane.CurrentPath);
+    }
+
+    private void ToggleTerminal()
+    {
+        Terminal.ToggleVisibilityCommand.Execute(null);
+
+        if (Terminal.IsVisible && ActiveTab is not null && !ActiveTab.ActivePane.IsAtComputerRoot)
+        {
+            Terminal.SyncCurrentDirectory(ActiveTab.ActivePane.CurrentPath);
+        }
     }
 
     private void TogglePreview()
@@ -230,6 +303,7 @@ public sealed class MainWindowViewModel : ObservableObject
             {
                 Header = t.Header,
                 ActivePaneIndex = t.ActivePaneIndex,
+                SplitOrientation = t.SplitOrientation,
                 Panes = t.Panes.Select(p => new PaneState
                 {
                     CurrentPath = p.CurrentPath,
@@ -273,17 +347,19 @@ public sealed class MainWindowViewModel : ObservableObject
 
         foreach (var tabState in state.Tabs)
         {
-            var paneState = tabState.Panes.FirstOrDefault() ?? new PaneState { CurrentPath = GetDefaultInitialPath() };
-            var pane = new PaneViewModel(
-                _fileSystemService,
-                _dialogService,
-                _versionControlService,
-                _externalToolService,
-                _settingsService,
-                paneState.CurrentPath,
-                paneState.ViewMode);
+            var paneStates = tabState.Panes.Count > 0
+                ? tabState.Panes
+                : new List<PaneState> { new() { CurrentPath = GetDefaultInitialPath() } };
 
-            var tab = new TabViewModel(pane, tabState.Header);
+            var firstPane = CreatePane(paneStates[0].CurrentPath, paneStates[0].ViewMode);
+            var tab = new TabViewModel(firstPane, tabState.Header) { SplitOrientation = tabState.SplitOrientation };
+
+            for (var i = 1; i < paneStates.Count; i++)
+            {
+                tab.AddPane(CreatePane(paneStates[i].CurrentPath, paneStates[i].ViewMode));
+            }
+
+            tab.SetActivePane(tab.Panes[Math.Clamp(tabState.ActivePaneIndex, 0, tab.Panes.Count - 1)]);
             Tabs.Add(tab);
         }
 

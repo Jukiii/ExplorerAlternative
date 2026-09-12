@@ -34,10 +34,14 @@ public sealed class PowerShellTerminalService : IPowerShellTerminalService
 
         try
         {
+            // 注意: "-Command -" を付けるとPowerShellは標準入力をEOFまで読み切ってから
+            // 一括実行するモードになり、対話的に1行ずつ実行されなくなる（ターミナルが
+            // 「使えない」ように見える不具合の原因）。引数なしで起動し、通常の対話型
+            // ホストとして標準入力を1行ずつ読み取らせる。
             var startInfo = new ProcessStartInfo
             {
                 FileName = _shellExecutable,
-                Arguments = "-NoLogo -NoExit -Command -",
+                Arguments = "-NoLogo -NoProfile",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -49,6 +53,7 @@ public sealed class PowerShellTerminalService : IPowerShellTerminalService
             _process.OutputDataReceived += (_, e) => RaiseOutput(e.Data);
             _process.ErrorDataReceived += (_, e) => RaiseOutput(e.Data);
             _process.Start();
+            _process.StandardInput.AutoFlush = true;
             _process.BeginOutputReadLine();
             _process.BeginErrorReadLine();
         }

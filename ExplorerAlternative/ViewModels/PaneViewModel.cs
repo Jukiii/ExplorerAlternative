@@ -63,6 +63,7 @@ public sealed class PaneViewModel : ObservableObject
         CommitAddressEditCommand = new RelayCommand(_ => CommitAddressEdit());
         RunExternalToolCommand = new RelayCommand(p => RunExternalTool((ExternalToolDefinition)p!), _ => PrimarySelectedNode is not null);
         CancelAddressEditCommand = new RelayCommand(_ => IsAddressEditing = false);
+        BulkRenameCommand = new RelayCommand(_ => BulkRenameSelection(), _ => SelectedNodes.Count > 1);
 
         NavigateTo(_currentPath, addToHistory: false);
     }
@@ -106,6 +107,8 @@ public sealed class PaneViewModel : ObservableObject
     public RelayCommand CancelAddressEditCommand { get; }
 
     public RelayCommand RunExternalToolCommand { get; }
+
+    public RelayCommand BulkRenameCommand { get; }
 
     /// <summary>コンテキストメニューの「外部ツール」サブメニュー（仕様書22章）用。</summary>
     public IReadOnlyList<ExternalToolDefinition> ExternalTools => _settingsService.Current.ExternalTools;
@@ -487,9 +490,7 @@ public sealed class PaneViewModel : ObservableObject
     {
         for (var i = 0; i < targets.Count; i++)
         {
-            var newName = pattern.Replace("{n}", (i + 1).ToString())
-                .Replace("{name}", Path.GetFileNameWithoutExtension(targets[i].Name))
-                .Replace("{ext}", Path.GetExtension(targets[i].Name).TrimStart('.'));
+            var newName = RenamePatternExpander.Expand(pattern, targets[i].Name, i);
 
             try
             {
@@ -503,5 +504,21 @@ public sealed class PaneViewModel : ObservableObject
         }
 
         RefreshCurrentFolder();
+    }
+
+    private void BulkRenameSelection()
+    {
+        var targets = SelectedNodes.ToList();
+        if (targets.Count <= 1)
+        {
+            return;
+        }
+
+        var viewModel = new BulkRenameViewModel(targets);
+
+        if (_dialogService.ShowBulkRename(viewModel))
+        {
+            BulkRename(targets, viewModel.Pattern);
+        }
     }
 }

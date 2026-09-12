@@ -1,7 +1,9 @@
+using System.Windows.Controls;
+
 namespace ExplorerAlternative.Models;
 
 /// <summary>
-/// タブ1枚分の状態。Phase 1ではPanesは常に1件だが、19章の分割ペイン拡張に備えて複数保持できる構造にする。
+/// タブ1枚分の状態。19章の分割ペインに対応し、Panesは複数（Phase 1では最大2件）保持できる。
 /// </summary>
 public sealed class TabState
 {
@@ -10,4 +12,6 @@ public sealed class TabState
     public List<PaneState> Panes { get; set; } = new();
 
     public int ActivePaneIndex { get; set; }
+
+    public Orientation SplitOrientation { get; set; } = Orientation.Horizontal;
 }
