@@ -641,34 +641,22 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type vm:PaneViewModel}">
-                            <!-- アクティブペインは枠線で明確に表示する（19.2章） -->
-                            <Border BorderThickness="2" Margin="1" PreviewMouseDown="PaneContainer_PreviewMouseDown">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="BorderBrush" Value="Transparent" />
-                                        <Style.Triggers>
-                                            <!-- ペインが2件以上に分割されているときだけアクティブ枠を表示する
-                                                 （1ペインのみの通常時に常時青枠が出るのを防ぐ）。 -->
-                                            <MultiDataTrigger>
-                                                <MultiDataTrigger.Conditions>
-                                                    <Condition Binding="{Binding IsActive}" Value="True" />
-                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=DataContext.ActiveTab.ShowPaneBorders}" Value="True" />
-                                                </MultiDataTrigger.Conditions>
-                                                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
-                                            </MultiDataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
+                            <!-- 仕様書9章：アクティブペインを青枠・青背景で強調するのではなく、
+                                 非アクティブ側のペインを少し薄暗くすることでアクティブペインを
+                                 相対的に目立たせる方式にした（ユーザー指示）。 -->
+                            <Border BorderThickness="2" Margin="1" BorderBrush="Transparent"
+                                    PreviewMouseDown="PaneContainer_PreviewMouseDown">
                                 <Grid>
-                                    <!-- 仕様書9章：アクティブペインは枠線だけでなく背景でも強調する（強度は設定で調整可能）。 -->
-                                    <Border Background="{DynamicResource AccentBrush}" IsHitTestVisible="False">
+                                    <Border Background="Black" IsHitTestVisible="False">
                                         <Border.Style>
                                             <Style TargetType="Border">
                                                 <Setter Property="Opacity" Value="0" />
                                                 <Style.Triggers>
+                                                    <!-- ペインが2件以上に分割されているときだけ適用する
+                                                         （1ペインのみの通常時に暗くならないようにする）。 -->
                                                     <MultiDataTrigger>
                                                         <MultiDataTrigger.Conditions>
-                                                            <Condition Binding="{Binding IsActive}" Value="True" />
+                                                            <Condition Binding="{Binding IsActive}" Value="False" />
                                                             <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=DataContext.ActiveTab.ShowPaneBorders}" Value="True" />
                                                         </MultiDataTrigger.Conditions>
                                                         <Setter Property="Opacity" Value="{DynamicResource ActivePaneHighlightOpacity}" />
