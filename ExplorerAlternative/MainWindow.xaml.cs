@@ -68,20 +68,31 @@ public partial class MainWindow : Window
         return IntPtr.Zero;
     }
 
+    // カーソル直下から祖先方向へScrollViewerを探す際、最初に見つかったものをそのまま
+    // 使うと、ナビゲーションペイン内のListBoxが持つ内部ScrollViewer（既定では横スクロール
+    // 無効）に当たってしまい、ペイン全体を横スクロールさせたいケース（ペインをGridSplitter
+    // で狭めた場合）で何も起きなくなる。横方向に実際にスクロール可能な最も内側の
+    // ScrollViewerを優先し、見つからなければ最初に見つかったものにフォールバックする。
     private ScrollViewer? FindScrollViewerAt(Point point)
     {
         var hit = VisualTreeHelper.HitTest(this, point)?.VisualHit;
+        ScrollViewer? fallback = null;
         while (hit is not null)
         {
             if (hit is ScrollViewer scrollViewer)
             {
-                return scrollViewer;
+                if (scrollViewer.ScrollableWidth > 0)
+                {
+                    return scrollViewer;
+                }
+
+                fallback ??= scrollViewer;
             }
 
             hit = VisualTreeHelper.GetParent(hit);
         }
 
-        return null;
+        return fallback;
     }
 
     // 仕様書40章：システムトレイに常駐中は、ウィンドウを閉じてもアプリを終了せずトレイへ格納する。
@@ -809,12 +820,27 @@ public partial class MainWindow : Window
 
     // 仕様書4章：ナビゲーションペイン内のListBox（お気に入り等）は既定でホイール/トラックパッドの
     // スクロールを自身で消費してしまい、外側のScrollViewer（ペイン全体）へ伝播しない。
-    // ここで明示的に外側のScrollViewerへスクロールを転送する。
+    // ただし、MaxHeightで内部スクロールが必要な一覧（最近使った場所等）まで一律に外側へ
+    // 転送すると、その一覧自身がスクロールできなくなってしまう。そのため、内側の
+    // ScrollViewerがまだその方向へスクロールできる間は内側に処理させ、内側が端まで
+    // 達している場合のみ外側のScrollViewer（ペイン全体）へスクロールを転送する。
     private void NavListBox_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (sender is not DependencyObject element)
         {
             return;
+        }
+
+        var innerScrollViewer = FindDescendantScrollViewer(element);
+        if (innerScrollViewer is not null)
+        {
+            var canScrollInner = e.Delta > 0
+                ? innerScrollViewer.VerticalOffset > 0
+                : innerScrollViewer.VerticalOffset < innerScrollViewer.ScrollableHeight;
+            if (canScrollInner)
+            {
+                return;
+            }
         }
 
         var scrollViewer = FindAncestorScrollViewer(element);
@@ -837,5 +863,26 @@ public partial class MainWindow : Window
         }
 
         return current as ScrollViewer;
+    }
+
+    private static ScrollViewer? FindDescendantScrollViewer(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is ScrollViewer scrollViewer)
+            {
+                return scrollViewer;
+            }
+
+            var found = FindDescendantScrollViewer(child);
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 }
