@@ -19,4 +19,8 @@
     <Using Remove="System.Drawing" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ExplorerAlternative.Tests" />
+  </ItemGroup>
+
 </Project>

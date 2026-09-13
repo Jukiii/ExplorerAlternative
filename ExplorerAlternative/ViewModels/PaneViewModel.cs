@@ -126,9 +126,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         InitRepositoryCommand = new RelayCommand(_ => InitRepository(), _ => VcsInfo.Kind == VersionControlKind.None);
         CloneRepositoryCommand = new RelayCommand(_ => CloneRepository());
         ShowDiffCommand = new RelayCommand(_ => ShowDiff(), _ => VcsInfo.Kind != VersionControlKind.None && PrimarySelectedNode is { IsDirectory: false });
-        GoToProjectRootCommand = new RelayCommand(_ => NavigateTo(CurrentProject!.RootPath), _ => CurrentProject is not null && CurrentProject.RootPath != CurrentPath);
-        GoToSolutionRootCommand = new RelayCommand(_ => NavigateTo(_solutionRootPath!), _ => _solutionRootPath is not null && _solutionRootPath != CurrentPath);
-        GoToGitRootCommand = new RelayCommand(_ => NavigateTo(VcsInfo.RootPath!), _ => VcsInfo.Kind != VersionControlKind.None && VcsInfo.RootPath is not null && VcsInfo.RootPath != CurrentPath);
+        GoToProjectRootCommand = new RelayCommand(_ => NavigateTo(CurrentProject!.RootPath), _ => CurrentProject is not null && !PathsEqual(CurrentProject.RootPath, CurrentPath));
+        GoToSolutionRootCommand = new RelayCommand(_ => NavigateTo(_solutionRootPath!), _ => _solutionRootPath is not null && !PathsEqual(_solutionRootPath, CurrentPath));
+        GoToGitRootCommand = new RelayCommand(_ => NavigateTo(VcsInfo.RootPath!), _ => VcsInfo.Kind != VersionControlKind.None && VcsInfo.RootPath is not null && !PathsEqual(VcsInfo.RootPath, CurrentPath));
         HoldForComparisonCommand = new RelayCommand(_ => HoldForComparison(), _ => PrimarySelectedNode is { IsDirectory: false });
         CompareWithHeldCommand = new RelayCommand(
             _ => CompareWithHeld(),
@@ -541,6 +541,10 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     }
 
     private static bool IsPathComputerRoot(string path) => string.IsNullOrEmpty(path);
+
+    // Windowsのパスは大文字小文字を区別しないため、単純な==比較ではなくこちらを使う
+    // （56章のルート移動系コマンドのCanExecuteで、大小文字違いにより誤って有効化されるのを防ぐ）。
+    private static bool PathsEqual(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     private void GoUp()
     {
