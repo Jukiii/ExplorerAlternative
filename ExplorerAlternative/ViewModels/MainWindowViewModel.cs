@@ -85,7 +85,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _projectDetectionService = projectDetectionService;
         _folderWatcherServiceFactory = folderWatcherServiceFactory;
 
-        NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, dialogService, NavigateActiveTo, OpenFile);
+        NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, dialogService, NavigateActiveTo);
         NavigationPane.WorkspaceOpenRequested += name => LoadWorkspaceByName((Window)Application.Current!.MainWindow!, name);
         TerminalHost = new TerminalHostViewModel(terminalServiceFactory, settingsService.Current.Terminal.SyncByDefault);
 
@@ -326,22 +326,6 @@ public sealed class MainWindowViewModel : ObservableObject
             NavigationPane.Workspaces);
     }
 
-    // 仕様書50章「最近使った場所」・22章「アプリで開く」相当：既定のアプリでファイルを開く。
-    private void OpenFile(string path)
-    {
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = path,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            _dialogService.ShowError($"ファイルを開けませんでした。({ex.Message})");
-        }
-    }
 
     private PaneViewModel CreatePane(string initialPath, ViewMode initialViewMode)
     {
@@ -360,7 +344,6 @@ public sealed class MainWindowViewModel : ObservableObject
             initialViewMode);
 
         pane.RunTerminalCommandRequested += RunTerminalCommand;
-        pane.PinFileRequested += node => NavigationPane.AddPinnedFile(node.Name, node.FullPath);
         pane.OpenInNewTabRequested += OpenPathInNewTab;
         pane.ProjectDetected += project => NavigationPane.RecordRecentProject(project.Name, project.RootPath);
 

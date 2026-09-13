@@ -7,8 +7,10 @@ using ExplorerAlternative.Services.Abstractions;
 namespace ExplorerAlternative.ViewModels;
 
 /// <summary>
-/// ナビゲーションペイン（仕様書6章・4章）：クイックアクセス・ドライブ・お気に入り・
-/// 最近使った場所・ピン留めファイル・タグ・ワークスペースの一覧と折りたたみ状態。
+/// ナビゲーションペイン（仕様書6章・4章）：ドライブ・お気に入り・最近使った場所・
+/// 最近開いたプロジェクト・タグ・ワークスペースの一覧と折りたたみ状態。
+/// お気に入りは、クイックアクセス相当の標準フォルダ（Home/Desktop等）も統合した
+/// 単一の一覧として扱う（初回起動時のみ標準フォルダを初期値として登録する）。
 /// </summary>
 public sealed class NavigationPaneViewModel : ObservableObject
 {
@@ -18,23 +20,28 @@ public sealed class NavigationPaneViewModel : ObservableObject
     private readonly IFileSystemService _fileSystemService;
     private readonly IDialogService _dialogService;
     private readonly Action<string> _navigate;
-    private readonly Action<string> _openFile;
     private bool _isCollapsed;
 
-    public NavigationPaneViewModel(ISettingsService settingsService, IFileSystemService fileSystemService, IDialogService dialogService, Action<string> navigate, Action<string> openFile)
+    public NavigationPaneViewModel(ISettingsService settingsService, IFileSystemService fileSystemService, IDialogService dialogService, Action<string> navigate)
     {
         _settingsService = settingsService;
         _fileSystemService = fileSystemService;
         _dialogService = dialogService;
         _navigate = navigate;
-        _openFile = openFile;
-
-        foreach (var (name, path) in GetQuickAccessFolders())
-        {
-            QuickAccess.Add(new FavoriteEntry { Name = name, Path = path });
-        }
 
         RefreshDrives();
+
+        // 初回起動時（お気に入りが未設定）のみ、クイックアクセス相当の標準フォルダを
+        // お気に入りの初期値として登録する（以降はユーザーが自由に追加・削除・並び替え可能）。
+        if (_settingsService.Current.Favorites.Count == 0)
+        {
+            foreach (var (name, path) in GetDefaultFavoriteFolders())
+            {
+                _settingsService.Current.Favorites.Add(new FavoriteEntry { Name = name, Path = path });
+            }
+
+            _settingsService.Save();
+        }
 
         foreach (var favorite in _settingsService.Current.Favorites)
         {
@@ -51,11 +58,6 @@ public sealed class NavigationPaneViewModel : ObservableObject
             RecentProjects.Add(project);
         }
 
-        foreach (var pinned in _settingsService.Current.PinnedFiles)
-        {
-            PinnedFiles.Add(pinned);
-        }
-
         foreach (var tag in _settingsService.Current.TagDefinitions)
         {
             Tags.Add(tag);
@@ -67,7 +69,6 @@ public sealed class NavigationPaneViewModel : ObservableObject
         }
 
         NavigateToEntryCommand = new RelayCommand(p => _navigate(((FavoriteEntry)p!).Path));
-        OpenPinnedFileCommand = new RelayCommand(p => _openFile(((FavoriteEntry)p!).Path));
         RemoveFavoriteCommand = new RelayCommand(p => RemoveFavorite((FavoriteEntry)p!));
         RenameFavoriteCommand = new RelayCommand(p => RenameFavorite((FavoriteEntry)p!));
         MoveFavoriteUpCommand = new RelayCommand(p => MoveFavorite((FavoriteEntry)p!, -1));
@@ -76,7 +77,6 @@ public sealed class NavigationPaneViewModel : ObservableObject
         ClearRecentPlacesCommand = new RelayCommand(_ => ClearRecentPlaces());
         RemoveRecentProjectCommand = new RelayCommand(p => RemoveRecentProject((FavoriteEntry)p!));
         ClearRecentProjectsCommand = new RelayCommand(_ => ClearRecentProjects());
-        RemovePinnedFileCommand = new RelayCommand(p => RemovePinnedFile((FavoriteEntry)p!));
         RemoveTagCommand = new RelayCommand(p => RemoveTag((TagDefinition)p!));
         LoadWorkspaceCommand = new RelayCommand(p => WorkspaceOpenRequested?.Invoke((string)p!));
         ToggleCollapsedCommand = new RelayCommand(_ => IsCollapsed = !IsCollapsed);
@@ -84,8 +84,6 @@ public sealed class NavigationPaneViewModel : ObservableObject
 
     /// <summary>左ペインの「ワークスペース」項目クリック時（仕様書43章）。実際の読み込みはMainWindowViewModelへ委譲する。</summary>
     public event Action<string>? WorkspaceOpenRequested;
-
-    public ObservableCollection<FavoriteEntry> QuickAccess { get; } = new();
 
     public ObservableCollection<FavoriteEntry> Drives { get; } = new();
 
@@ -96,15 +94,11 @@ public sealed class NavigationPaneViewModel : ObservableObject
     /// <summary>仕様書55章「最近開いたプロジェクト」。</summary>
     public ObservableCollection<FavoriteEntry> RecentProjects { get; } = new();
 
-    public ObservableCollection<FavoriteEntry> PinnedFiles { get; } = new();
-
     public ObservableCollection<TagDefinition> Tags { get; } = new();
 
     public ObservableCollection<string> Workspaces { get; } = new();
 
     public RelayCommand NavigateToEntryCommand { get; }
-
-    public RelayCommand OpenPinnedFileCommand { get; }
 
     public RelayCommand RemoveFavoriteCommand { get; }
 
@@ -122,8 +116,6 @@ public sealed class NavigationPaneViewModel : ObservableObject
 
     public RelayCommand ClearRecentProjectsCommand { get; }
 
-    public RelayCommand RemovePinnedFileCommand { get; }
-
     public RelayCommand RemoveTagCommand { get; }
 
     public RelayCommand LoadWorkspaceCommand { get; }
@@ -136,7 +128,7 @@ public sealed class NavigationPaneViewModel : ObservableObject
         set => SetProperty(ref _isCollapsed, value);
     }
 
-    private static IEnumerable<(string Name, string Path)> GetQuickAccessFolders()
+    private static IEnumerable<(string Name, string Path)> GetDefaultFavoriteFolders()
     {
         var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
@@ -208,13 +200,32 @@ public sealed class NavigationPaneViewModel : ObservableObject
         _settingsService.Save();
     }
 
-    // 仕様書4章：お気に入りの並び替え。
+    // 仕様書4章：▲▼ボタンによる並び替え。
     private void MoveFavorite(FavoriteEntry entry, int offset)
     {
         var index = Favorites.IndexOf(entry);
-        var newIndex = index + offset;
+        if (index < 0)
+        {
+            return;
+        }
 
-        if (index < 0 || newIndex < 0 || newIndex >= Favorites.Count)
+        MoveFavoriteToIndex(entry, index + offset);
+    }
+
+    /// <summary>
+    /// お気に入りを任意の位置へ移動する。▲▼ボタン（隣接移動）に加え、
+    /// お気に入り欄内でのドラッグ&ドロップによる並び替えからも呼び出す。
+    /// </summary>
+    public void MoveFavoriteToIndex(FavoriteEntry entry, int newIndex)
+    {
+        var index = Favorites.IndexOf(entry);
+        if (index < 0)
+        {
+            return;
+        }
+
+        newIndex = Math.Clamp(newIndex, 0, Favorites.Count - 1);
+        if (newIndex == index)
         {
             return;
         }
@@ -226,11 +237,9 @@ public sealed class NavigationPaneViewModel : ObservableObject
 
         if (settingsIndex >= 0)
         {
-            var settingsNewIndex = settingsIndex + offset;
-            if (settingsNewIndex >= 0 && settingsNewIndex < settingsList.Count)
-            {
-                (settingsList[settingsIndex], settingsList[settingsNewIndex]) = (settingsList[settingsNewIndex], settingsList[settingsIndex]);
-            }
+            var moved = settingsList[settingsIndex];
+            settingsList.RemoveAt(settingsIndex);
+            settingsList.Insert(Math.Clamp(newIndex, 0, settingsList.Count), moved);
         }
 
         _settingsService.Save();
@@ -306,27 +315,6 @@ public sealed class NavigationPaneViewModel : ObservableObject
     {
         RecentProjects.Clear();
         _settingsService.Current.RecentProjects.Clear();
-        _settingsService.Save();
-    }
-
-    // 仕様書51章：ピン留めファイル。
-    public void AddPinnedFile(string name, string path)
-    {
-        if (PinnedFiles.Any(f => f.Path == path))
-        {
-            return;
-        }
-
-        var entry = new FavoriteEntry { Name = name, Path = path };
-        PinnedFiles.Add(entry);
-        _settingsService.Current.PinnedFiles.Add(entry);
-        _settingsService.Save();
-    }
-
-    private void RemovePinnedFile(FavoriteEntry entry)
-    {
-        PinnedFiles.Remove(entry);
-        _settingsService.Current.PinnedFiles.RemoveAll(f => f.Path == entry.Path);
         _settingsService.Save();
     }
 

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
 using System.Windows;
@@ -5,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using ExplorerAlternative.Models;
 using ExplorerAlternative.ViewModels;
 
 namespace ExplorerAlternative;
@@ -12,10 +14,13 @@ namespace ExplorerAlternative;
 public partial class MainWindow : Window
 {
     private static readonly string SourcePaneFormat = "ExplorerAlternative.SourcePane";
+    private static readonly string FavoriteReorderFormat = "ExplorerAlternative.FavoriteEntry";
 
     private Point? _tabDragStartPoint;
     private bool _tabDragDuplicated;
     private Point? _fileDragStartPoint;
+    private FavoriteEntry? _favoriteDragStartEntry;
+    private Point? _favoriteDragStartPoint;
 
     public MainWindow()
     {
@@ -320,22 +325,114 @@ public partial class MainWindow : Window
     }
 
     // 仕様書4章：メインペインからフォルダをお気に入りへドラッグ&ドロップして追加する。
+    // 仕様書4章：お気に入り欄内での並び替え用ドラッグ開始検出。行の大部分は「移動」ボタンが
+    // 占めているため、ファイル一覧のドラッグ検出（NodeListBox_PreviewMouseLeftButtonDown等）と
+    // 同様にトンネリング段階で検出する。
+    private void FavoritesListBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var source = e.OriginalSource as DependencyObject;
+        _favoriteDragStartEntry = IsOverItemContainer(source) ? FindFavoriteFromVisual(source) : null;
+        _favoriteDragStartPoint = _favoriteDragStartEntry is not null ? e.GetPosition(null) : null;
+    }
+
+    private void FavoritesListBox_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_favoriteDragStartEntry is null || _favoriteDragStartPoint is null || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        var current = e.GetPosition(null);
+        var diff = _favoriteDragStartPoint.Value - current;
+
+        if (Math.Abs(diff.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(diff.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        var entry = _favoriteDragStartEntry;
+        _favoriteDragStartEntry = null;
+        _favoriteDragStartPoint = null;
+
+        if (sender is not ListBox listBox)
+        {
+            return;
+        }
+
+        DragDrop.DoDragDrop(listBox, new DataObject(FavoriteReorderFormat, entry), DragDropEffects.Move);
+    }
+
     private void FavoritesListBox_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = TryGetDroppedFolder(e, out _) ? DragDropEffects.Link : DragDropEffects.None;
+        if (e.Data.GetDataPresent(FavoriteReorderFormat))
+        {
+            e.Effects = DragDropEffects.Move;
+        }
+        else
+        {
+            e.Effects = TryGetDroppedFolder(e, out _) ? DragDropEffects.Link : DragDropEffects.None;
+        }
+
         e.Handled = true;
     }
 
     private void FavoritesListBox_Drop(object sender, DragEventArgs e)
     {
-        if (!TryGetDroppedFolder(e, out var folderPath) || DataContext is not MainWindowViewModel viewModel)
+        if (DataContext is not MainWindowViewModel viewModel)
         {
             return;
         }
 
-        var name = System.IO.Path.GetFileName(folderPath.TrimEnd('\\'));
-        viewModel.NavigationPane.AddFavorite(string.IsNullOrEmpty(name) ? folderPath : name, folderPath);
-        e.Handled = true;
+        // お気に入り内での並び替え（ドラッグ&ドロップ）。
+        if (e.Data.GetData(FavoriteReorderFormat) is FavoriteEntry draggedEntry)
+        {
+            if (sender is ListBox listBox)
+            {
+                var targetIndex = ResolveFavoriteDropIndex(listBox, e, viewModel.NavigationPane.Favorites, draggedEntry);
+                viewModel.NavigationPane.MoveFavoriteToIndex(draggedEntry, targetIndex);
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        // フォルダをドラッグ&ドロップしてお気に入りへ追加。
+        if (TryGetDroppedFolder(e, out var folderPath))
+        {
+            var name = System.IO.Path.GetFileName(folderPath.TrimEnd('\\'));
+            viewModel.NavigationPane.AddFavorite(string.IsNullOrEmpty(name) ? folderPath : name, folderPath);
+            e.Handled = true;
+        }
+    }
+
+    private static int ResolveFavoriteDropIndex(ListBox listBox, DragEventArgs e, ObservableCollection<FavoriteEntry> favorites, FavoriteEntry draggedEntry)
+    {
+        var position = e.GetPosition(listBox);
+        var hit = VisualTreeHelper.HitTest(listBox, position)?.VisualHit;
+        var targetEntry = FindFavoriteFromVisual(hit);
+
+        if (targetEntry is null || ReferenceEquals(targetEntry, draggedEntry))
+        {
+            return favorites.Count - 1;
+        }
+
+        return favorites.IndexOf(targetEntry);
+    }
+
+    private static FavoriteEntry? FindFavoriteFromVisual(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is FrameworkElement { DataContext: FavoriteEntry entry })
+            {
+                return entry;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return null;
     }
 
     private static bool TryGetDroppedFolder(DragEventArgs e, out string folderPath)

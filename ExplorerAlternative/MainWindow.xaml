@@ -44,8 +44,6 @@
                 <MenuItem Header="相対パスをコピー" Command="{Binding CopyPathCommand}" CommandParameter="RelativePath" />
                 <MenuItem Header="URIをコピー" Command="{Binding CopyPathCommand}" CommandParameter="Uri" />
             </MenuItem>
-            <!-- 仕様書51章：ピン留めファイル（フォルダは対象外）。 -->
-            <MenuItem Header="ピン留めに追加" Command="{Binding PinFileCommand}" />
             <MenuItem Header="プロパティ" Command="{Binding ShowPropertiesCommand}" />
             <Separator />
             <!-- 仕様書25章：任意の2ファイル比較（Git管理外でも利用可能）。 -->
@@ -373,30 +371,6 @@
 
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel>
-                            <!-- クイックアクセス（仕様書4章：Home/Desktop/Downloads/Documents/Pictures/Music/Videos） -->
-                            <TextBlock Text="クイックアクセス" FontWeight="SemiBold" Margin="2,14,0,4" />
-                            <ListBox ItemsSource="{Binding NavigationPane.QuickAccess}"
-                                     BorderThickness="0" Background="Transparent"
-                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
-                                     PreviewMouseWheel="NavListBox_PreviewMouseWheel">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type models:FavoriteEntry}">
-                                        <Button Content="{Binding Name}" HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
-                                                Command="{Binding DataContext.NavigationPane.NavigateToEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}">
-                                            <Button.ContentTemplate>
-                                                <DataTemplate>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="📁" Margin="0,0,6,0" FontSize="11" />
-                                                        <TextBlock Text="{Binding}" />
-                                                    </StackPanel>
-                                                </DataTemplate>
-                                            </Button.ContentTemplate>
-                                        </Button>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-
                             <!-- ドライブ（仕様書4章） -->
                             <TextBlock Text="ドライブ" FontWeight="SemiBold" Margin="2,14,0,4" />
                             <ListBox ItemsSource="{Binding NavigationPane.Drives}"
@@ -421,12 +395,16 @@
                                 </ListBox.ItemTemplate>
                             </ListBox>
 
-                            <!-- お気に入り（仕様書4章・36章）：並び替え・削除・フォルダのドラッグ&ドロップ追加に対応。 -->
+                            <!-- お気に入り（仕様書4章・36章）：クイックアクセス相当の標準フォルダも統合した単一の一覧。
+                                 削除・名前変更・▲▼ボタンでの並び替えに加え、フォルダのドラッグ&ドロップ追加、
+                                 お気に入り欄内でのドラッグ&ドロップによる並び替えに対応。 -->
                             <TextBlock Text="お気に入り" FontWeight="SemiBold" Margin="2,14,0,4" />
                             <ListBox ItemsSource="{Binding NavigationPane.Favorites}" MaxHeight="200"
                                      BorderThickness="0" Background="Transparent"
                                      ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
                                      PreviewMouseWheel="NavListBox_PreviewMouseWheel"
+                                     PreviewMouseLeftButtonDown="FavoritesListBox_PreviewMouseLeftButtonDown"
+                                     PreviewMouseMove="FavoritesListBox_PreviewMouseMove"
                                      AllowDrop="True"
                                      DragOver="FavoritesListBox_DragOver"
                                      Drop="FavoritesListBox_Drop">
@@ -524,37 +502,6 @@
                                                     <DataTemplate>
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Text="📦" Margin="0,0,6,0" FontSize="11" />
-                                                            <TextBlock Text="{Binding}" />
-                                                        </StackPanel>
-                                                    </DataTemplate>
-                                                </Button.ContentTemplate>
-                                            </Button>
-                                        </DockPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-
-                            <!-- ピン留めファイル（仕様書51章） -->
-                            <TextBlock Text="ピン留めファイル" FontWeight="SemiBold" Margin="2,14,0,4" />
-                            <ListBox ItemsSource="{Binding NavigationPane.PinnedFiles}" MaxHeight="160"
-                                     BorderThickness="0" Background="Transparent"
-                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
-                                     PreviewMouseWheel="NavListBox_PreviewMouseWheel">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type models:FavoriteEntry}">
-                                        <DockPanel>
-                                            <Button DockPanel.Dock="Right" Content="✕" FontSize="9" Width="20" Height="20" Padding="0"
-                                                    ToolTip="ピン留めから削除"
-                                                    Command="{Binding DataContext.NavigationPane.RemovePinnedFileCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}" />
-                                            <Button Content="{Binding Name}" ToolTip="{Binding Path}"
-                                                    HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
-                                                    Command="{Binding DataContext.NavigationPane.OpenPinnedFileCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}">
-                                                <Button.ContentTemplate>
-                                                    <DataTemplate>
-                                                        <StackPanel Orientation="Horizontal">
-                                                            <TextBlock Text="📌" Margin="0,0,6,0" FontSize="11" />
                                                             <TextBlock Text="{Binding}" />
                                                         </StackPanel>
                                                     </DataTemplate>

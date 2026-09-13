@@ -94,7 +94,6 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         NewFileCommand = new RelayCommand(_ => CreateNewFile());
         ShowPropertiesCommand = new RelayCommand(_ => ShowPropertiesForSelection(), _ => PrimarySelectedNode is not null);
         CopyPathCommand = new RelayCommand(p => CopyPath((string)p!), _ => PrimarySelectedNode is not null);
-        PinFileCommand = new RelayCommand(_ => PinSelectedFile(), _ => PrimarySelectedNode is { IsDirectory: false });
         RenameCommand = new RelayCommand(_ => RenameSelection(), _ => PrimarySelectedNode is not null);
         DeleteCommand = new RelayCommand(_ => DeleteSelection(), _ => SelectedNodes.Count > 0);
         CopyCommand = new RelayCommand(_ => CopySelectionToClipboard(isCut: false), _ => SelectedNodes.Count > 0);
@@ -147,8 +146,6 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     /// <summary>Git/SVN操作コマンドを統合ターミナル（9章）で実行してもらうための橋渡し。</summary>
     public event Action<string>? RunTerminalCommandRequested;
 
-    /// <summary>ピン留めファイル（仕様書51章）への追加を、ナビゲーションペインへ委譲するための橋渡し。</summary>
-    public event Action<FileSystemNodeViewModel>? PinFileRequested;
 
     /// <summary>フォルダを新しいタブで開く（仕様書10章・37章）要求を、MainWindowViewModelへ委譲するための橋渡し。</summary>
     public event Action<string>? OpenInNewTabRequested;
@@ -195,8 +192,6 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     public RelayCommand ShowPropertiesCommand { get; }
 
     public RelayCommand CopyPathCommand { get; }
-
-    public RelayCommand PinFileCommand { get; }
 
     public RelayCommand RenameCommand { get; }
 
@@ -892,17 +887,6 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         }
     }
 
-    // 仕様書51章：ピン留めファイルへの追加はナビゲーションペイン（MainWindowViewModel経由）へ委譲する。
-    private void PinSelectedFile()
-    {
-        var target = PrimarySelectedNode;
-        if (target is null || target.IsDirectory)
-        {
-            return;
-        }
-
-        PinFileRequested?.Invoke(target);
-    }
 
     private void RenameSelection()
     {

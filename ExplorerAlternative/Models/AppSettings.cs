@@ -26,9 +26,6 @@ public sealed class AppSettings
     /// <summary>仕様書37章「スマートタブ」。</summary>
     public TabSettings Tabs { get; set; } = new();
 
-    /// <summary>ピン留めファイル（仕様書51章）。</summary>
-    public List<FavoriteEntry> PinnedFiles { get; set; } = new();
-
     /// <summary>最近使った場所（仕様書50章）。先頭が最新。</summary>
     public List<string> RecentPlaces { get; set; } = new();
 
