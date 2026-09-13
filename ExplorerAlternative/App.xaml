@@ -140,7 +140,7 @@
                                     <Thumb>
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="Thumb">
-                                                <Border Background="{DynamicResource BorderBrush2}" CornerRadius="4" Margin="2" />
+                                                <Border Background="{DynamicResource BorderBrush2}" CornerRadius="6" Margin="2" />
                                             </ControlTemplate>
                                         </Thumb.Template>
                                     </Thumb>
@@ -187,7 +187,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8"
                                 Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
@@ -220,7 +220,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8"
                                 Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
@@ -238,6 +238,38 @@
             </Setter>
         </Style>
 
+        <!-- 標準WPFのTabItem（設定画面等）のヘッダー部分。なお、TabControl自体の既定の
+             ControlTemplate（タブ本体の背景）は、Application.Resourcesでの
+             TargetType="TabControl"指定によるカスタムテンプレートが反映されない環境
+             だったため（原因未特定。TabItemのテンプレートは正常に反映される）、
+             タブ本体側の背景は各TabItemの中身（Grid等）に直接DynamicResourceで
+             指定する方式にした（SettingsWindow.xaml参照）。 -->
+        <Style TargetType="TabItem">
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bd" Background="Transparent" BorderThickness="0,0,0,2"
+                                BorderBrush="Transparent" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter x:Name="Cp" ContentSource="Header"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               TextElement.Foreground="{DynamicResource TextSecondaryBrush}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="Cp" Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- タブストリップの1タブ -->
         <Style x:Key="TabItemContainerStyle" TargetType="ListBoxItem">
             <Setter Property="Padding" Value="0" />
@@ -248,7 +280,7 @@
                     <ControlTemplate TargetType="ListBoxItem">
                         <Border x:Name="Bd" Background="{DynamicResource PanelBackgroundBrush}"
                                 BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1,1,1,0"
-                                CornerRadius="6,6,0,0" Padding="2">
+                                CornerRadius="10,10,0,0" Padding="2">
                             <Grid>
                                 <ContentPresenter />
                                 <Border x:Name="ActiveIndicator" Height="3" VerticalAlignment="Bottom"
@@ -330,7 +362,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="8" Padding="{TemplateBinding Padding}">
                             <ContentPresenter />
                         </Border>
                         <ControlTemplate.Triggers>
