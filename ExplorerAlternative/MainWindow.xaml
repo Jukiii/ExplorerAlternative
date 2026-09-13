@@ -850,11 +850,60 @@
              （左のナビゲーションペイン・右のGit/SVN情報ペインの下には表示しない）。 -->
         <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" SharedSizeGroup="NavPaneColumn" />
-                <ColumnDefinition Width="Auto" SharedSizeGroup="NavSplitterColumn" />
+                <!-- ナビゲーション/Git・SVNペインが折りたたまれている間は、再展開用の
+                     小さな「»」「«」ボタンのために列幅がわずかに残る（Grid.Row="2"側）。
+                     ターミナル側にはそのボタンが無いため、SharedSizeGroupにそのまま従うと
+                     ターミナルの左右に不要な隙間ができてしまう。折りたたみ中はWidth=0を
+                     明示してSharedSizeGroupを上書きし、隙間なく画面端まで広がるようにする。 -->
+                <ColumnDefinition SharedSizeGroup="NavPaneColumn">
+                    <ColumnDefinition.Style>
+                        <Style TargetType="ColumnDefinition">
+                            <Setter Property="Width" Value="Auto" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding NavigationPane.IsCollapsed}" Value="True">
+                                    <Setter Property="Width" Value="0" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ColumnDefinition.Style>
+                </ColumnDefinition>
+                <ColumnDefinition SharedSizeGroup="NavSplitterColumn">
+                    <ColumnDefinition.Style>
+                        <Style TargetType="ColumnDefinition">
+                            <Setter Property="Width" Value="Auto" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding NavigationPane.IsCollapsed}" Value="True">
+                                    <Setter Property="Width" Value="0" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ColumnDefinition.Style>
+                </ColumnDefinition>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" SharedSizeGroup="VcsSplitterColumn" />
-                <ColumnDefinition Width="Auto" SharedSizeGroup="VcsPaneColumn" />
+                <ColumnDefinition SharedSizeGroup="VcsSplitterColumn">
+                    <ColumnDefinition.Style>
+                        <Style TargetType="ColumnDefinition">
+                            <Setter Property="Width" Value="Auto" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsVcsPaneVisible}" Value="False">
+                                    <Setter Property="Width" Value="0" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ColumnDefinition.Style>
+                </ColumnDefinition>
+                <ColumnDefinition SharedSizeGroup="VcsPaneColumn">
+                    <ColumnDefinition.Style>
+                        <Style TargetType="ColumnDefinition">
+                            <Setter Property="Width" Value="Auto" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsVcsPaneVisible}" Value="False">
+                                    <Setter Property="Width" Value="0" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ColumnDefinition.Style>
+                </ColumnDefinition>
             </Grid.ColumnDefinitions>
 
         <Border Grid.Column="2" Background="{DynamicResource TerminalBackgroundBrush}"
