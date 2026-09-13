@@ -8,6 +8,8 @@
     <UseWPF>true</UseWPF>
     <!-- 仕様書40章「システムトレイ」：System.Windows.Forms.NotifyIconを使用するため。 -->
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- 実行ファイル（タスクバー・タスクトレイ含む）のアイコン。 -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!-- UseWindowsForms有効時に暗黙的globalusingとして追加されるSystem.Windows.Forms /
@@ -17,6 +19,11 @@
   <ItemGroup>
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <!-- ウィンドウタイトルバー等でのアイコン表示用（MainWindow.xamlのWindow.Iconから参照）。 -->
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
 </Project>

@@ -6,6 +6,7 @@
         xmlns:models="clr-namespace:ExplorerAlternative.Models"
         xmlns:conv="clr-namespace:ExplorerAlternative.Converters"
         Title="Explorer Alternative"
+        Icon="Assets/app.ico"
         Height="760" Width="1280"
         MinHeight="480" MinWidth="720"
         WindowStartupLocation="CenterScreen">
