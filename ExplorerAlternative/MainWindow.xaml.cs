@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -454,6 +455,43 @@ public partial class MainWindow : Window
 
         folderPath = folder;
         return true;
+    }
+
+    // 仕様書11章：パンくずの空白部分をクリックしたらアドレス編集モードにする。
+    // ただし、パンくずセグメントやドロップダウン矢印（Button/ToggleButton）自体のクリックは
+    // 従来通りナビゲーション操作として扱い、編集モードへは切り替えない。
+    private void AddressBarBorder_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (IsOverButton(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var command = viewModel.ActiveTab?.ActivePane.BeginAddressEditCommand;
+        if (command?.CanExecute(null) == true)
+        {
+            command.Execute(null);
+        }
+    }
+
+    private static bool IsOverButton(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is ButtonBase)
+            {
+                return true;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
     }
 
     private void AddressEditTextBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)

@@ -148,9 +148,15 @@
         <KeyBinding Key="W" Modifiers="Control" Command="{Binding DataContext.CloseTabCommand, ElementName=RootWindow}"
                     CommandParameter="{Binding DataContext.ActiveTab, ElementName=RootWindow}" />
         <KeyBinding Key="Tab" Modifiers="Control" Command="{Binding DataContext.NextTabCommand, ElementName=RootWindow}" />
+        <!-- 仕様書20章：Ctrl+Nで新しいフォルダを作成。 -->
+        <KeyBinding Key="N" Modifiers="Control" Command="{Binding DataContext.ActiveTab.ActivePane.NewFolderCommand, ElementName=RootWindow}" />
+        <!-- Ctrl+,で設定を開く（多くのWindows/Macアプリで一般的なショートカット）。 -->
+        <KeyBinding Key="OemComma" Modifiers="Control" Command="{Binding DataContext.OpenSettingsCommand, ElementName=RootWindow}" />
     </Window.InputBindings>
 
-    <Grid>
+    <!-- IsSharedSizeScope: ターミナル行（下記Grid.Row="3"）の列幅を、ナビゲーション/メイン/
+         Git・SVNペインの行（Grid.Row="2"）の列幅と自動的に同期させるため。 -->
+    <Grid Grid.IsSharedSizeScope="True">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -269,7 +275,10 @@
 
                 <!-- 仕様書11章：アドレスバーは残りの横幅いっぱいに伸ばす（DockPanelの最後の子要素にして埋める）。 -->
                 <Grid Margin="10,0,0,0">
-                <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="5" Padding="6,0">
+                <!-- 仕様書11章：パンくず部分の空白（segment/dropdownボタン以外）をクリックしたら
+                     アドレス編集モードへ切り替える（Windows 11 Explorerと同様の操作感）。 -->
+                <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="5" Padding="6,0"
+                        PreviewMouseLeftButtonDown="AddressBarBorder_PreviewMouseLeftButtonDown">
                     <Grid>
                         <Grid.Style>
                             <Style TargetType="Grid">
@@ -354,11 +363,11 @@
         <!-- ナビゲーションペイン + メインペイン + Git/SVN情報ペイン -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="NavPaneColumn" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="NavSplitterColumn" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="VcsSplitterColumn" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="VcsPaneColumn" />
             </Grid.ColumnDefinitions>
 
             <!-- ナビゲーションペイン（仕様書4章・6章） -->
@@ -731,6 +740,7 @@
                             Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"
                             Command="{Binding DataContext.ToggleVcsPaneCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
 
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
                         <TextBlock Text="Git / SVN 情報" FontWeight="SemiBold" Margin="0,14,0,10" />
 
@@ -775,8 +785,43 @@
                             <TextBlock Margin="0,12,0,0" Text="状態" FontWeight="SemiBold" />
                             <TextBlock Margin="0,4,0,0" Text="{Binding VcsInfo.StatusSummary, Mode=OneWay}"
                                        Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" />
+
+                            <!-- 仕様書21章「Log」：直近のコミット履歴。 -->
+                            <TextBlock Margin="0,16,0,0" Text="コミット履歴" FontWeight="SemiBold" />
+                            <ItemsControl Margin="0,4,0,0" ItemsSource="{Binding CommitLog}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:CommitLogEntry}">
+                                        <Border BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,0,0,1"
+                                                Padding="0,6" Margin="0,0,0,2">
+                                            <StackPanel>
+                                                <TextBlock TextWrapping="Wrap">
+                                                    <Run Text="{Binding Revision, Mode=OneWay}" FontFamily="Consolas" FontWeight="SemiBold" />
+                                                    <Run Text="{Binding Author, Mode=OneWay}" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding Date, Mode=OneWay}" FontSize="11"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                <TextBlock Text="{Binding Message, Mode=OneWay}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Margin="0,4,0,0" Text="コミット履歴がありません。"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CommitLog.Count}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </StackPanel>
                     </StackPanel>
+                    </ScrollViewer>
                 </DockPanel>
             </Border>
 
@@ -800,7 +845,19 @@
              ハンドラーでは出力欄からのクリックを検知できない。トンネリング段階
              （PreviewMouseLeftButtonDown）で検知しつつ、実際のフォーカス移動は
              Dispatcher.BeginInvokeで出力欄自身の既定処理が終わった後に行う。 -->
-        <Border Grid.Row="3" Background="{DynamicResource TerminalBackgroundBrush}"
+        <!-- 仕様書3章：ターミナル部分の横幅は、上のGrid.Row="2"と同じSharedSizeGroupで列幅を
+             同期させることで、中央（メイン）ペインと同じ幅になるようにする
+             （左のナビゲーションペイン・右のGit/SVN情報ペインの下には表示しない）。 -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="NavPaneColumn" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="NavSplitterColumn" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="VcsSplitterColumn" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="VcsPaneColumn" />
+            </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="2" Background="{DynamicResource TerminalBackgroundBrush}"
                 Visibility="{Binding TerminalHost.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}"
                 PreviewMouseLeftButtonDown="TerminalPanel_MouseLeftButtonDown">
             <Grid Height="230" DataContext="{Binding TerminalHost}">
@@ -880,5 +937,6 @@
                 </Border>
             </Grid>
         </Border>
+        </Grid>
     </Grid>
 </Window>

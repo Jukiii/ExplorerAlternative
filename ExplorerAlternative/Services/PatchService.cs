@@ -82,6 +82,10 @@ public sealed class PatchService : IPatchService
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // git/svnの出力はUTF-8のため、明示しないとシステムのANSIコードページで誤読され、
+            // 日本語ファイル名・日本語を含むdiff内容が文字化けする。
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
             UseShellExecute = false,
             CreateNoWindow = true
         };

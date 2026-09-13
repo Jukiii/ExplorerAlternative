@@ -13,6 +13,7 @@ public partial class PreviewWindow : Window
     public PreviewWindow()
     {
         InitializeComponent();
+        Closed += (_, _) => (DataContext as PreviewViewModel)?.Closed?.Invoke();
     }
 
     public void SetPreview(PreviewViewModel previewViewModel)

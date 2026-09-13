@@ -48,6 +48,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     private bool _isActive;
     private ProjectInfo? _currentProject;
     private string? _solutionRootPath;
+    private string? _lastCommitLogRoot;
 
     public PaneViewModel(
         IFileSystemService fileSystemService,
@@ -339,6 +340,20 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _vcsInfo, value);
     }
 
+    /// <summary>仕様書21章「Log」：直近のコミット履歴（新しい順）。</summary>
+    public ObservableCollection<CommitLogEntry> CommitLog { get; } = new();
+
+    private void RefreshCommitLog()
+    {
+        CommitLog.Clear();
+        _lastCommitLogRoot = VcsInfo.RootPath;
+
+        foreach (var entry in _versionControlService.GetCommitLog(VcsInfo, maxCount: 20))
+        {
+            CommitLog.Add(entry);
+        }
+    }
+
     /// <summary>仕様書54章：現在パスまたはその祖先で検出されたプロジェクト。</summary>
     public ProjectInfo? CurrentProject
     {
@@ -439,6 +454,18 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             VcsInfo = IsPathComputerRoot(path) ? VersionControlInfo.None : _versionControlService.Detect(path);
             _vcsStatusByPath = _versionControlService.GetFileStatuses(VcsInfo);
             _folderWatcherService.SetPath(IsPathComputerRoot(path) ? null : path);
+
+            // 仕様書21章「Log」：VCSルートが変わった場合のみ取得し直す（同じリポジトリ内の
+            // フォルダ移動のたびにgit/svnプロセスを起動しないようにするため）。
+            if (VcsInfo.Kind != VersionControlKind.None && VcsInfo.RootPath != _lastCommitLogRoot)
+            {
+                RefreshCommitLog();
+            }
+            else if (VcsInfo.Kind == VersionControlKind.None && _lastCommitLogRoot is not null)
+            {
+                CommitLog.Clear();
+                _lastCommitLogRoot = null;
+            }
 
             var previousProjectRoot = CurrentProject?.RootPath;
             CurrentProject = IsPathComputerRoot(path) ? null : _projectDetectionService.Detect(path);
