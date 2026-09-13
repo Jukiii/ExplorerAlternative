@@ -29,5 +29,7 @@ public static class ShortcutRegistry
         new("コマンドパレット", "Ctrl + Shift + P"),
         new("現在の場所をブックマークに追加", "Ctrl + D"),
         new("最新の情報に更新", "F5"),
+        new("新しいフォルダを作成", "Ctrl + N"),
+        new("設定を開く", "Ctrl + ,"),
     };
 }

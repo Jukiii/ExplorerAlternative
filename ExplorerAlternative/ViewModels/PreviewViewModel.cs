@@ -106,8 +106,15 @@ public sealed class PreviewViewModel : ObservableObject
 
     public Action? RequestNext { get; set; }
 
-    /// <summary>仕様書13章「Esc 閉じる」。</summary>
+    /// <summary>仕様書13章「Esc 閉じる」。呼び出し側（View）に対して「閉じてほしい」と要求する。</summary>
     public Action? RequestClose { get; set; }
+
+    /// <summary>
+    /// ウィンドウが（タイトルバーの×ボタン等、RequestClose経由以外の方法で）実際に閉じられた
+    /// ときにViewから呼び出される。MainWindowViewModel側の状態（_currentPreview）をリセットする
+    /// ためのものであり、再度ウィンドウを閉じようとはしない（RequestCloseと役割を分けている）。
+    /// </summary>
+    public Action? Closed { get; set; }
 
     public static PreviewViewModel Create(
         FileSystemNodeViewModel node,

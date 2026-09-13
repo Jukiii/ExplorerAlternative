@@ -494,6 +494,7 @@ public sealed class MainWindowViewModel : ObservableObject
         preview.RequestPrevious = () => MovePreview(-1);
         preview.RequestNext = () => MovePreview(1);
         preview.RequestClose = ClosePreviewInternal;
+        preview.Closed = OnPreviewWindowClosed;
 
         _currentPreview = preview;
         _dialogService.ShowPreview(preview);
@@ -514,6 +515,14 @@ public sealed class MainWindowViewModel : ObservableObject
     private void ClosePreviewInternal()
     {
         _dialogService.ClosePreview();
+        OnPreviewWindowClosed();
+    }
+
+    // タイトルバーの×ボタン等、RequestClose以外の経路でプレビューウィンドウが閉じられた場合に
+    // 呼ばれる。ここで_currentPreviewをリセットしないと、次に選択が変わった際に
+    // OnActivePaneSelectionChangedが「プレビュー表示中」と誤認し、勝手に再表示してしまう。
+    private void OnPreviewWindowClosed()
+    {
         _currentPreview = null;
         _previewNodes = new List<FileSystemNodeViewModel>();
         _previewIndex = -1;

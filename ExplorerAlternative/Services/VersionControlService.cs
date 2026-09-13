@@ -135,6 +135,11 @@ public sealed class VersionControlService : IVersionControlService
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // git/svnはUTF-8で出力するが、指定しないと.NETがシステムのANSI/OEMコードページ
+            // （日本語Windowsだと既定でCP932）で解釈してしまい、日本語のコミットメッセージ等が
+            // 文字化けする。単体テスト実施後のUI動作確認で発見。
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
             UseShellExecute = false,
             CreateNoWindow = true
         };
@@ -157,6 +162,8 @@ public sealed class VersionControlService : IVersionControlService
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
             UseShellExecute = false,
             CreateNoWindow = true
         };
@@ -324,6 +331,117 @@ public sealed class VersionControlService : IVersionControlService
         {
             return Array.Empty<string>();
         }
+    }
+
+    public IReadOnlyList<CommitLogEntry> GetCommitLog(VersionControlInfo vcsInfo, int maxCount)
+    {
+        if (vcsInfo.Kind == VersionControlKind.None || vcsInfo.RootPath is null)
+        {
+            return Array.Empty<CommitLogEntry>();
+        }
+
+        try
+        {
+            return vcsInfo.Kind == VersionControlKind.Git
+                ? GetGitCommitLog(vcsInfo.RootPath, maxCount)
+                : GetSvnCommitLog(vcsInfo.RootPath, maxCount);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            // 27章：git/svnが見つからない等でクラッシュさせない。空のログとして扱う。
+            return Array.Empty<CommitLogEntry>();
+        }
+    }
+
+    private static IReadOnlyList<CommitLogEntry> GetGitCommitLog(string root, int maxCount)
+    {
+        // \x1f（フィールド区切り）はコミットメッセージ中に出現しない制御文字のため、
+        // メッセージに"|"等が含まれていても列がずれない。
+        var (output, success) = RunCommandAllowFailure(
+            root, "git", $"log -n {maxCount} --date=short --pretty=format:%h%an%ad%s");
+
+        if (!success)
+        {
+            return Array.Empty<CommitLogEntry>();
+        }
+
+        var results = new List<CommitLogEntry>();
+
+        foreach (var rawLine in output.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r');
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            var fields = line.Split('');
+            if (fields.Length < 4)
+            {
+                continue;
+            }
+
+            results.Add(new CommitLogEntry
+            {
+                Revision = fields[0],
+                Author = fields[1],
+                Date = fields[2],
+                Message = fields[3]
+            });
+        }
+
+        return results;
+    }
+
+    private static IReadOnlyList<CommitLogEntry> GetSvnCommitLog(string root, int maxCount)
+    {
+        var (output, success) = RunCommandAllowFailure(root, "svn", $"log -l {maxCount}");
+
+        if (!success)
+        {
+            return Array.Empty<CommitLogEntry>();
+        }
+
+        var results = new List<CommitLogEntry>();
+
+        // svn logの出力は各コミットが "----...----" 区切り線で分かれ、1行目が
+        // "r123 | author | 2026-01-02 10:00:00 +0900 (...) | 1 line" 形式、
+        // 空行を挟んでメッセージ本文が続く。
+        var blocks = output.Split("------------------------------------------------------------------", StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var block in blocks)
+        {
+            var lines = block.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+            var headerLine = lines.FirstOrDefault(l => l.Length > 0);
+            if (headerLine is null)
+            {
+                continue;
+            }
+
+            var parts = headerLine.Split(" | ");
+            if (parts.Length < 3)
+            {
+                continue;
+            }
+
+            var messageLines = lines
+                .SkipWhile(l => l != headerLine)
+                .Skip(1)
+                .SkipWhile(string.IsNullOrWhiteSpace)
+                .ToList();
+
+            var message = string.Join(" ", messageLines).Trim();
+
+            results.Add(new CommitLogEntry
+            {
+                Revision = parts[0].Trim(),
+                Author = parts[1].Trim(),
+                Date = parts[2].Trim().Split(' ').FirstOrDefault() ?? parts[2].Trim(),
+                Message = string.IsNullOrEmpty(message) ? "(コミットメッセージなし)" : message
+            });
+        }
+
+        return results;
     }
 
     public string? GetCommittedFileContent(VersionControlInfo vcsInfo, string fullFilePath)
