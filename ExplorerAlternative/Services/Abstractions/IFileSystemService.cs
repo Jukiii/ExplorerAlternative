@@ -27,5 +27,8 @@ public interface IFileSystemService
 
     void Move(IEnumerable<string> sourcePaths, string destinationDirectory);
 
+    /// <summary>選択したファイル・フォルダを同じ場所に複製する。名前は自動的に一意な名前（「名前 (2)」等）を採番する。</summary>
+    void Duplicate(IEnumerable<string> fullPaths);
+
     string ReadTextPreview(string filePath, int maxBytes, out bool truncated);
 }

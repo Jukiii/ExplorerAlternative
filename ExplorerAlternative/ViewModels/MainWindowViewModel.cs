@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -113,6 +114,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OpenSearchCommand = new RelayCommand(_ => OpenSearch());
         OpenDiskAnalysisCommand = new RelayCommand(_ => OpenDiskAnalysis());
         OpenCommandPaletteCommand = new RelayCommand(_ => OpenCommandPalette());
+        OpenNewWindowCommand = new RelayCommand(_ => OpenNewWindow());
 
         AddTab(ResolveStartupPath(startupPath));
         RebuildJumpList();
@@ -145,6 +147,9 @@ public sealed class MainWindowViewModel : ObservableObject
     public RelayCommand OpenSettingsCommand { get; }
 
     public RelayCommand AddFavoriteCommand { get; }
+
+    /// <summary>Ctrl+N：新しいウィンドウを開く（現在フォルダを引き継いで別プロセスを起動）。</summary>
+    public RelayCommand OpenNewWindowCommand { get; }
 
     public RelayCommand AddTagCommand { get; }
 
@@ -531,6 +536,34 @@ public sealed class MainWindowViewModel : ObservableObject
         ShowPreviewAtCurrentIndex();
     }
 
+    private void OpenNewWindow()
+    {
+        try
+        {
+            var exePath = Process.GetCurrentProcess().MainModule?.FileName;
+            if (string.IsNullOrWhiteSpace(exePath))
+            {
+                return;
+            }
+
+            var currentPath = ActiveTab?.ActivePane.CurrentPath;
+            var startInfo = new ProcessStartInfo(exePath)
+            {
+                UseShellExecute = true
+            };
+            if (!string.IsNullOrWhiteSpace(currentPath) && Directory.Exists(currentPath))
+            {
+                startInfo.ArgumentList.Add(currentPath);
+            }
+
+            Process.Start(startInfo);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            _dialogService.ShowError($"新しいウィンドウを開けませんでした: {ex.Message}");
+        }
+    }
+
     private void OpenSettings()
     {
         var settingsViewModel = new SettingsViewModel(
@@ -765,7 +798,7 @@ public sealed class MainWindowViewModel : ObservableObject
             new() { Name = "ターミナルの表示/非表示 (Ctrl+@)", Execute = ToggleTerminal },
             new() { Name = "プレビュー (Space)", Execute = () => TogglePreviewCommand.Execute(null) },
             new() { Name = "Git/SVN情報ペインの表示/非表示", Execute = () => ToggleVcsPaneCommand.Execute(null) },
-            new() { Name = "現在の場所をブックマークに追加 (Ctrl+D)", Execute = () => AddFavoriteCommand.Execute(null) },
+            new() { Name = "現在の場所をお気に入りに追加", Execute = () => AddFavoriteCommand.Execute(null) },
             new()
             {
                 Name = "Patchを作成...",

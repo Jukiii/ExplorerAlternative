@@ -137,8 +137,8 @@
         <KeyBinding Key="L" Modifiers="Control" Command="{Binding DataContext.ActiveTab.ActivePane.BeginAddressEditCommand, ElementName=RootWindow}" />
         <!-- 仕様書12章：Ctrl+Fで検索。 -->
         <KeyBinding Key="F" Modifiers="Control" Command="{Binding DataContext.OpenSearchCommand, ElementName=RootWindow}" />
-        <!-- 仕様書36章「Ctrl+Dでブックマーク（お気に入り）に追加」。 -->
-        <KeyBinding Key="D" Modifiers="Control" Command="{Binding DataContext.AddFavoriteCommand, ElementName=RootWindow}" />
+        <!-- Ctrl+D：選択したファイル・フォルダを複製する（お気に入り追加のショートカットは廃止）。 -->
+        <KeyBinding Key="D" Modifiers="Control" Command="{Binding DataContext.ActiveTab.ActivePane.DuplicateSelectionCommand, ElementName=RootWindow}" />
         <!-- 仕様書46章：コマンドパレット。 -->
         <KeyBinding Key="P" Modifiers="Control+Shift" Command="{Binding DataContext.OpenCommandPaletteCommand, ElementName=RootWindow}" />
         <KeyBinding Key="F5" Command="{Binding DataContext.ActiveTab.ActivePane.RefreshCommand, ElementName=RootWindow}" />
@@ -148,20 +148,18 @@
         <KeyBinding Key="W" Modifiers="Control" Command="{Binding DataContext.CloseTabCommand, ElementName=RootWindow}"
                     CommandParameter="{Binding DataContext.ActiveTab, ElementName=RootWindow}" />
         <KeyBinding Key="Tab" Modifiers="Control" Command="{Binding DataContext.NextTabCommand, ElementName=RootWindow}" />
-        <!-- 仕様書20章：Ctrl+Nで新しいフォルダを作成。 -->
-        <KeyBinding Key="N" Modifiers="Control" Command="{Binding DataContext.ActiveTab.ActivePane.NewFolderCommand, ElementName=RootWindow}" />
+        <!-- Ctrl+N：新しいウィンドウを開く。仕様書20章「新しいフォルダを作成」はCtrl+Shift+Nへ変更。 -->
+        <KeyBinding Key="N" Modifiers="Control" Command="{Binding DataContext.OpenNewWindowCommand, ElementName=RootWindow}" />
+        <KeyBinding Key="N" Modifiers="Control+Shift" Command="{Binding DataContext.ActiveTab.ActivePane.NewFolderCommand, ElementName=RootWindow}" />
         <!-- Ctrl+,で設定を開く（多くのWindows/Macアプリで一般的なショートカット）。 -->
         <KeyBinding Key="OemComma" Modifiers="Control" Command="{Binding DataContext.OpenSettingsCommand, ElementName=RootWindow}" />
     </Window.InputBindings>
 
-    <!-- IsSharedSizeScope: ターミナル行（下記Grid.Row="3"）の列幅を、ナビゲーション/メイン/
-         Git・SVNペインの行（Grid.Row="2"）の列幅と自動的に同期させるため。 -->
-    <Grid Grid.IsSharedSizeScope="True">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- タブ行 -->
@@ -363,11 +361,11 @@
         <!-- ナビゲーションペイン + メインペイン + Git/SVN情報ペイン -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" SharedSizeGroup="NavPaneColumn" />
-                <ColumnDefinition Width="Auto" SharedSizeGroup="NavSplitterColumn" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" SharedSizeGroup="VcsSplitterColumn" />
-                <ColumnDefinition Width="Auto" SharedSizeGroup="VcsPaneColumn" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <!-- ナビゲーションペイン（仕様書4章・6章） -->
@@ -582,8 +580,16 @@
                     Visibility="{Binding NavigationPane.IsCollapsed, Converter={StaticResource BoolToVisibilityConverter}}"
                     Command="{Binding NavigationPane.ToggleCollapsedCommand}" />
 
-            <!-- メインペイン（19章：分割ペイン対応。Panesが2件のときはUniformGridで横/縦に並べる） -->
-            <Border Grid.Column="2" Background="{DynamicResource WindowBackgroundBrush}">
+            <!-- メインペイン（19章：分割ペイン対応。Panesが2件のときはUniformGridで横/縦に並べる）。
+                 ターミナル（9章）はこの列の下側に配置し、ナビゲーション/Git・SVNペイン（左右）は
+                 この列と独立して画面下端まで伸びるようにする。 -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Background="{DynamicResource WindowBackgroundBrush}">
                 <ItemsControl ItemsSource="{Binding ActiveTab.Panes}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -727,7 +733,107 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-            </Border>
+                </Border>
+
+                <!-- PowerShellターミナル（仕様書17章：複数タブ）。 -->
+                <!-- 注意: Visibilityのバインディング元（TerminalHost.IsVisible）は、この要素の
+                     「変更前」のDataContext（Window＝MainWindowViewModel）を指す。DataContext自体を
+                     ここでTerminalHostへ切り替えてしまうと、同じ要素上のVisibilityバインディングも
+                     新しいDataContext（TerminalHostViewModel）基準で解決されてしまい、
+                     存在しない"TerminalHost.IsVisible"を探しにいって解決に失敗する
+                     （＝表示状態がトグルに追従しなくなる不具合の原因だった）。
+                     そのためDataContextの切り替えは内側のGridで行う。 -->
+                <!-- クリックでどこからでも（出力欄を含め）入力欄へフォーカスできるようにする。
+                     出力欄（TextBox）はクリック時に自分自身へフォーカスを奪う内部処理を持ち、
+                     かつその処理でイベントをHandled済みにするため、通常のバブリング段階の
+                     ハンドラーでは出力欄からのクリックを検知できない。トンネリング段階
+                     （PreviewMouseLeftButtonDown）で検知しつつ、実際のフォーカス移動は
+                     Dispatcher.BeginInvokeで出力欄自身の既定処理が終わった後に行う。 -->
+                <!-- 仕様書3章：ターミナルはこの列（中央のメインペイン列）にのみ配置し、
+                     左のナビゲーションペイン・右のGit/SVN情報ペインの下には表示しない。
+                     これらのペインは同じ行の別列にあるため、ターミナルの開閉に関わらず
+                     画面下端まで独立して伸びる。 -->
+                <Border Grid.Row="1" Background="{DynamicResource TerminalBackgroundBrush}"
+                        Visibility="{Binding TerminalHost.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}"
+                        PreviewMouseLeftButtonDown="TerminalPanel_MouseLeftButtonDown">
+                    <Grid Height="230" DataContext="{Binding TerminalHost}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- タブストリップ。各タブはSync状態を個別に保持する（18章）。 -->
+                        <DockPanel Grid.Row="0" Margin="8,6,8,0">
+                            <Button DockPanel.Dock="Right" Content="＋" Width="26" ToolTip="新しいターミナル"
+                                    Command="{Binding AddTerminalCommand}" Foreground="{DynamicResource TerminalForegroundBrush}" />
+                            <ItemsControl ItemsSource="{Binding Terminals}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,4,0" Padding="8,3" CornerRadius="4"
+                                                Background="#2A2A2A" Cursor="Hand"
+                                                MouseLeftButtonUp="TerminalTab_MouseLeftButtonUp">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource TerminalAccentBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TerminalForegroundBrush}" />
+                                                <TextBlock Text=" ✕" Margin="6,0,0,0" Foreground="{DynamicResource TerminalForegroundBrush}"
+                                                           MouseLeftButtonUp="TerminalTabClose_MouseLeftButtonUp" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </DockPanel>
+
+                        <DockPanel Grid.Row="1" Margin="8,6" DataContext="{Binding ActiveTerminal}">
+                            <ToggleButton DockPanel.Dock="Left" Padding="10,4"
+                                          IsChecked="{Binding IsSyncEnabled, Mode=TwoWay}"
+                                          Content="{Binding IsSyncEnabled, Converter={StaticResource SyncLabelConverter}}"
+                                          Foreground="{DynamicResource TerminalForegroundBrush}" />
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Margin="10,0"
+                                       Foreground="{DynamicResource TerminalForegroundBrush}" FontWeight="SemiBold" />
+                        </DockPanel>
+
+                        <TextBox x:Name="TerminalOutputTextBox" Grid.Row="2" Text="{Binding ActiveTerminal.OutputText, Mode=OneWay}"
+                                 IsReadOnly="True" TextWrapping="Wrap" FontFamily="Cascadia Mono,Consolas"
+                                 Background="{DynamicResource TerminalBackgroundBrush}" Foreground="{DynamicResource TerminalForegroundBrush}"
+                                 BorderThickness="0" Margin="8,0" Padding="2"
+                                 VerticalScrollBarVisibility="Auto"
+                                 TextChanged="TerminalOutputTextBox_TextChanged" />
+
+                        <!-- 仕様書19章：ファイル・フォルダをドラッグ＆ドロップするとパスが入力される。 -->
+                        <Border Grid.Row="3" Background="#2A2A2A" CornerRadius="4" Margin="8,6,8,8" Padding="8,4"
+                                AllowDrop="True" DragOver="TerminalInput_DragOver" Drop="TerminalInput_Drop">
+                            <DockPanel DataContext="{Binding ActiveTerminal}">
+                                <TextBlock DockPanel.Dock="Left" Text="&gt;" Foreground="{DynamicResource TerminalAccentBrush}"
+                                           FontFamily="Cascadia Mono,Consolas" Margin="0,0,6,0" />
+                                <TextBox x:Name="TerminalInputTextBox" Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
+                                         FontFamily="Cascadia Mono,Consolas" Background="Transparent" BorderThickness="0"
+                                         Foreground="{DynamicResource TerminalForegroundBrush}" CaretBrush="{DynamicResource TerminalForegroundBrush}"
+                                         IsVisibleChanged="TerminalInputTextBox_IsVisibleChanged">
+                                    <TextBox.InputBindings>
+                                        <KeyBinding Key="Return" Command="{Binding SendCommand}" />
+                                    </TextBox.InputBindings>
+                                </TextBox>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+            </Grid>
 
             <!-- Git/SVN情報ペイン（表示/非表示切り替え可能）。ハンバーガーメニューからも切替できる。 -->
             <GridSplitter Grid.Column="3" Width="3" HorizontalAlignment="Stretch" Background="{DynamicResource BorderBrush2}"
@@ -829,163 +935,6 @@
                     ToolTip="Git/SVN情報ペインを表示" Foreground="{DynamicResource TextSecondaryBrush}"
                     Visibility="{Binding IsVcsPaneVisible, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"
                     Command="{Binding ToggleVcsPaneCommand}" />
-        </Grid>
-
-        <!-- PowerShellターミナル（仕様書17章：複数タブ） -->
-        <!-- 注意: Visibilityのバインディング元（TerminalHost.IsVisible）は、この要素の
-             「変更前」のDataContext（Window＝MainWindowViewModel）を指す。DataContext自体を
-             ここでTerminalHostへ切り替えてしまうと、同じ要素上のVisibilityバインディングも
-             新しいDataContext（TerminalHostViewModel）基準で解決されてしまい、
-             存在しない"TerminalHost.IsVisible"を探しにいって解決に失敗する
-             （＝表示状態がトグルに追従しなくなる不具合の原因だった）。
-             そのためDataContextの切り替えは内側のGridで行う。 -->
-        <!-- クリックでどこからでも（出力欄を含め）入力欄へフォーカスできるようにする。
-             出力欄（TextBox）はクリック時に自分自身へフォーカスを奪う内部処理を持ち、
-             かつその処理でイベントをHandled済みにするため、通常のバブリング段階の
-             ハンドラーでは出力欄からのクリックを検知できない。トンネリング段階
-             （PreviewMouseLeftButtonDown）で検知しつつ、実際のフォーカス移動は
-             Dispatcher.BeginInvokeで出力欄自身の既定処理が終わった後に行う。 -->
-        <!-- 仕様書3章：ターミナル部分の横幅は、上のGrid.Row="2"と同じSharedSizeGroupで列幅を
-             同期させることで、中央（メイン）ペインと同じ幅になるようにする
-             （左のナビゲーションペイン・右のGit/SVN情報ペインの下には表示しない）。 -->
-        <Grid Grid.Row="3">
-            <Grid.ColumnDefinitions>
-                <!-- ナビゲーション/Git・SVNペインが折りたたまれている間は、再展開用の
-                     小さな「»」「«」ボタンのために列幅がわずかに残る（Grid.Row="2"側）。
-                     ターミナル側にはそのボタンが無いため、SharedSizeGroupにそのまま従うと
-                     ターミナルの左右に不要な隙間ができてしまう。折りたたみ中はWidth=0を
-                     明示してSharedSizeGroupを上書きし、隙間なく画面端まで広がるようにする。 -->
-                <ColumnDefinition SharedSizeGroup="NavPaneColumn">
-                    <ColumnDefinition.Style>
-                        <Style TargetType="ColumnDefinition">
-                            <Setter Property="Width" Value="Auto" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding NavigationPane.IsCollapsed}" Value="True">
-                                    <Setter Property="Width" Value="0" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ColumnDefinition.Style>
-                </ColumnDefinition>
-                <ColumnDefinition SharedSizeGroup="NavSplitterColumn">
-                    <ColumnDefinition.Style>
-                        <Style TargetType="ColumnDefinition">
-                            <Setter Property="Width" Value="Auto" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding NavigationPane.IsCollapsed}" Value="True">
-                                    <Setter Property="Width" Value="0" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ColumnDefinition.Style>
-                </ColumnDefinition>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition SharedSizeGroup="VcsSplitterColumn">
-                    <ColumnDefinition.Style>
-                        <Style TargetType="ColumnDefinition">
-                            <Setter Property="Width" Value="Auto" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsVcsPaneVisible}" Value="False">
-                                    <Setter Property="Width" Value="0" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ColumnDefinition.Style>
-                </ColumnDefinition>
-                <ColumnDefinition SharedSizeGroup="VcsPaneColumn">
-                    <ColumnDefinition.Style>
-                        <Style TargetType="ColumnDefinition">
-                            <Setter Property="Width" Value="Auto" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsVcsPaneVisible}" Value="False">
-                                    <Setter Property="Width" Value="0" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ColumnDefinition.Style>
-                </ColumnDefinition>
-            </Grid.ColumnDefinitions>
-
-        <Border Grid.Column="2" Background="{DynamicResource TerminalBackgroundBrush}"
-                Visibility="{Binding TerminalHost.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}"
-                PreviewMouseLeftButtonDown="TerminalPanel_MouseLeftButtonDown">
-            <Grid Height="230" DataContext="{Binding TerminalHost}">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <!-- タブストリップ。各タブはSync状態を個別に保持する（18章）。 -->
-                <DockPanel Grid.Row="0" Margin="8,6,8,0">
-                    <Button DockPanel.Dock="Right" Content="＋" Width="26" ToolTip="新しいターミナル"
-                            Command="{Binding AddTerminalCommand}" Foreground="{DynamicResource TerminalForegroundBrush}" />
-                    <ItemsControl ItemsSource="{Binding Terminals}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,4,0" Padding="8,3" CornerRadius="4"
-                                        Background="#2A2A2A" Cursor="Hand"
-                                        MouseLeftButtonUp="TerminalTab_MouseLeftButtonUp">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                                    <Setter Property="Background" Value="{DynamicResource TerminalAccentBrush}" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TerminalForegroundBrush}" />
-                                        <TextBlock Text=" ✕" Margin="6,0,0,0" Foreground="{DynamicResource TerminalForegroundBrush}"
-                                                   MouseLeftButtonUp="TerminalTabClose_MouseLeftButtonUp" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </DockPanel>
-
-                <DockPanel Grid.Row="1" Margin="8,6" DataContext="{Binding ActiveTerminal}">
-                    <ToggleButton DockPanel.Dock="Left" Padding="10,4"
-                                  IsChecked="{Binding IsSyncEnabled, Mode=TwoWay}"
-                                  Content="{Binding IsSyncEnabled, Converter={StaticResource SyncLabelConverter}}"
-                                  Foreground="{DynamicResource TerminalForegroundBrush}" />
-                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Margin="10,0"
-                               Foreground="{DynamicResource TerminalForegroundBrush}" FontWeight="SemiBold" />
-                </DockPanel>
-
-                <TextBox x:Name="TerminalOutputTextBox" Grid.Row="2" Text="{Binding ActiveTerminal.OutputText, Mode=OneWay}"
-                         IsReadOnly="True" TextWrapping="Wrap" FontFamily="Cascadia Mono,Consolas"
-                         Background="{DynamicResource TerminalBackgroundBrush}" Foreground="{DynamicResource TerminalForegroundBrush}"
-                         BorderThickness="0" Margin="8,0" Padding="2"
-                         VerticalScrollBarVisibility="Auto"
-                         TextChanged="TerminalOutputTextBox_TextChanged" />
-
-                <!-- 仕様書19章：ファイル・フォルダをドラッグ＆ドロップするとパスが入力される。 -->
-                <Border Grid.Row="3" Background="#2A2A2A" CornerRadius="4" Margin="8,6,8,8" Padding="8,4"
-                        AllowDrop="True" DragOver="TerminalInput_DragOver" Drop="TerminalInput_Drop">
-                    <DockPanel DataContext="{Binding ActiveTerminal}">
-                        <TextBlock DockPanel.Dock="Left" Text="&gt;" Foreground="{DynamicResource TerminalAccentBrush}"
-                                   FontFamily="Cascadia Mono,Consolas" Margin="0,0,6,0" />
-                        <TextBox x:Name="TerminalInputTextBox" Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
-                                 FontFamily="Cascadia Mono,Consolas" Background="Transparent" BorderThickness="0"
-                                 Foreground="{DynamicResource TerminalForegroundBrush}" CaretBrush="{DynamicResource TerminalForegroundBrush}"
-                                 IsVisibleChanged="TerminalInputTextBox_IsVisibleChanged">
-                            <TextBox.InputBindings>
-                                <KeyBinding Key="Return" Command="{Binding SendCommand}" />
-                            </TextBox.InputBindings>
-                        </TextBox>
-                    </DockPanel>
-                </Border>
-            </Grid>
-        </Border>
         </Grid>
     </Grid>
 </Window>

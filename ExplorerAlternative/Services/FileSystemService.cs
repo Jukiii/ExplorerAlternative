@@ -226,6 +226,53 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
+    public void Duplicate(IEnumerable<string> fullPaths)
+    {
+        foreach (var source in fullPaths)
+        {
+            try
+            {
+                var parent = Path.GetDirectoryName(source);
+                if (parent is null)
+                {
+                    continue;
+                }
+
+                var destination = GetUniqueDuplicateName(parent, source);
+
+                if (Directory.Exists(source))
+                {
+                    CopyDirectoryRecursive(source, destination);
+                }
+                else if (File.Exists(source))
+                {
+                    File.Copy(source, destination, overwrite: false);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                throw new AppOperationException($"「{Path.GetFileName(source)}」を複製できませんでした。", ex);
+            }
+        }
+    }
+
+    private static string GetUniqueDuplicateName(string parent, string source)
+    {
+        var isDirectory = Directory.Exists(source);
+        var extension = isDirectory ? string.Empty : Path.GetExtension(source);
+        var baseName = isDirectory ? Path.GetFileName(source) : Path.GetFileNameWithoutExtension(source);
+
+        for (var i = 2; ; i++)
+        {
+            var candidateName = $"{baseName} ({i}){extension}";
+            var candidatePath = Path.Combine(parent, candidateName);
+            if (!Directory.Exists(candidatePath) && !File.Exists(candidatePath))
+            {
+                return candidatePath;
+            }
+        }
+    }
+
     public string ReadTextPreview(string filePath, int maxBytes, out bool truncated)
     {
         try

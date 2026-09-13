@@ -27,9 +27,10 @@ public static class ShortcutRegistry
         new("タブを複製", "Ctrl + ドラッグ"),
         new("検索", "Ctrl + F"),
         new("コマンドパレット", "Ctrl + Shift + P"),
-        new("現在の場所をブックマークに追加", "Ctrl + D"),
+        new("選択したファイル・フォルダを複製", "Ctrl + D"),
         new("最新の情報に更新", "F5"),
-        new("新しいフォルダを作成", "Ctrl + N"),
+        new("新しいウィンドウを開く", "Ctrl + N"),
+        new("新しいフォルダを作成", "Ctrl + Shift + N"),
         new("設定を開く", "Ctrl + ,"),
     };
 }

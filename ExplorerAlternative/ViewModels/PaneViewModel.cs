@@ -100,6 +100,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         CopyCommand = new RelayCommand(_ => CopySelectionToClipboard(isCut: false), _ => SelectedNodes.Count > 0);
         CutCommand = new RelayCommand(_ => CopySelectionToClipboard(isCut: true), _ => SelectedNodes.Count > 0);
         PasteCommand = new RelayCommand(_ => PasteFromClipboard());
+        DuplicateSelectionCommand = new RelayCommand(_ => DuplicateSelection(), _ => SelectedNodes.Count > 0);
         BeginAddressEditCommand = new RelayCommand(_ => BeginAddressEdit());
         CommitAddressEditCommand = new RelayCommand(_ => CommitAddressEdit());
         RunExternalToolCommand = new RelayCommand(p => RunExternalTool((ExternalToolDefinition)p!), _ => PrimarySelectedNode is not null);
@@ -203,6 +204,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     public RelayCommand CutCommand { get; }
 
     public RelayCommand PasteCommand { get; }
+
+    /// <summary>Ctrl+D：選択したファイル・フォルダを同じ場所に複製する。</summary>
+    public RelayCommand DuplicateSelectionCommand { get; }
 
     public RelayCommand BeginAddressEditCommand { get; }
 
@@ -1019,6 +1023,26 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 _fileSystemService.Copy(files, CurrentPath);
             }
 
+            RefreshCurrentFolder();
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+    }
+
+    private void DuplicateSelection()
+    {
+        if (SelectedNodes.Count == 0)
+        {
+            return;
+        }
+
+        var targets = SelectedNodes.Select(n => n.FullPath).ToList();
+
+        try
+        {
+            _fileSystemService.Duplicate(targets);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
