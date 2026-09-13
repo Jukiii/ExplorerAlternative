@@ -304,7 +304,11 @@
                                                     Padding="6,4" />
                                             <ToggleButton Content="⌄" Width="18" Padding="0"
                                                           IsChecked="{Binding IsDropdownOpen, Mode=TwoWay}" />
-                                            <Popup IsOpen="{Binding IsDropdownOpen, Mode=TwoWay}" StaysOpen="False" Placement="Bottom">
+                                            <!-- StaysOpen="False"は、ポップアップ内のButtonクリックがポップアップの
+                                                 自動クローズ処理と競合し、クリックが無視される（左クリック/右クリックとも
+                                                 ナビゲーションが発生しない）WPFの既知の問題があるため、StaysOpen="True"とし、
+                                                 各項目選択時に明示的にクローズする（closeDropdown呼び出し）方式にしている。 -->
+                                            <Popup IsOpen="{Binding IsDropdownOpen, Mode=TwoWay}" StaysOpen="True" Placement="Bottom">
                                                 <Border Background="{DynamicResource WindowBackgroundBrush}"
                                                         BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
                                                         CornerRadius="4" Padding="2">
