@@ -80,6 +80,16 @@ public partial class MainWindow : Window
         }
     }
 
+    // 仕様書11章：パンくずドロップダウンの左クリック＝パス全体を置換。
+    private void BreadcrumbDropdownItem_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: BreadcrumbDropdownItem item } && item.NavigateCommand.CanExecute(null))
+        {
+            item.NavigateCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
     // 仕様書11章：パンくずドロップダウンの右クリック＝部分パス置換（下層を維持）。
     private void BreadcrumbDropdownItem_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
@@ -466,7 +476,7 @@ public partial class MainWindow : Window
     // 従来通りナビゲーション操作として扱い、編集モードへは切り替えない。
     private void AddressBarBorder_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (IsOverButton(e.OriginalSource as DependencyObject))
+        if (IsOverButtonOrDropdownItem(e.OriginalSource as DependencyObject))
         {
             return;
         }
@@ -483,7 +493,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private static bool IsOverButton(DependencyObject? source)
+    // ButtonBase（パンくずセグメント・ドロップダウン矢印）自体、またはドロップダウン内の
+    // 項目（BreadcrumbDropdownItemテンプレートのBorder。Buttonではないため別途判定が必要）の
+    // 上かどうかを判定する。
+    private static bool IsOverButtonOrDropdownItem(DependencyObject? source)
     {
         while (source is not null)
         {
@@ -492,10 +505,41 @@ public partial class MainWindow : Window
                 return true;
             }
 
+            if (source is FrameworkElement { DataContext: BreadcrumbDropdownItem })
+            {
+                return true;
+            }
+
             source = VisualTreeHelper.GetParent(source);
         }
 
         return false;
+    }
+
+    // 仕様書11章：パンくずドロップダウンを開いた状態で、そのドロップダウン（またはドロップダウン
+    // 矢印）以外の場所をクリックしたら閉じる（Windows 11 Explorerと同様の操作感）。
+    private void RootWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (IsOverButtonOrDropdownItem(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var segments = viewModel.ActiveTab?.ActivePane.BreadcrumbSegments;
+        if (segments is null)
+        {
+            return;
+        }
+
+        foreach (var segment in segments)
+        {
+            segment.IsDropdownOpen = false;
+        }
     }
 
     private void AddressEditTextBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)

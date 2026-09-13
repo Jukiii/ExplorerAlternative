@@ -9,7 +9,8 @@
         Icon="Assets/app.ico"
         Height="760" Width="1280"
         MinHeight="480" MinWidth="720"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        PreviewMouseDown="RootWindow_PreviewMouseDown">
     <Window.Resources>
         <conv:DepthToIndentConverter x:Key="DepthToIndentConverter" />
         <ContextMenu x:Key="NodeContextMenu" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
@@ -325,12 +326,27 @@
                                                         </ListBox.ItemContainerStyle>
                                                         <ListBox.ItemTemplate>
                                                             <DataTemplate DataType="{x:Type vm:BreadcrumbDropdownItem}">
-                                                                <!-- 仕様書11章：左クリック＝パス全体を置換、右クリック＝下層を維持したまま部分置換。 -->
-                                                                <Button Content="{Binding Name}" Command="{Binding NavigateCommand}"
+                                                                <!-- 仕様書11章：左クリック＝パス全体を置換、右クリック＝下層を維持したまま部分置換。
+                                                                     Buttonではなく素のBorderに直接Preview系のマウスイベントを付けることで、
+                                                                     ContentPresenter/Buttonの内容幅に依存せず、行（ListBoxItem）全体を
+                                                                     確実にクリック対象にする（Borderは既定でHorizontalAlignment=Stretchのため、
+                                                                     ListBoxItem側のHorizontalContentAlignment=Stretchと合わせて行全体に広がる）。 -->
+                                                                <Border Padding="10,5" Background="Transparent"
                                                                         ToolTip="左クリック: このフォルダへ移動 / 右クリック: 現在の下層パスを維持したまま置換"
-                                                                        HorizontalContentAlignment="Left"
-                                                                        HorizontalAlignment="Stretch"
-                                                                        PreviewMouseRightButtonUp="BreadcrumbDropdownItem_PreviewMouseRightButtonUp" />
+                                                                        PreviewMouseLeftButtonUp="BreadcrumbDropdownItem_PreviewMouseLeftButtonUp"
+                                                                        PreviewMouseRightButtonUp="BreadcrumbDropdownItem_PreviewMouseRightButtonUp">
+                                                                    <Border.Style>
+                                                                        <Style TargetType="Border">
+                                                                            <Setter Property="Background" Value="Transparent" />
+                                                                            <Style.Triggers>
+                                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                                    <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+                                                                                </Trigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Border.Style>
+                                                                    <TextBlock Text="{Binding Name}" />
+                                                                </Border>
                                                             </DataTemplate>
                                                         </ListBox.ItemTemplate>
                                                     </ListBox>
