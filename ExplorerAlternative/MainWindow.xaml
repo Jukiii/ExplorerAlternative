@@ -303,7 +303,9 @@
                                         <StackPanel Orientation="Horizontal">
                                             <Button Content="{Binding DisplayName}" Command="{Binding NavigateCommand}"
                                                     Padding="6,4" />
-                                            <ToggleButton Content="⌄" Width="18" Padding="0"
+                                            <!-- Windows 11 Explorer同様、セグメント間の区切りを「/」ではなく「>」とし、
+                                                 このボタン自体がドロップダウン（兄弟フォルダ一覧）の開閉も兼ねる。 -->
+                                            <ToggleButton Content="&gt;" Width="18" Padding="0"
                                                           IsChecked="{Binding IsDropdownOpen, Mode=TwoWay}" />
                                             <!-- StaysOpen="False"は、ポップアップ内のButtonクリックがポップアップの
                                                  自動クローズ処理と競合し、クリックが無視される（左クリック/右クリックとも
@@ -352,7 +354,6 @@
                                                     </ListBox>
                                                 </Border>
                                             </Popup>
-                                            <TextBlock Text="/" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" Margin="2,0" />
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -368,7 +369,8 @@
                          Background="{DynamicResource WindowBackgroundBrush}"
                          Foreground="{DynamicResource TextPrimaryBrush}"
                          BorderBrush="{DynamicResource AccentBrush}"
-                         IsVisibleChanged="AddressEditTextBox_IsVisibleChanged">
+                         IsVisibleChanged="AddressEditTextBox_IsVisibleChanged"
+                         LostFocus="AddressEditTextBox_LostFocus">
                     <TextBox.Style>
                         <Style TargetType="TextBox">
                             <Setter Property="Visibility" Value="Collapsed" />
@@ -398,8 +400,12 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- ナビゲーションペイン（仕様書4章・6章） -->
-            <Border Grid.Column="0" Width="230" Background="{DynamicResource PanelBackgroundBrush}"
+            <!-- ナビゲーションペイン（仕様書4章・6章）。列は"Auto"のまま、Borderには固定Widthではなく
+                 MinWidthを指定する。固定Widthだと、GridSplitterで列を広げてもBorder（表示内容）の
+                 幅がそのまま追従せず「枠だけ広がって中身の幅は変わらない」不具合になる。MinWidthなら
+                 既定の表示幅は確保しつつ、列が広がればHorizontalAlignment=Stretch（既定）で追従し、
+                 折りたたみ時（Visibility=Collapsed）は測定対象から外れるため列も正しく縮む。 -->
+            <Border Grid.Column="0" MinWidth="230" Background="{DynamicResource PanelBackgroundBrush}"
                     Visibility="{Binding NavigationPane.IsCollapsed, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
                 <DockPanel Margin="10">
                     <Button DockPanel.Dock="Top" Content="« 折りたたむ" HorizontalAlignment="Left"
@@ -869,7 +875,7 @@
             <GridSplitter Grid.Column="3" Width="3" HorizontalAlignment="Stretch" Background="{DynamicResource BorderBrush2}"
                           Visibility="{Binding IsVcsPaneVisible, Converter={StaticResource BoolToVisibilityConverter}}" />
 
-            <Border Grid.Column="4" Width="260" Background="{DynamicResource PanelBackgroundBrush}"
+            <Border Grid.Column="4" MinWidth="260" Background="{DynamicResource PanelBackgroundBrush}"
                     Visibility="{Binding IsVcsPaneVisible, Converter={StaticResource BoolToVisibilityConverter}}">
                 <DockPanel Margin="10" DataContext="{Binding ActiveTab.ActivePane}">
                     <Button DockPanel.Dock="Top" Content="折りたたむ »" HorizontalAlignment="Right"

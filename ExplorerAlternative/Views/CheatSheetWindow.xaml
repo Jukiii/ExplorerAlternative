@@ -2,19 +2,54 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="ショートカット一覧"
-        Height="360" Width="420"
+        Height="560" Width="440"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{DynamicResource WindowBackgroundBrush}"
         TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
+    <Window.Resources>
+        <CollectionViewSource x:Key="GroupedShortcuts" Source="{Binding}">
+            <CollectionViewSource.GroupDescriptions>
+                <PropertyGroupDescription PropertyName="Category" />
+            </CollectionViewSource.GroupDescriptions>
+        </CollectionViewSource>
+    </Window.Resources>
     <Grid Margin="12">
-        <ListView x:Name="ShortcutList">
-            <ListView.View>
-                <GridView>
-                    <GridViewColumn Header="操作" Width="220" DisplayMemberBinding="{Binding Action}" />
-                    <GridViewColumn Header="ショートカット" Width="150" DisplayMemberBinding="{Binding Gesture}" />
-                </GridView>
-            </ListView.View>
-        </ListView>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="ShortcutList" ItemsSource="{Binding Source={StaticResource GroupedShortcuts}}">
+                <ItemsControl.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.ContainerStyle>
+                            <Style TargetType="GroupItem">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="GroupItem">
+                                            <StackPanel Margin="0,0,0,10">
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13"
+                                                           Margin="0,0,0,4" Foreground="{DynamicResource AccentBrush}" />
+                                                <ItemsPresenter />
+                                            </StackPanel>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </GroupStyle.ContainerStyle>
+                    </GroupStyle>
+                </ItemsControl.GroupStyle>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="4,3">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding Action}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="{Binding Gesture}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
     </Grid>
 </Window>

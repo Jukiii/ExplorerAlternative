@@ -520,17 +520,30 @@ public partial class MainWindow : Window
     // 矢印）以外の場所をクリックしたら閉じる（Windows 11 Explorerと同様の操作感）。
     private void RootWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (IsOverButtonOrDropdownItem(e.OriginalSource as DependencyObject))
-        {
-            return;
-        }
-
         if (DataContext is not MainWindowViewModel viewModel)
         {
             return;
         }
 
-        var segments = viewModel.ActiveTab?.ActivePane.BreadcrumbSegments;
+        var pane = viewModel.ActiveTab?.ActivePane;
+
+        // 仕様書11章：アドレス編集中に、編集欄以外の場所をクリックしたら編集を取り消し、
+        // 元のパンくず表示に戻す。編集欄自体（カーソル移動等）のクリックは無視する。
+        // マウスクリックだけではフォーカスが移動しない要素（空白部分等）も多いため、
+        // TextBox.LostFocusだけに頼らずここでも判定する。
+        if (pane is { IsAddressEditing: true } &&
+            !IsDescendantOf(e.OriginalSource as DependencyObject, AddressEditTextBox) &&
+            pane.CancelAddressEditCommand.CanExecute(null))
+        {
+            pane.CancelAddressEditCommand.Execute(null);
+        }
+
+        if (IsOverButtonOrDropdownItem(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        var segments = pane?.BreadcrumbSegments;
         if (segments is null)
         {
             return;
@@ -542,6 +555,21 @@ public partial class MainWindow : Window
         }
     }
 
+    private static bool IsDescendantOf(DependencyObject? source, DependencyObject ancestor)
+    {
+        while (source is not null)
+        {
+            if (ReferenceEquals(source, ancestor))
+            {
+                return true;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
+    }
+
     private void AddressEditTextBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (sender is not TextBox textBox || e.NewValue is not true)
@@ -551,6 +579,22 @@ public partial class MainWindow : Window
 
         textBox.Focus();
         textBox.SelectAll();
+    }
+
+    // 仕様書11章：アドレス編集中に他の場所をクリックする（＝フォーカスが外れる）と、
+    // 編集を確定せず元の表示（パンくず）に戻す。Enter確定時もフォーカスが外れるが、
+    // その時点で既にIsAddressEditingはfalseになっているため二重処理にはならない。
+    private void AddressEditTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PaneViewModel pane })
+        {
+            return;
+        }
+
+        if (pane.IsAddressEditing && pane.CancelAddressEditCommand.CanExecute(null))
+        {
+            pane.CancelAddressEditCommand.Execute(null);
+        }
     }
 
     private void TerminalOutputTextBox_TextChanged(object sender, TextChangedEventArgs e)

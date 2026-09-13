@@ -14,7 +14,8 @@ namespace ExplorerAlternative.ViewModels;
 /// </summary>
 public sealed class NavigationPaneViewModel : ObservableObject
 {
-    private const int MaxRecentPlaces = 10;
+    private const int MaxRecentPlaces = 5;
+    private const int MaxRecentProjects = 10;
 
     private readonly ISettingsService _settingsService;
     private readonly IFileSystemService _fileSystemService;
@@ -48,13 +49,21 @@ public sealed class NavigationPaneViewModel : ObservableObject
             Favorites.Add(favorite);
         }
 
-        foreach (var path in _settingsService.Current.RecentPlaces)
+        foreach (var path in _settingsService.Current.RecentPlaces.Take(MaxRecentPlaces))
         {
             RecentPlaces.Add(new FavoriteEntry { Name = DisplayNameFor(path), Path = path });
         }
 
+        // 仕様書55章：起動時の読み込みでは、名前が重複するプロジェクトは先に現れた方
+        // （＝保存順は最近使った順のため、より最近使った方）だけを残す（本修正より前の
+        // 設定ファイルに含まれる重複の後片付けも兼ねる）。
         foreach (var project in _settingsService.Current.RecentProjects)
         {
+            if (RecentProjects.Any(e => string.Equals(e.Name, project.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
             RecentProjects.Add(project);
         }
 
@@ -285,17 +294,30 @@ public sealed class NavigationPaneViewModel : ObservableObject
     }
 
     // 仕様書55章：最近開いたプロジェクト。プロジェクトルートへ実際に移動したときに呼び出される。
+    // 同じ名前のプロジェクトが既にある場合は、上位階層（パスの階層が浅い方）を優先して
+    // 1件のみ保持する。階層が同じかそれ以上に深い場合は、既存の項目を「最近使った」
+    // 扱いで先頭へ移動するにとどめ、別名義での重複追加はしない。
     public void RecordRecentProject(string name, string rootPath)
     {
-        var existing = RecentProjects.FirstOrDefault(e => string.Equals(e.Path, rootPath, StringComparison.OrdinalIgnoreCase));
-        if (existing is not null)
+        var existingSamePath = RecentProjects.FirstOrDefault(e => string.Equals(e.Path, rootPath, StringComparison.OrdinalIgnoreCase));
+        if (existingSamePath is not null)
         {
-            RecentProjects.Remove(existing);
+            RecentProjects.Remove(existingSamePath);
         }
 
-        RecentProjects.Insert(0, new FavoriteEntry { Name = name, Path = rootPath });
+        var existingSameName = RecentProjects.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existingSameName is null)
+        {
+            RecentProjects.Insert(0, new FavoriteEntry { Name = name, Path = rootPath });
+        }
+        else
+        {
+            RecentProjects.Remove(existingSameName);
+            var keepNew = PathDepth(rootPath) < PathDepth(existingSameName.Path);
+            RecentProjects.Insert(0, keepNew ? new FavoriteEntry { Name = name, Path = rootPath } : existingSameName);
+        }
 
-        while (RecentProjects.Count > MaxRecentPlaces)
+        while (RecentProjects.Count > MaxRecentProjects)
         {
             RecentProjects.RemoveAt(RecentProjects.Count - 1);
         }
@@ -303,6 +325,9 @@ public sealed class NavigationPaneViewModel : ObservableObject
         _settingsService.Current.RecentProjects = RecentProjects.ToList();
         _settingsService.Save();
     }
+
+    private static int PathDepth(string path) =>
+        path.Count(c => c is '\\' or '/');
 
     private void RemoveRecentProject(FavoriteEntry entry)
     {
