@@ -313,7 +313,16 @@
                                                         BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
                                                         CornerRadius="4" Padding="2">
                                                     <ListBox ItemsSource="{Binding DropdownItems}" MaxHeight="240" MinWidth="160"
-                                                             BorderThickness="0">
+                                                             BorderThickness="0" HorizontalContentAlignment="Stretch">
+                                                        <ListBox.ItemContainerStyle>
+                                                            <!-- 既定のListBoxItemはHorizontalContentAlignment="Left"相当のため、
+                                                                 文字部分にしかButtonが広がらずクリック判定も狭くなる。項目（Button）を
+                                                                 行全体に広げ、枠内どこをクリックしても反応するようにする。 -->
+                                                            <Style TargetType="ListBoxItem">
+                                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                                <Setter Property="Padding" Value="0" />
+                                                            </Style>
+                                                        </ListBox.ItemContainerStyle>
                                                         <ListBox.ItemTemplate>
                                                             <DataTemplate DataType="{x:Type vm:BreadcrumbDropdownItem}">
                                                                 <!-- 仕様書11章：左クリック＝パス全体を置換、右クリック＝下層を維持したまま部分置換。 -->
