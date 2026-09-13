@@ -8,6 +8,6 @@ public partial class CheatSheetWindow : Window
     public CheatSheetWindow()
     {
         InitializeComponent();
-        ShortcutList.ItemsSource = ShortcutRegistry.All;
+        DataContext = ShortcutRegistry.All;
     }
 }

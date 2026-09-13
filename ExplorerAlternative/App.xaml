@@ -107,14 +107,107 @@
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
         </Style>
 
+        <!-- ContextMenu／MenuItemは既定のControlTemplateがApplication.Resourcesでの
+             ブラシ上書き（Setterのみ）に追従せず、ダークテーマでもポップアップの背景が
+             白いままになる環境だったため（TabControlと同種の問題、App.xaml内の
+             TabItemスタイルのコメント参照）、ContextMenuとMenuItemの両方に
+             ControlTemplateを直接定義してDynamicResourceで確実に反映させている。 -->
         <Style TargetType="ContextMenu">
-            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush2}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{DynamicResource PanelBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                CornerRadius="8" Padding="4" SnapsToDevicePixels="True">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.25" Color="Black" />
+                            </Border.Effect>
+                            <StackPanel IsItemsHost="True" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
+        <Style TargetType="Separator">
+            <Setter Property="Margin" Value="6,4" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Border Height="1" Background="{DynamicResource BorderBrush2}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- MenuItemの左側にアイコン/チェック用の空きガター列を常設しない。チェック可能な
+             項目（タグ付与メニュー等）のみ、チェック時に小さなチェックマークを表示する。
+             Role（TopLevelHeader＝Menuバー直下、SubmenuHeader＝ContextMenu内の入れ子）に
+             応じてポップアップの開く向きを切り替える（前者は下、後者は右）。 -->
         <Style TargetType="MenuItem">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="Bg" Background="Transparent" CornerRadius="6" SnapsToDevicePixels="True">
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Path x:Name="CheckMark" Grid.Column="0" Data="M0,4 L3,7.5 L8,0"
+                                      Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.6"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                      Width="10" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                      Visibility="Collapsed" />
+                                <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True"
+                                                   VerticalAlignment="Center" />
+                                <TextBlock x:Name="GestureText" Grid.Column="2" Text="{TemplateBinding InputGestureText}"
+                                           Margin="24,0,0,0" VerticalAlignment="Center" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <Path x:Name="Arrow" Grid.Column="3" Data="M0,0 L4,4 L0,8" Stroke="{DynamicResource TextSecondaryBrush}"
+                                      StrokeThickness="1.3" Width="4" Height="8" Margin="10,0,0,0"
+                                      VerticalAlignment="Center" Visibility="Collapsed" />
+                                <Popup x:Name="Popup" Placement="Right" HorizontalOffset="-2" VerticalOffset="-6"
+                                       IsOpen="{TemplateBinding IsSubmenuOpen}" AllowsTransparency="True"
+                                       Focusable="False" PopupAnimation="Fade">
+                                    <Border Background="{DynamicResource PanelBackgroundBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                            CornerRadius="8" Padding="4" SnapsToDevicePixels="True">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.25" Color="Black" />
+                                        </Border.Effect>
+                                        <StackPanel IsItemsHost="True" />
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="Role" Value="SubmenuHeader">
+                                <Setter TargetName="Arrow" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="Role" Value="TopLevelHeader">
+                                <Setter TargetName="Popup" Property="Placement" Value="Bottom" />
+                                <Setter TargetName="Popup" Property="HorizontalOffset" Value="0" />
+                                <Setter TargetName="Popup" Property="VerticalOffset" Value="2" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- ToolTipは既定で白背景の独立ポップアップのため、TextBlockの暗黙スタイルにより
@@ -140,7 +233,7 @@
                                     <Thumb>
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="Thumb">
-                                                <Border Background="{DynamicResource BorderBrush2}" CornerRadius="4" Margin="2" />
+                                                <Border Background="{DynamicResource BorderBrush2}" CornerRadius="6" Margin="2" />
                                             </ControlTemplate>
                                         </Thumb.Template>
                                     </Thumb>
@@ -187,7 +280,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8"
                                 Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
@@ -220,7 +313,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8"
                                 Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
@@ -238,6 +331,38 @@
             </Setter>
         </Style>
 
+        <!-- 標準WPFのTabItem（設定画面等）のヘッダー部分。なお、TabControl自体の既定の
+             ControlTemplate（タブ本体の背景）は、Application.Resourcesでの
+             TargetType="TabControl"指定によるカスタムテンプレートが反映されない環境
+             だったため（原因未特定。TabItemのテンプレートは正常に反映される）、
+             タブ本体側の背景は各TabItemの中身（Grid等）に直接DynamicResourceで
+             指定する方式にした（SettingsWindow.xaml参照）。 -->
+        <Style TargetType="TabItem">
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bd" Background="Transparent" BorderThickness="0,0,0,2"
+                                BorderBrush="Transparent" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter x:Name="Cp" ContentSource="Header"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               TextElement.Foreground="{DynamicResource TextSecondaryBrush}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="Cp" Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- タブストリップの1タブ -->
         <Style x:Key="TabItemContainerStyle" TargetType="ListBoxItem">
             <Setter Property="Padding" Value="0" />
@@ -248,7 +373,7 @@
                     <ControlTemplate TargetType="ListBoxItem">
                         <Border x:Name="Bd" Background="{DynamicResource PanelBackgroundBrush}"
                                 BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1,1,1,0"
-                                CornerRadius="6,6,0,0" Padding="2">
+                                CornerRadius="10,10,0,0" Padding="2">
                             <Grid>
                                 <ContentPresenter />
                                 <Border x:Name="ActiveIndicator" Height="3" VerticalAlignment="Bottom"
@@ -323,19 +448,24 @@
             </Setter>
         </Style>
 
-        <!-- ナビゲーションペイン（お気に入り／タグ）の行 -->
+        <!-- ナビゲーションペイン（お気に入り／タグ等）の行。2026-09のデザイン刷新で、
+             ペイン背景から浮いて見える「カード」風（背景色・枠線・行間の余白付き）にした。 -->
         <Style x:Key="NavListBoxItemStyle" TargetType="ListBoxItem">
-            <Setter Property="Padding" Value="2" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Margin" Value="0,1" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="Bd" Background="{DynamicResource WindowBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                CornerRadius="8" Padding="{TemplateBinding Padding}">
                             <ContentPresenter />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

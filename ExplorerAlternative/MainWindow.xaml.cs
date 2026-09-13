@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ExplorerAlternative.Models;
@@ -17,6 +18,11 @@ public partial class MainWindow : Window
     private static readonly string SourcePaneFormat = "ExplorerAlternative.SourcePane";
     private static readonly string FavoriteReorderFormat = "ExplorerAlternative.FavoriteEntry";
 
+    // トラックパッドの横スワイプはWM_MOUSEHWHEELとしてOSから送られてくるが、WPFの
+    // ScrollViewerは既定でこれをハンドリングしない（縦方向のWM_MOUSEWHEELのみ対応）ため、
+    // ウィンドウメッセージを直接フックしてカーソル位置直下のScrollViewerへ手動で反映する。
+    private const int WM_MOUSEHWHEEL = 0x020E;
+
     private Point? _tabDragStartPoint;
     private bool _tabDragDuplicated;
     private Point? _fileDragStartPoint;
@@ -28,6 +34,65 @@ public partial class MainWindow : Window
         InitializeComponent();
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         Closing += MainWindow_Closing;
+        SourceInitialized += MainWindow_SourceInitialized;
+    }
+
+    private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+    {
+        if (PresentationSource.FromVisual(this) is HwndSource source)
+        {
+            source.AddHook(HorizontalScrollWndProc);
+        }
+    }
+
+    private IntPtr HorizontalScrollWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg != WM_MOUSEHWHEEL)
+        {
+            return IntPtr.Zero;
+        }
+
+        var delta = unchecked((short)((wParam.ToInt64() >> 16) & 0xFFFF));
+        var screenX = unchecked((short)(lParam.ToInt64() & 0xFFFF));
+        var screenY = unchecked((short)((lParam.ToInt64() >> 16) & 0xFFFF));
+
+        var point = PointFromScreen(new Point(screenX, screenY));
+        var scrollViewer = FindScrollViewerAt(point);
+        if (scrollViewer is null)
+        {
+            return IntPtr.Zero;
+        }
+
+        scrollViewer.ScrollToHorizontalOffset(scrollViewer.HorizontalOffset + delta / 3.0);
+        handled = true;
+        return IntPtr.Zero;
+    }
+
+    // カーソル直下から祖先方向へScrollViewerを探す際、最初に見つかったものをそのまま
+    // 使うと、ナビゲーションペイン内のListBoxが持つ内部ScrollViewer（既定では横スクロール
+    // 無効）に当たってしまい、ペイン全体を横スクロールさせたいケース（ペインをGridSplitter
+    // で狭めた場合）で何も起きなくなる。横方向に実際にスクロール可能な最も内側の
+    // ScrollViewerを優先し、見つからなければ最初に見つかったものにフォールバックする。
+    private ScrollViewer? FindScrollViewerAt(Point point)
+    {
+        var hit = VisualTreeHelper.HitTest(this, point)?.VisualHit;
+        ScrollViewer? fallback = null;
+        while (hit is not null)
+        {
+            if (hit is ScrollViewer scrollViewer)
+            {
+                if (scrollViewer.ScrollableWidth > 0)
+                {
+                    return scrollViewer;
+                }
+
+                fallback ??= scrollViewer;
+            }
+
+            hit = VisualTreeHelper.GetParent(hit);
+        }
+
+        return fallback;
     }
 
     // 仕様書40章：システムトレイに常駐中は、ウィンドウを閉じてもアプリを終了せずトレイへ格納する。
@@ -77,6 +142,16 @@ public partial class MainWindow : Window
             {
                 viewModel.ToggleTerminalCommand.Execute(null);
             }
+        }
+    }
+
+    // 仕様書11章：パンくずドロップダウンの左クリック＝パス全体を置換。
+    private void BreadcrumbDropdownItem_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: BreadcrumbDropdownItem item } && item.NavigateCommand.CanExecute(null))
+        {
+            item.NavigateCommand.Execute(null);
+            e.Handled = true;
         }
     }
 
@@ -209,7 +284,9 @@ public partial class MainWindow : Window
         dataObject.SetFileDropList(fileList);
         dataObject.SetData(SourcePaneFormat, pane);
 
-        DragDrop.DoDragDrop(element, dataObject, DragDropEffects.Copy | DragDropEffects.Move);
+        // Link（Alt+ドラッグ＝ショートカット作成）も許可しておかないと、DragOver側でLinkを
+        // 要求した際にドロップ先の許可効果と一致せずDropが一切発火しなくなる（WPFの既知の挙動）。
+        DragDrop.DoDragDrop(element, dataObject, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
     }
 
     private static bool IsOverItemContainer(DependencyObject? source)
@@ -264,7 +341,18 @@ public partial class MainWindow : Window
         var isMove = effects == DragDropEffects.Move;
         var sourcePane = e.Data.GetDataPresent(SourcePaneFormat) ? e.Data.GetData(SourcePaneFormat) as PaneViewModel : null;
 
-        destinationPane.DropFiles(sourcePaths, destinationFolder, isMove);
+        if (effects == DragDropEffects.Link)
+        {
+            destinationPane.DropFilesAsShortcuts(sourcePaths, destinationFolder);
+        }
+        else if (isMove)
+        {
+            destinationPane.DropFiles(sourcePaths, destinationFolder, isMove: true);
+        }
+        else
+        {
+            destinationPane.DropFilesAsCopy(sourcePaths, destinationFolder);
+        }
 
         if (isMove && sourcePane is not null && !ReferenceEquals(sourcePane, destinationPane))
         {
@@ -300,13 +388,18 @@ public partial class MainWindow : Window
         return null;
     }
 
-    // Ctrl=コピー、Shift=移動、指定なしは同一ドライブなら移動・異なるドライブならコピー
-    // （Windows標準エクスプローラーの慣習に合わせる）。
+    // Alt=ショートカット作成、Ctrl=コピー、Shift=移動、指定なしは同一ドライブなら移動・
+    // 異なるドライブならコピー（Windows標準エクスプローラーの慣習に合わせる）。
     private static DragDropEffects DetermineDropEffect(IReadOnlyList<string> sourcePaths, string destinationFolder, DragEventArgs e)
     {
         if (sourcePaths.Count == 0)
         {
             return DragDropEffects.None;
+        }
+
+        if ((e.KeyStates & DragDropKeyStates.AltKey) != 0)
+        {
+            return DragDropEffects.Link;
         }
 
         if ((e.KeyStates & DragDropKeyStates.ControlKey) != 0)
@@ -466,7 +559,7 @@ public partial class MainWindow : Window
     // 従来通りナビゲーション操作として扱い、編集モードへは切り替えない。
     private void AddressBarBorder_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (IsOverButton(e.OriginalSource as DependencyObject))
+        if (IsOverButtonOrDropdownItem(e.OriginalSource as DependencyObject))
         {
             return;
         }
@@ -483,11 +576,73 @@ public partial class MainWindow : Window
         }
     }
 
-    private static bool IsOverButton(DependencyObject? source)
+    // ButtonBase（パンくずセグメント・ドロップダウン矢印）自体、またはドロップダウン内の
+    // 項目（BreadcrumbDropdownItemテンプレートのBorder。Buttonではないため別途判定が必要）の
+    // 上かどうかを判定する。
+    private static bool IsOverButtonOrDropdownItem(DependencyObject? source)
     {
         while (source is not null)
         {
             if (source is ButtonBase)
+            {
+                return true;
+            }
+
+            if (source is FrameworkElement { DataContext: BreadcrumbDropdownItem })
+            {
+                return true;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
+    }
+
+    // 仕様書11章：パンくずドロップダウンを開いた状態で、そのドロップダウン（またはドロップダウン
+    // 矢印）以外の場所をクリックしたら閉じる（Windows 11 Explorerと同様の操作感）。
+    private void RootWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var pane = viewModel.ActiveTab?.ActivePane;
+
+        // 仕様書11章：アドレス編集中に、編集欄以外の場所をクリックしたら編集を取り消し、
+        // 元のパンくず表示に戻す。編集欄自体（カーソル移動等）のクリックは無視する。
+        // マウスクリックだけではフォーカスが移動しない要素（空白部分等）も多いため、
+        // TextBox.LostFocusだけに頼らずここでも判定する。
+        if (pane is { IsAddressEditing: true } &&
+            !IsDescendantOf(e.OriginalSource as DependencyObject, AddressEditTextBox) &&
+            pane.CancelAddressEditCommand.CanExecute(null))
+        {
+            pane.CancelAddressEditCommand.Execute(null);
+        }
+
+        if (IsOverButtonOrDropdownItem(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        var segments = pane?.BreadcrumbSegments;
+        if (segments is null)
+        {
+            return;
+        }
+
+        foreach (var segment in segments)
+        {
+            segment.IsDropdownOpen = false;
+        }
+    }
+
+    private static bool IsDescendantOf(DependencyObject? source, DependencyObject ancestor)
+    {
+        while (source is not null)
+        {
+            if (ReferenceEquals(source, ancestor))
             {
                 return true;
             }
@@ -507,6 +662,22 @@ public partial class MainWindow : Window
 
         textBox.Focus();
         textBox.SelectAll();
+    }
+
+    // 仕様書11章：アドレス編集中に他の場所をクリックする（＝フォーカスが外れる）と、
+    // 編集を確定せず元の表示（パンくず）に戻す。Enter確定時もフォーカスが外れるが、
+    // その時点で既にIsAddressEditingはfalseになっているため二重処理にはならない。
+    private void AddressEditTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PaneViewModel pane })
+        {
+            return;
+        }
+
+        if (pane.IsAddressEditing && pane.CancelAddressEditCommand.CanExecute(null))
+        {
+            pane.CancelAddressEditCommand.Execute(null);
+        }
     }
 
     private void TerminalOutputTextBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -649,12 +820,27 @@ public partial class MainWindow : Window
 
     // 仕様書4章：ナビゲーションペイン内のListBox（お気に入り等）は既定でホイール/トラックパッドの
     // スクロールを自身で消費してしまい、外側のScrollViewer（ペイン全体）へ伝播しない。
-    // ここで明示的に外側のScrollViewerへスクロールを転送する。
+    // ただし、MaxHeightで内部スクロールが必要な一覧（最近使った場所等）まで一律に外側へ
+    // 転送すると、その一覧自身がスクロールできなくなってしまう。そのため、内側の
+    // ScrollViewerがまだその方向へスクロールできる間は内側に処理させ、内側が端まで
+    // 達している場合のみ外側のScrollViewer（ペイン全体）へスクロールを転送する。
     private void NavListBox_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (sender is not DependencyObject element)
         {
             return;
+        }
+
+        var innerScrollViewer = FindDescendantScrollViewer(element);
+        if (innerScrollViewer is not null)
+        {
+            var canScrollInner = e.Delta > 0
+                ? innerScrollViewer.VerticalOffset > 0
+                : innerScrollViewer.VerticalOffset < innerScrollViewer.ScrollableHeight;
+            if (canScrollInner)
+            {
+                return;
+            }
         }
 
         var scrollViewer = FindAncestorScrollViewer(element);
@@ -677,5 +863,26 @@ public partial class MainWindow : Window
         }
 
         return current as ScrollViewer;
+    }
+
+    private static ScrollViewer? FindDescendantScrollViewer(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is ScrollViewer scrollViewer)
+            {
+                return scrollViewer;
+            }
+
+            var found = FindDescendantScrollViewer(child);
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 }

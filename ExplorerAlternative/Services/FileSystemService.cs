@@ -273,6 +273,130 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
+    // 仕様書20章：Ctrl+ドラッグで移動先に同名の項目が既に存在した場合の「名前を変更してコピー」。
+    public void CopyRenamed(string sourcePath, string destinationDirectory)
+    {
+        try
+        {
+            var destination = GetUniqueCopyName(destinationDirectory, sourcePath);
+
+            if (Directory.Exists(sourcePath))
+            {
+                CopyDirectoryRecursive(sourcePath, destination);
+            }
+            else if (File.Exists(sourcePath))
+            {
+                File.Copy(sourcePath, destination, overwrite: false);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new AppOperationException($"「{Path.GetFileName(sourcePath)}」をコピーできませんでした。", ex);
+        }
+    }
+
+    // 仕様書20章：Ctrl+ドラッグで移動先に同名の項目が既に存在した場合の「上書きする」。
+    public void CopyReplacing(string sourcePath, string destinationDirectory)
+    {
+        try
+        {
+            var destination = Path.Combine(destinationDirectory, Path.GetFileName(sourcePath));
+
+            if (Directory.Exists(destination))
+            {
+                Directory.Delete(destination, recursive: true);
+            }
+            else if (File.Exists(destination))
+            {
+                File.Delete(destination);
+            }
+
+            if (Directory.Exists(sourcePath))
+            {
+                CopyDirectoryRecursive(sourcePath, destination);
+            }
+            else if (File.Exists(sourcePath))
+            {
+                File.Copy(sourcePath, destination, overwrite: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new AppOperationException($"「{Path.GetFileName(sourcePath)}」を上書きコピーできませんでした。", ex);
+        }
+    }
+
+    private static string GetUniqueCopyName(string destinationDirectory, string sourcePath)
+    {
+        var isDirectory = Directory.Exists(sourcePath);
+        var extension = isDirectory ? string.Empty : Path.GetExtension(sourcePath);
+        var baseName = isDirectory ? Path.GetFileName(sourcePath) : Path.GetFileNameWithoutExtension(sourcePath);
+
+        var candidate = Path.Combine(destinationDirectory, $"{baseName}_copy{extension}");
+        if (!Directory.Exists(candidate) && !File.Exists(candidate))
+        {
+            return candidate;
+        }
+
+        for (var i = 2; ; i++)
+        {
+            candidate = Path.Combine(destinationDirectory, $"{baseName}_copy{i}{extension}");
+            if (!Directory.Exists(candidate) && !File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    // 仕様書20章：Alt+ドラッグでのショートカット（.lnk）作成。外部NuGet依存を増やさないよう、
+    // WScript.Shell COMオブジェクトを使う（Windows標準搭載）。
+    public void CreateShortcuts(IEnumerable<string> sourcePaths, string destinationDirectory)
+    {
+        var shellType = Type.GetTypeFromProgID("WScript.Shell");
+        if (shellType is null)
+        {
+            throw new AppOperationException("ショートカットを作成できませんでした（WScript.Shellを利用できません）。");
+        }
+
+        dynamic shell = Activator.CreateInstance(shellType)!;
+
+        foreach (var source in sourcePaths)
+        {
+            try
+            {
+                var name = Path.GetFileNameWithoutExtension(source);
+                var shortcutPath = GetUniqueShortcutPath(destinationDirectory, name);
+
+                dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                shortcut.TargetPath = source;
+                shortcut.WorkingDirectory = Directory.Exists(source) ? source : Path.GetDirectoryName(source);
+                shortcut.Save();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
+            {
+                throw new AppOperationException($"「{Path.GetFileName(source)}」のショートカットを作成できませんでした。", ex);
+            }
+        }
+    }
+
+    private static string GetUniqueShortcutPath(string destinationDirectory, string name)
+    {
+        var candidate = Path.Combine(destinationDirectory, $"{name}.lnk");
+        if (!File.Exists(candidate))
+        {
+            return candidate;
+        }
+
+        for (var i = 2; ; i++)
+        {
+            candidate = Path.Combine(destinationDirectory, $"{name} ({i}).lnk");
+            if (!File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
     public string ReadTextPreview(string filePath, int maxBytes, out bool truncated)
     {
         try

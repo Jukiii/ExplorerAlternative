@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
 using ExplorerAlternative.Services;
@@ -70,6 +71,17 @@ public sealed class FileSystemNodeViewModel : ObservableObject
     public string SizeDisplay => IsDirectory || SizeBytes is null ? string.Empty : FormatSize(SizeBytes.Value);
 
     public string LastModifiedDisplay => LastModified?.ToString("yyyy/MM/dd HH:mm") ?? string.Empty;
+
+    /// <summary>仕様書6.2章「種類」列。フォルダは「ファイル フォルダー」、ファイルは拡張子ベースの簡易表示。</summary>
+    public string KindDisplay => IsDirectory ? "ファイル フォルダー" : GetFileKind(Name);
+
+    private static string GetFileKind(string name)
+    {
+        var extension = Path.GetExtension(name);
+        return string.IsNullOrEmpty(extension)
+            ? "ファイル"
+            : $"{extension.TrimStart('.').ToUpperInvariant()} ファイル";
+    }
 
     /// <summary>仕様書6.2章：ファイル・フォルダに設定されたタグ。</summary>
     public IReadOnlyList<string> Tags =>
