@@ -372,7 +372,11 @@ public partial class MainWindow : Window
         }
         else
         {
-            e.Effects = TryGetDroppedFolder(e, out _) ? DragDropEffects.Link : DragDropEffects.None;
+            // 仕様書4章：フォルダをドラッグ&ドロップしてお気に入りに追加。
+            // ファイル一覧側のドラッグ開始（NodeListBox_PreviewMouseMove）はCopy|Moveのみを許可しており、
+            // ここでLinkを指定すると許可された効果に含まれないためWPFがDropイベントを発火せず、
+            // 常にDoDragDropの結果がNoneになってしまう（お気に入りに追加できない不具合の原因）。
+            e.Effects = TryGetDroppedFolder(e, out _) ? DragDropEffects.Copy : DragDropEffects.None;
         }
 
         e.Handled = true;
