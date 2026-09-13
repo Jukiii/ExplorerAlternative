@@ -1104,6 +1104,96 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         return normalizedDestination.StartsWith(normalizedSource + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
+    // 仕様書20章：Ctrl+ドラッグ。同じフォルダ内へのドロップは複製として扱い、異なるフォルダで
+    // 同名の項目が既に存在する場合は「名前を変更してコピー」／「上書きする」／「キャンセル」を尋ねる。
+    public void DropFilesAsCopy(IReadOnlyList<string> sourcePaths, string destinationFolder)
+    {
+        var targets = sourcePaths.Where(source => !IsSelfOrDescendantDrop(source, destinationFolder)).ToList();
+        if (targets.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var source in targets)
+            {
+                var normalizedSource = Path.TrimEndingDirectorySeparator(source);
+                var normalizedDestination = Path.TrimEndingDirectorySeparator(destinationFolder);
+                var sourceParent = Path.GetDirectoryName(normalizedSource);
+
+                if (string.Equals(sourceParent, normalizedDestination, StringComparison.OrdinalIgnoreCase))
+                {
+                    _fileSystemService.Duplicate(new[] { source });
+                    continue;
+                }
+
+                var destinationPath = Path.Combine(destinationFolder, Path.GetFileName(source));
+                if (!Directory.Exists(destinationPath) && !File.Exists(destinationPath))
+                {
+                    _fileSystemService.Copy(new[] { source }, destinationFolder);
+                    continue;
+                }
+
+                var fileName = Path.GetFileName(source);
+                var choice = _dialogService.SelectFromList(
+                    "ファイルの競合",
+                    $"「{fileName}」は移動先に既に存在します。どうしますか？",
+                    new[] { "名前を変更してコピー（*_copy）", "上書きする" });
+
+                if (choice == "名前を変更してコピー（*_copy）")
+                {
+                    _fileSystemService.CopyRenamed(source, destinationFolder);
+                }
+                else if (choice == "上書きする")
+                {
+                    _fileSystemService.CopyReplacing(source, destinationFolder);
+                }
+
+                // それ以外（キャンセル・ダイアログを閉じた）は何もしない。
+            }
+
+            RefreshCurrentFolder();
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+    }
+
+    // 仕様書20章：Alt+ドラッグでのショートカット作成。
+    public void DropFilesAsShortcuts(IReadOnlyList<string> sourcePaths, string destinationFolder)
+    {
+        var targets = sourcePaths.Where(source => !IsSelfOrDescendantDrop(source, destinationFolder)).ToList();
+        if (targets.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _fileSystemService.CreateShortcuts(targets, destinationFolder);
+            RefreshCurrentFolder();
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+    }
+
+    private static bool IsSelfOrDescendantDrop(string sourcePath, string destinationFolder)
+    {
+        var normalizedSource = Path.TrimEndingDirectorySeparator(sourcePath);
+        var normalizedDestination = Path.TrimEndingDirectorySeparator(destinationFolder);
+
+        if (string.Equals(normalizedSource, normalizedDestination, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return normalizedDestination.StartsWith(normalizedSource + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
     // 仕様書6.2章：ファイル・フォルダへのタグ付与/解除。選択中に未付与のノードが1件でもあれば
     // 選択全体に付与し、全て付与済みであれば選択全体から解除する（Finderのタグ操作に準拠）。
     private void ToggleTag(TagDefinition tag)
