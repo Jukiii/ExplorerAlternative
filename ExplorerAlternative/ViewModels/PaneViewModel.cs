@@ -49,6 +49,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     private ProjectInfo? _currentProject;
     private string? _solutionRootPath;
     private string? _lastCommitLogRoot;
+    private string _sortColumn = "Name";
+    private bool _sortAscending = true;
 
     public PaneViewModel(
         IFileSystemService fileSystemService,
@@ -81,6 +83,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         NavigateToCommand = new RelayCommand(p => NavigateTo((string)p!));
         GoUpCommand = new RelayCommand(_ => GoUp());
         SetViewModeCommand = new RelayCommand(p => CurrentViewMode = (ViewMode)p!);
+        SortByColumnCommand = new RelayCommand(p => SortByColumn((string)p!));
         ToggleShowHiddenFilesCommand = new RelayCommand(_ => ShowHiddenFiles = !ShowHiddenFiles);
         RefreshCommand = new RelayCommand(_ => RefreshCurrentFolder());
         ToggleExpandCommand = new RelayCommand(p => ((FileSystemNodeViewModel)p!).IsExpanded ^= true);
@@ -167,6 +170,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     public RelayCommand GoUpCommand { get; }
 
     public RelayCommand SetViewModeCommand { get; }
+
+    /// <summary>詳細表示の列ヘッダーをクリックしたときの並び替え（列名を文字列で受け取る）。</summary>
+    public RelayCommand SortByColumnCommand { get; }
 
     public RelayCommand ToggleExpandCommand { get; }
 
@@ -304,6 +310,17 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         get => _currentViewMode;
         set => SetProperty(ref _currentViewMode, value);
     }
+
+    /// <summary>詳細表示の列ヘッダーに表示する、現在の並び替え方向を示す矢印（対象列以外は空）。</summary>
+    public string SortIndicatorName => GetSortIndicator("Name");
+
+    public string SortIndicatorSize => GetSortIndicator("Size");
+
+    public string SortIndicatorLastModified => GetSortIndicator("LastModified");
+
+    public string SortIndicatorKind => GetSortIndicator("Kind");
+
+    private string GetSortIndicator(string column) => _sortColumn == column ? (_sortAscending ? " ▲" : " ▼") : string.Empty;
 
     /// <summary>仕様書49章「隠しファイル」。設定に永続化し、切り替え時に再読み込みする。</summary>
     public bool ShowHiddenFiles
@@ -494,12 +511,13 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             RootNodes.Clear();
 
             var showHidden = _settingsService.Current.View.ShowHiddenFiles;
-            foreach (var entry in entries
+            var newNodes = entries
                 .Where(e => showHidden || !e.IsHidden)
-                .OrderByDescending(e => e.IsDirectory)
-                .ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase))
+                .Select(e => new FileSystemNodeViewModel(e, 0, _fileSystemService, _dialogService, _settingsService, GetVcsStatus, OnNodeToggled));
+
+            foreach (var node in SortNodes(newNodes))
             {
-                RootNodes.Add(new FileSystemNodeViewModel(entry, 0, _fileSystemService, _dialogService, _settingsService, GetVcsStatus, RebuildVisibleNodes));
+                RootNodes.Add(node);
             }
 
             RebuildVisibleNodes();
@@ -604,6 +622,107 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 AppendVisible(node.Children);
             }
         }
+    }
+
+    /// <summary>
+    /// フォルダの展開・折りたたみ時に呼ばれる。VisibleNodes全体をClear+再構築すると
+    /// ListBoxの全コンテナが作り直され、選択位置とスクロール位置が先頭に戻ってしまう
+    /// ため、変化があった部分だけを挿入・削除する。
+    /// </summary>
+    private void OnNodeToggled(FileSystemNodeViewModel node)
+    {
+        var index = VisibleNodes.IndexOf(node);
+        if (index < 0)
+        {
+            RebuildVisibleNodes();
+            return;
+        }
+
+        if (node.IsExpanded)
+        {
+            if (node.Children is null)
+            {
+                return;
+            }
+
+            var toInsert = new List<FileSystemNodeViewModel>();
+            CollectVisible(node.Children, toInsert);
+
+            for (var i = 0; i < toInsert.Count; i++)
+            {
+                VisibleNodes.Insert(index + 1 + i, toInsert[i]);
+            }
+        }
+        else
+        {
+            var removeCount = 0;
+            while (index + 1 + removeCount < VisibleNodes.Count && VisibleNodes[index + 1 + removeCount].Depth > node.Depth)
+            {
+                removeCount++;
+            }
+
+            for (var i = 0; i < removeCount; i++)
+            {
+                VisibleNodes.RemoveAt(index + 1);
+            }
+        }
+    }
+
+    private void CollectVisible(IEnumerable<FileSystemNodeViewModel> nodes, List<FileSystemNodeViewModel> result)
+    {
+        foreach (var node in nodes)
+        {
+            result.Add(node);
+
+            if (node.IsDirectory && node.IsExpanded && node.Children is not null)
+            {
+                CollectVisible(node.Children, result);
+            }
+        }
+    }
+
+    /// <summary>詳細表示の列ヘッダークリック：同じ列なら昇順/降順を反転し、別の列なら昇順から並べ替える。</summary>
+    private void SortByColumn(string column)
+    {
+        _sortAscending = _sortColumn == column ? !_sortAscending : true;
+        _sortColumn = column;
+
+        OnPropertyChanged(nameof(SortIndicatorName));
+        OnPropertyChanged(nameof(SortIndicatorSize));
+        OnPropertyChanged(nameof(SortIndicatorLastModified));
+        OnPropertyChanged(nameof(SortIndicatorKind));
+
+        var sorted = SortNodes(RootNodes).ToList();
+        RootNodes.Clear();
+
+        foreach (var node in sorted)
+        {
+            RootNodes.Add(node);
+        }
+
+        RebuildVisibleNodes();
+    }
+
+    /// <summary>フォルダを常に先頭にまとめた上で、現在の並び替え列・方向に従って並べ替える。</summary>
+    private IEnumerable<FileSystemNodeViewModel> SortNodes(IEnumerable<FileSystemNodeViewModel> nodes)
+    {
+        var ordered = nodes.OrderByDescending(n => n.IsDirectory);
+
+        return _sortColumn switch
+        {
+            "Size" => _sortAscending
+                ? ordered.ThenBy(n => n.SizeBytes ?? 0)
+                : ordered.ThenByDescending(n => n.SizeBytes ?? 0),
+            "LastModified" => _sortAscending
+                ? ordered.ThenBy(n => n.LastModified ?? DateTime.MinValue)
+                : ordered.ThenByDescending(n => n.LastModified ?? DateTime.MinValue),
+            "Kind" => _sortAscending
+                ? ordered.ThenBy(n => n.KindDisplay, StringComparer.CurrentCultureIgnoreCase)
+                : ordered.ThenByDescending(n => n.KindDisplay, StringComparer.CurrentCultureIgnoreCase),
+            _ => _sortAscending
+                ? ordered.ThenBy(n => n.Name, StringComparer.CurrentCultureIgnoreCase)
+                : ordered.ThenByDescending(n => n.Name, StringComparer.CurrentCultureIgnoreCase),
+        };
     }
 
     private void RebuildBreadcrumb()

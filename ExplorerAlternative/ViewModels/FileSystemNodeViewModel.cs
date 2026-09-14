@@ -16,7 +16,7 @@ public sealed class FileSystemNodeViewModel : ObservableObject
     private readonly IDialogService _dialogService;
     private readonly ISettingsService _settingsService;
     private readonly Func<string, string>? _vcsStatusLookup;
-    private readonly Action? _onTreeChanged;
+    private readonly Action<FileSystemNodeViewModel>? _onTreeChanged;
     private bool _isExpanded;
     private bool _isSelected;
     private bool _childrenLoaded;
@@ -28,7 +28,7 @@ public sealed class FileSystemNodeViewModel : ObservableObject
         IDialogService dialogService,
         ISettingsService settingsService,
         Func<string, string>? vcsStatusLookup = null,
-        Action? onTreeChanged = null)
+        Action<FileSystemNodeViewModel>? onTreeChanged = null)
     {
         Entry = entry;
         Depth = depth;
@@ -122,7 +122,7 @@ public sealed class FileSystemNodeViewModel : ObservableObject
                     LoadChildren();
                 }
 
-                _onTreeChanged?.Invoke();
+                _onTreeChanged?.Invoke(this);
             }
         }
     }

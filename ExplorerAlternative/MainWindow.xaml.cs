@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -136,6 +137,30 @@ public partial class MainWindow : Window
         }
 
         pane.UpdateSelection(listBox.SelectedItems.Cast<FileSystemNodeViewModel>());
+    }
+
+    // 詳細表示の列ヘッダークリック：DisplayMemberBindingのパスから並び替え対象の列を判定する
+    // （「名前」列だけはアイコン付きCellTemplateでDisplayMemberBindingを持たないためnull判定）。
+    private void GridViewColumnHeader_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not GridViewColumnHeader { Column: { } column, DataContext: PaneViewModel pane })
+        {
+            return;
+        }
+
+        var sortKey = column.DisplayMemberBinding switch
+        {
+            null => "Name",
+            Binding { Path.Path: "SizeDisplay" } => "Size",
+            Binding { Path.Path: "LastModifiedDisplay" } => "LastModified",
+            Binding { Path.Path: "KindDisplay" } => "Kind",
+            _ => null,
+        };
+
+        if (sortKey is not null && pane.SortByColumnCommand.CanExecute(sortKey))
+        {
+            pane.SortByColumnCommand.Execute(sortKey);
+        }
     }
 
     private void NodeListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
