@@ -29,6 +29,9 @@ public sealed class AppSettings
     /// <summary>最近使った場所（仕様書50章）。先頭が最新。</summary>
     public List<string> RecentPlaces { get; set; } = new();
 
+    /// <summary>「よく使う場所」のアクセス回数記録（仕様書39章）。</summary>
+    public List<FrequentPlaceVisit> FrequentPlaces { get; set; } = new();
+
     /// <summary>最近開いたプロジェクト（仕様書55章）。先頭が最新。</summary>
     public List<FavoriteEntry> RecentProjects { get; set; } = new();
 

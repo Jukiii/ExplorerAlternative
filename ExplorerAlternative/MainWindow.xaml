@@ -421,7 +421,8 @@
                             Command="{Binding NavigationPane.ToggleCollapsedCommand}" />
 
                     <!-- 仕様書4章：ユーザー指示により表示順を お気に入り→タグ→ドライブ→ワークスペース→
-                         最近使った場所→最近のプロジェクト とした。 -->
+                         最近使った場所→最近のプロジェクト とした。よく使う場所（仕様書39章）は
+                         最近使った場所の直後に追加した。 -->
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
                         <StackPanel>
                             <!-- お気に入り（仕様書4章・36章）：クイックアクセス相当の標準フォルダも統合した単一の一覧。
@@ -570,6 +571,42 @@
                                                     <DataTemplate>
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Text="🕘" Margin="0,0,6,0" FontSize="11" />
+                                                            <TextBlock Text="{Binding}" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </Button.ContentTemplate>
+                                            </Button>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- よく使う場所（仕様書39章）：MRU順の「最近使った場所」とは別に、
+                                 アクセス回数の多い順で上位を表示する。 -->
+                            <DockPanel Margin="2,14,0,4">
+                                <Button DockPanel.Dock="Right" Content="クリア" FontSize="9" Padding="4,0"
+                                        ToolTip="よく使う場所をクリア" Command="{Binding NavigationPane.ClearFrequentPlacesCommand}" />
+                                <TextBlock Text="よく使う場所" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <ListBox ItemsSource="{Binding NavigationPane.FrequentPlaces}" MaxHeight="160"
+                                     BorderThickness="0" Background="Transparent"
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
+                                     PreviewMouseWheel="NavListBox_PreviewMouseWheel">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:FavoriteEntry}">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="✕" FontSize="9" Width="20" Height="20" Padding="0"
+                                                    ToolTip="一覧から削除"
+                                                    Command="{Binding DataContext.NavigationPane.RemoveFrequentPlaceCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button Content="{Binding Name}" ToolTip="{Binding Path}"
+                                                    HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
+                                                    Command="{Binding DataContext.NavigationPane.NavigateToEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}">
+                                                <Button.ContentTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="⭐" Margin="0,0,6,0" FontSize="11" />
                                                             <TextBlock Text="{Binding}" />
                                                         </StackPanel>
                                                     </DataTemplate>

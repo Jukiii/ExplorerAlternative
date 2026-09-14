@@ -329,14 +329,16 @@ public sealed class MainWindowViewModel : ObservableObject
         var syncTarget = ActiveTab?.ActivePane.CurrentProject?.RootPath ?? path;
         TerminalHost.SyncCurrentDirectory(syncTarget);
         NavigationPane.RecordRecentPlace(path);
+        NavigationPane.RecordFrequentPlaceVisit(path);
         RebuildJumpList();
     }
 
-    // 仕様書39章：最近使った場所・お気に入り・ワークスペースが変化するたびに反映し直す。
+    // 仕様書39章：最近使った場所・よく使う場所・お気に入り・ワークスペースが変化するたびに反映し直す。
     private void RebuildJumpList()
     {
         _jumpListService.Rebuild(
             NavigationPane.RecentPlaces.Select(f => (f.Name, f.Path)),
+            NavigationPane.FrequentPlaces.Select(f => (f.Name, f.Path)),
             NavigationPane.Favorites.Select(f => (f.Name, f.Path)),
             NavigationPane.Workspaces);
     }
