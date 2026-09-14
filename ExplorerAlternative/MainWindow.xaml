@@ -434,6 +434,7 @@
                                      PreviewMouseMove="FavoritesListBox_PreviewMouseMove"
                                      AllowDrop="True"
                                      DragOver="FavoritesListBox_DragOver"
+                                     DragLeave="FavoritesListBox_DragLeave"
                                      Drop="FavoritesListBox_Drop">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:FavoriteEntry}">
@@ -667,7 +668,7 @@
                                             </Style>
                                         </Border.Style>
                                     </Border>
-                                <Grid AllowDrop="True" DragOver="PaneGrid_DragOver" Drop="PaneGrid_Drop">
+                                <Grid AllowDrop="True" DragOver="PaneGrid_DragOver" Drop="PaneGrid_Drop" DragLeave="PaneGrid_DragLeave">
                                     <!-- 階層表示 -->
                                     <ListBox x:Name="TreeListBox" ItemsSource="{Binding VisibleNodes}"
                                              Background="Transparent"

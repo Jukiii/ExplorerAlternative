@@ -19,6 +19,7 @@ public sealed class FileSystemNodeViewModel : ObservableObject
     private readonly Action<FileSystemNodeViewModel>? _onTreeChanged;
     private bool _isExpanded;
     private bool _isSelected;
+    private bool _isDropTarget;
     private bool _childrenLoaded;
 
     public FileSystemNodeViewModel(
@@ -138,6 +139,13 @@ public sealed class FileSystemNodeViewModel : ObservableObject
     {
         get => _isSelected;
         set => SetProperty(ref _isSelected, value);
+    }
+
+    /// <summary>ドラッグ&ドロップ中、このフォルダがドロップ先として強調表示される対象かどうか。</summary>
+    public bool IsDropTarget
+    {
+        get => _isDropTarget;
+        set => SetProperty(ref _isDropTarget, value);
     }
 
     public void LoadChildren()
