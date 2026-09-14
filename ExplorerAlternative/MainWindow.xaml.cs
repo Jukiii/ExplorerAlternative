@@ -5,7 +5,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ExplorerAlternative.Models;
@@ -18,11 +17,6 @@ public partial class MainWindow : Window
     private static readonly string SourcePaneFormat = "ExplorerAlternative.SourcePane";
     private static readonly string FavoriteReorderFormat = "ExplorerAlternative.FavoriteEntry";
 
-    // トラックパッドの横スワイプはWM_MOUSEHWHEELとしてOSから送られてくるが、WPFの
-    // ScrollViewerは既定でこれをハンドリングしない（縦方向のWM_MOUSEWHEELのみ対応）ため、
-    // ウィンドウメッセージを直接フックしてカーソル位置直下のScrollViewerへ手動で反映する。
-    private const int WM_MOUSEHWHEEL = 0x020E;
-
     private Point? _tabDragStartPoint;
     private bool _tabDragDuplicated;
     private Point? _fileDragStartPoint;
@@ -34,65 +28,6 @@ public partial class MainWindow : Window
         InitializeComponent();
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         Closing += MainWindow_Closing;
-        SourceInitialized += MainWindow_SourceInitialized;
-    }
-
-    private void MainWindow_SourceInitialized(object? sender, EventArgs e)
-    {
-        if (PresentationSource.FromVisual(this) is HwndSource source)
-        {
-            source.AddHook(HorizontalScrollWndProc);
-        }
-    }
-
-    private IntPtr HorizontalScrollWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        if (msg != WM_MOUSEHWHEEL)
-        {
-            return IntPtr.Zero;
-        }
-
-        var delta = unchecked((short)((wParam.ToInt64() >> 16) & 0xFFFF));
-        var screenX = unchecked((short)(lParam.ToInt64() & 0xFFFF));
-        var screenY = unchecked((short)((lParam.ToInt64() >> 16) & 0xFFFF));
-
-        var point = PointFromScreen(new Point(screenX, screenY));
-        var scrollViewer = FindScrollViewerAt(point);
-        if (scrollViewer is null)
-        {
-            return IntPtr.Zero;
-        }
-
-        scrollViewer.ScrollToHorizontalOffset(scrollViewer.HorizontalOffset + delta / 3.0);
-        handled = true;
-        return IntPtr.Zero;
-    }
-
-    // カーソル直下から祖先方向へScrollViewerを探す際、最初に見つかったものをそのまま
-    // 使うと、ナビゲーションペイン内のListBoxが持つ内部ScrollViewer（既定では横スクロール
-    // 無効）に当たってしまい、ペイン全体を横スクロールさせたいケース（ペインをGridSplitter
-    // で狭めた場合）で何も起きなくなる。横方向に実際にスクロール可能な最も内側の
-    // ScrollViewerを優先し、見つからなければ最初に見つかったものにフォールバックする。
-    private ScrollViewer? FindScrollViewerAt(Point point)
-    {
-        var hit = VisualTreeHelper.HitTest(this, point)?.VisualHit;
-        ScrollViewer? fallback = null;
-        while (hit is not null)
-        {
-            if (hit is ScrollViewer scrollViewer)
-            {
-                if (scrollViewer.ScrollableWidth > 0)
-                {
-                    return scrollViewer;
-                }
-
-                fallback ??= scrollViewer;
-            }
-
-            hit = VisualTreeHelper.GetParent(hit);
-        }
-
-        return fallback;
     }
 
     // 仕様書40章：システムトレイに常駐中は、ウィンドウを閉じてもアプリを終了せずトレイへ格納する。
@@ -146,6 +81,34 @@ public partial class MainWindow : Window
     }
 
     // 仕様書11章：パンくずドロップダウンの左クリック＝パス全体を置換。
+    // 仕様書21章「Show Commit」：Git/SVN情報ペインの簡易コミット履歴をクリックすると、
+    // そのコミットを選択した状態でLogウィンドウ（変更内容つき）を開く。
+    private void CommitLogEntry_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: CommitLogEntry entry } element)
+        {
+            return;
+        }
+
+        var current = (DependencyObject)element;
+        while (current is not null)
+        {
+            if (current is FrameworkElement { DataContext: PaneViewModel pane })
+            {
+                if (pane.ShowCommitCommand.CanExecute(entry))
+                {
+                    pane.ShowCommitCommand.Execute(entry);
+                }
+
+                break;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        e.Handled = true;
+    }
+
     private void BreadcrumbDropdownItem_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: BreadcrumbDropdownItem item } && item.NavigateCommand.CanExecute(null))
@@ -696,12 +659,18 @@ public partial class MainWindow : Window
         textBox.Focus();
     }
 
-    // ターミナル部分（出力欄を含む）をクリックしたときに入力欄へフォーカスする。
-    // 出力欄（TextBox）自身がクリック時に自分へフォーカスを奪う処理を持っているため、
-    // 同じ入力処理の中でFocus()を呼んでもすぐに上書きされてしまう。
-    // Dispatcher.BeginInvokeで、クリックの既定処理が完了した後に改めてフォーカスする。
+    // ターミナル部分をクリックしたときに入力欄へフォーカスする（すぐに入力できるように
+    // するため）。ただし出力欄（TerminalOutputTextBox）自体のクリックは、テキスト選択・
+    // コピーのための操作である場合があるため対象外とする。ここで無条件にフォーカスを
+    // 奪うと、出力欄でのドラッグ選択が毎回入力欄へのフォーカス移動によって
+    // キャンセルされてしまい、ターミナルの内容を選択・コピーできなくなる不具合があった。
     private void TerminalPanel_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (IsDescendantOf(e.OriginalSource as DependencyObject, TerminalOutputTextBox))
+        {
+            return;
+        }
+
         Dispatcher.BeginInvoke(new Action(() => TerminalInputTextBox.Focus()), DispatcherPriority.Input);
     }
 

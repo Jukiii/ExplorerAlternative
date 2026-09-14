@@ -41,6 +41,7 @@ public sealed class SshProfilesViewModel : ObservableObject
         EditCommand = new RelayCommand(_ => Edit(), _ => SelectedProfile is not null);
         DeleteCommand = new RelayCommand(_ => Delete(), _ => SelectedProfile is not null);
         ConnectCommand = new RelayCommand(_ => Connect(), _ => SelectedProfile is not null);
+        ConnectSftpCommand = new RelayCommand(_ => ConnectSftp(), _ => SelectedProfile is not null);
     }
 
     public ObservableCollection<SshConnectionProfile> Profiles { get; } = new();
@@ -67,8 +68,14 @@ public sealed class SshProfilesViewModel : ObservableObject
 
     public RelayCommand ConnectCommand { get; }
 
+    /// <summary>仕様書44章「SFTPリモートファイル操作」：SFTPブラウザを開く。</summary>
+    public RelayCommand ConnectSftpCommand { get; }
+
     /// <summary>「接続」実行時に、組み立てたsshコマンドと（保存されていれば）パスワードを呼び出し側へ通知する。</summary>
     public event Action<string, string?>? RequestConnect;
+
+    /// <summary>「SFTPで開く」実行時に、対象プロファイルと（保存されていれば）パスワードを呼び出し側へ通知する。</summary>
+    public event Action<SshConnectionProfile, string?>? RequestSftpBrowser;
 
     public event Action? RequestClose;
 
@@ -175,6 +182,19 @@ public sealed class SshProfilesViewModel : ObservableObject
         {
             _dialogService.ShowError(ex.Message);
         }
+    }
+
+    private void ConnectSftp()
+    {
+        var target = SelectedProfile;
+        if (target is null)
+        {
+            return;
+        }
+
+        var password = _credentialStore.TryGetPassword(target.Id);
+        RequestSftpBrowser?.Invoke(target, password);
+        RequestClose?.Invoke();
     }
 
     private void Save()

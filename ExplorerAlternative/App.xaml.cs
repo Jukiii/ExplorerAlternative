@@ -40,6 +40,10 @@ public partial class App : Application
                 }
             }));
 
+        // 仕様書4章：トラックパッドの横スワイプによる水平スクロールを、MainWindowだけでなく
+        // Log/フォルダ比較/SFTPブラウザ等、以降に開かれる全てのWindowで有効にする。
+        TrackpadScrollSupport.RegisterForAllWindows();
+
         IPowerShellTerminalService TerminalServiceFactory() =>
             new PowerShellTerminalService(
                 settingsService.Current.Terminal.ShellExecutable,
@@ -49,7 +53,9 @@ public partial class App : Application
         var patchService = new PatchService();
         var sshService = new SshService();
         var sshCredentialStore = new WindowsCredentialSshStore();
+        var sftpService = new SftpService();
         var folderScanService = new FolderScanService();
+        var folderCompareService = new FolderCompareService();
         var versionControlOperationsService = new VersionControlOperationsService();
         var diffService = new DiffService();
         var explorerIntegrationService = new ExplorerIntegrationService();
@@ -87,10 +93,12 @@ public partial class App : Application
             themeService,
             patchService,
             sshService,
+            sftpService,
             versionControlOperationsService,
             diffService,
             sshCredentialStore,
             folderScanService,
+            folderCompareService,
             explorerIntegrationService,
             trayIconService,
             globalHotkeyService,

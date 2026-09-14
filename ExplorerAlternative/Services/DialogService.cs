@@ -159,4 +159,22 @@ public sealed class DialogService : IDialogService
         var window = new DiffWindow(diffViewModel) { Owner = Application.Current?.MainWindow };
         window.Show();
     }
+
+    public void ShowGitLog(GitLogViewModel gitLogViewModel)
+    {
+        var window = new GitLogWindow(gitLogViewModel) { Owner = Application.Current?.MainWindow };
+        window.Show();
+    }
+
+    public void ShowFolderCompare(FolderCompareViewModel folderCompareViewModel)
+    {
+        var window = new FolderCompareWindow(folderCompareViewModel) { Owner = Application.Current?.MainWindow };
+        window.Show();
+    }
+
+    public void ShowSftpBrowser(SftpBrowserViewModel sftpBrowserViewModel)
+    {
+        var window = new SftpBrowserWindow(sftpBrowserViewModel) { Owner = Application.Current?.MainWindow };
+        window.Show();
+    }
 }

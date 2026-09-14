@@ -56,4 +56,13 @@ public interface IDialogService
 
     /// <summary>Diffウィンドウ（仕様書23章・25章）を非モーダルで表示する。</summary>
     void ShowDiff(DiffViewModel diffViewModel);
+
+    /// <summary>Log / Show Commitウィンドウ（仕様書21章）を非モーダルで表示する。</summary>
+    void ShowGitLog(GitLogViewModel gitLogViewModel);
+
+    /// <summary>フォルダ比較・同期ウィンドウ（仕様書45章）を非モーダルで表示する。</summary>
+    void ShowFolderCompare(FolderCompareViewModel folderCompareViewModel);
+
+    /// <summary>SFTPリモートブラウザウィンドウ（仕様書44章）を非モーダルで表示する。</summary>
+    void ShowSftpBrowser(SftpBrowserViewModel sftpBrowserViewModel);
 }

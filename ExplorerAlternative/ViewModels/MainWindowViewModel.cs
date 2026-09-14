@@ -25,10 +25,12 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IThemeService _themeService;
     private readonly IPatchService _patchService;
     private readonly ISshService _sshService;
+    private readonly ISftpService _sftpService;
     private readonly IVersionControlOperationsService _versionControlOperationsService;
     private readonly IDiffService _diffService;
     private readonly ISshCredentialStore _sshCredentialStore;
     private readonly IFolderScanService _folderScanService;
+    private readonly IFolderCompareService _folderCompareService;
     private readonly IExplorerIntegrationService _explorerIntegrationService;
     private readonly ITrayIconService _trayIconService;
     private readonly IGlobalHotkeyService _globalHotkeyService;
@@ -54,10 +56,12 @@ public sealed class MainWindowViewModel : ObservableObject
         IThemeService themeService,
         IPatchService patchService,
         ISshService sshService,
+        ISftpService sftpService,
         IVersionControlOperationsService versionControlOperationsService,
         IDiffService diffService,
         ISshCredentialStore sshCredentialStore,
         IFolderScanService folderScanService,
+        IFolderCompareService folderCompareService,
         IExplorerIntegrationService explorerIntegrationService,
         ITrayIconService trayIconService,
         IGlobalHotkeyService globalHotkeyService,
@@ -75,10 +79,12 @@ public sealed class MainWindowViewModel : ObservableObject
         _themeService = themeService;
         _patchService = patchService;
         _sshService = sshService;
+        _sftpService = sftpService;
         _versionControlOperationsService = versionControlOperationsService;
         _diffService = diffService;
         _sshCredentialStore = sshCredentialStore;
         _folderScanService = folderScanService;
+        _folderCompareService = folderCompareService;
         _explorerIntegrationService = explorerIntegrationService;
         _trayIconService = trayIconService;
         _globalHotkeyService = globalHotkeyService;
@@ -113,6 +119,7 @@ public sealed class MainWindowViewModel : ObservableObject
         ToggleVcsPaneCommand = new RelayCommand(_ => IsVcsPaneVisible = !IsVcsPaneVisible);
         OpenSearchCommand = new RelayCommand(_ => OpenSearch());
         OpenDiskAnalysisCommand = new RelayCommand(_ => OpenDiskAnalysis());
+        OpenFolderCompareCommand = new RelayCommand(_ => OpenFolderCompare());
         OpenCommandPaletteCommand = new RelayCommand(_ => OpenCommandPalette());
         OpenNewWindowCommand = new RelayCommand(_ => OpenNewWindow());
 
@@ -176,6 +183,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     /// <summary>仕様書38章・58章・59章：巨大ファイル/重複ファイル/空フォルダ検索。</summary>
     public RelayCommand OpenDiskAnalysisCommand { get; }
+
+    /// <summary>仕様書45章「フォルダ同期」：2フォルダの差分比較・同期ウィンドウを開く。</summary>
+    public RelayCommand OpenFolderCompareCommand { get; }
 
     /// <summary>仕様書46章「コマンドパレット」（Ctrl+Shift+P）。</summary>
     public RelayCommand OpenCommandPaletteCommand { get; }
@@ -431,8 +441,17 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void SetActivePane(PaneViewModel pane)
     {
+        // 仕様書9.2章の同期はペイン切替時にのみ行う。既にアクティブなペインへの
+        // クリック（ファイル選択等）のたびに毎回呼ぶと、ターミナルへ同じ`cd`コマンドが
+        // 送られ続けてしまい、ユーザーが何もしていないのにターミナルへ入力が
+        // 表示されてしまう不具合があった。
+        var wasAlreadyActive = ReferenceEquals(ActiveTab?.ActivePane, pane);
         ActiveTab?.SetActivePane(pane);
-        TerminalHost.SyncCurrentDirectory(pane.CurrentPath);
+
+        if (!wasAlreadyActive)
+        {
+            TerminalHost.SyncCurrentDirectory(pane.CurrentPath);
+        }
     }
 
     private void ToggleTerminal()
@@ -748,6 +767,11 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         var profilesViewModel = new SshProfilesViewModel(_settingsService, _dialogService, _sshService, _sshCredentialStore);
         profilesViewModel.RequestConnect += (command, password) => TerminalHost.SendRawCommand(command, password);
+        profilesViewModel.RequestSftpBrowser += (profile, password) =>
+        {
+            var sftpViewModel = new SftpBrowserViewModel(profile, _sftpService, password, _dialogService);
+            _dialogService.ShowSftpBrowser(sftpViewModel);
+        };
         _dialogService.ShowSshProfiles(profilesViewModel);
     }
 
@@ -774,6 +798,17 @@ public sealed class MainWindowViewModel : ObservableObject
 
         var viewModel = new DiskAnalysisViewModel(initialPath, _folderScanService, _fileSystemService, _dialogService);
         _dialogService.ShowDiskAnalysis(viewModel);
+    }
+
+    // 仕様書45章「フォルダ同期」：分割ビュー中は左右のペインをそのまま比較対象の初期値にする。
+    private void OpenFolderCompare()
+    {
+        var panes = ActiveTab?.Panes;
+        var leftPath = panes is { Count: > 0 } ? panes[0].CurrentPath : GetDefaultInitialPath();
+        var rightPath = panes is { Count: > 1 } ? panes[1].CurrentPath : string.Empty;
+
+        var viewModel = new FolderCompareViewModel(leftPath, rightPath, _folderCompareService, _fileSystemService, _dialogService);
+        _dialogService.ShowFolderCompare(viewModel);
     }
 
     // 仕様書46章：主要操作を検索・実行するコマンドパレット。

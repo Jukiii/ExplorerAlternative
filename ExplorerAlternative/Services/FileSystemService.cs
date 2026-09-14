@@ -176,6 +176,24 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
+    public void CopyFileTo(string sourceFullPath, string destinationFullPath)
+    {
+        try
+        {
+            var destinationDirectory = Path.GetDirectoryName(destinationFullPath);
+            if (!string.IsNullOrEmpty(destinationDirectory) && !Directory.Exists(destinationDirectory))
+            {
+                Directory.CreateDirectory(destinationDirectory);
+            }
+
+            File.Copy(sourceFullPath, destinationFullPath, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new AppOperationException($"「{Path.GetFileName(sourceFullPath)}」をコピーできませんでした。", ex);
+        }
+    }
+
     public void Copy(IEnumerable<string> sourcePaths, string destinationDirectory)
     {
         foreach (var source in sourcePaths)

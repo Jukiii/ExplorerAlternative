@@ -99,6 +99,7 @@
             <Separator />
             <!-- 仕様書13章・20章・21章・22章：Git/SVN操作。Git専用の項目はGitのときのみ有効になる。 -->
             <MenuItem Header="Git/SVN操作">
+                <MenuItem Header="Log..." Command="{Binding ShowLogCommand}" />
                 <MenuItem Header="Show Diff" Command="{Binding ShowDiffCommand}" />
                 <MenuItem Header="変更を破棄 (Discard/Revert)" Command="{Binding DiscardChangesCommand}" />
                 <Separator />
@@ -183,6 +184,7 @@
                         <Separator />
                         <MenuItem Header="検索... (Ctrl+F)" Command="{Binding OpenSearchCommand}" />
                         <MenuItem Header="ディスク解析..." Command="{Binding OpenDiskAnalysisCommand}" />
+                        <MenuItem Header="フォルダ比較・同期..." Command="{Binding OpenFolderCompareCommand}" />
                         <MenuItem Header="コマンドパレット... (Ctrl+Shift+P)" Command="{Binding OpenCommandPaletteCommand}" />
                         <Separator />
                         <MenuItem Header="ワークスペースを保存"
@@ -937,7 +939,20 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:CommitLogEntry}">
                                         <Border BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,0,0,1"
-                                                Padding="0,6" Margin="0,0,0,2">
+                                                Padding="4,6" Margin="0,0,0,2" Cursor="Hand"
+                                                ToolTip="クリックして変更内容を表示 (Show Commit)"
+                                                Background="Transparent"
+                                                MouseLeftButtonUp="CommitLogEntry_MouseLeftButtonUp">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="Transparent" />
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
                                             <StackPanel>
                                                 <TextBlock TextWrapping="Wrap">
                                                     <Run Text="{Binding Revision, Mode=OneWay}" FontFamily="Consolas" FontWeight="SemiBold" />
