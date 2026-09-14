@@ -441,8 +441,17 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void SetActivePane(PaneViewModel pane)
     {
+        // 仕様書9.2章の同期はペイン切替時にのみ行う。既にアクティブなペインへの
+        // クリック（ファイル選択等）のたびに毎回呼ぶと、ターミナルへ同じ`cd`コマンドが
+        // 送られ続けてしまい、ユーザーが何もしていないのにターミナルへ入力が
+        // 表示されてしまう不具合があった。
+        var wasAlreadyActive = ReferenceEquals(ActiveTab?.ActivePane, pane);
         ActiveTab?.SetActivePane(pane);
-        TerminalHost.SyncCurrentDirectory(pane.CurrentPath);
+
+        if (!wasAlreadyActive)
+        {
+            TerminalHost.SyncCurrentDirectory(pane.CurrentPath);
+        }
     }
 
     private void ToggleTerminal()

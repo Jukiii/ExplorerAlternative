@@ -659,12 +659,18 @@ public partial class MainWindow : Window
         textBox.Focus();
     }
 
-    // ターミナル部分（出力欄を含む）をクリックしたときに入力欄へフォーカスする。
-    // 出力欄（TextBox）自身がクリック時に自分へフォーカスを奪う処理を持っているため、
-    // 同じ入力処理の中でFocus()を呼んでもすぐに上書きされてしまう。
-    // Dispatcher.BeginInvokeで、クリックの既定処理が完了した後に改めてフォーカスする。
+    // ターミナル部分をクリックしたときに入力欄へフォーカスする（すぐに入力できるように
+    // するため）。ただし出力欄（TerminalOutputTextBox）自体のクリックは、テキスト選択・
+    // コピーのための操作である場合があるため対象外とする。ここで無条件にフォーカスを
+    // 奪うと、出力欄でのドラッグ選択が毎回入力欄へのフォーカス移動によって
+    // キャンセルされてしまい、ターミナルの内容を選択・コピーできなくなる不具合があった。
     private void TerminalPanel_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (IsDescendantOf(e.OriginalSource as DependencyObject, TerminalOutputTextBox))
+        {
+            return;
+        }
+
         Dispatcher.BeginInvoke(new Action(() => TerminalInputTextBox.Focus()), DispatcherPriority.Input);
     }
 
