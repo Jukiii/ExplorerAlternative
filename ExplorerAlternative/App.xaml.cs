@@ -63,6 +63,7 @@ public partial class App : Application
         var globalHotkeyService = new GlobalHotkeyService();
         var jumpListService = new JumpListService();
         var projectDetectionService = new ProjectDetectionService();
+        var undoService = new UndoService();
         IFolderWatcherService FolderWatcherServiceFactory() => new FolderWatcherService();
 
         // 仕様書39章：`--workspace 名前` はジャンプリストからのワークスペース直接起動。
@@ -104,6 +105,7 @@ public partial class App : Application
             globalHotkeyService,
             jumpListService,
             projectDetectionService,
+            undoService,
             FolderWatcherServiceFactory,
             startupPath);
 

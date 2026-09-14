@@ -36,6 +36,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IGlobalHotkeyService _globalHotkeyService;
     private readonly IJumpListService _jumpListService;
     private readonly IProjectDetectionService _projectDetectionService;
+    private readonly IUndoService _undoService;
     private readonly Func<IFolderWatcherService> _folderWatcherServiceFactory;
 
     private TabViewModel? _activeTab;
@@ -67,6 +68,7 @@ public sealed class MainWindowViewModel : ObservableObject
         IGlobalHotkeyService globalHotkeyService,
         IJumpListService jumpListService,
         IProjectDetectionService projectDetectionService,
+        IUndoService undoService,
         Func<IFolderWatcherService> folderWatcherServiceFactory,
         string? startupPath = null)
     {
@@ -90,12 +92,19 @@ public sealed class MainWindowViewModel : ObservableObject
         _globalHotkeyService = globalHotkeyService;
         _jumpListService = jumpListService;
         _projectDetectionService = projectDetectionService;
+        _undoService = undoService;
         _folderWatcherServiceFactory = folderWatcherServiceFactory;
 
         NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, dialogService, NavigateActiveTo);
         NavigationPane.WorkspaceOpenRequested += name => LoadWorkspaceByName((Window)Application.Current!.MainWindow!, name);
         TerminalHost = new TerminalHostViewModel(terminalServiceFactory, settingsService.Current.Terminal.SyncByDefault);
 
+        UndoCommand = new RelayCommand(_ => Undo(), _ => _undoService.CanUndo);
+        _undoService.Changed += () =>
+        {
+            UndoCommand.RaiseCanExecuteChanged();
+            OnPropertyChanged(nameof(UndoMenuLabel));
+        };
         AddTabCommand = new RelayCommand(_ => AddTab(GetDefaultInitialPath()));
         CloseTabCommand = new RelayCommand(p => CloseTab((TabViewModel)p!), _ => Tabs.Count > 1);
         NextTabCommand = new RelayCommand(_ => ActivateNextTab(), _ => Tabs.Count > 1);
@@ -132,6 +141,15 @@ public sealed class MainWindowViewModel : ObservableObject
     public NavigationPaneViewModel NavigationPane { get; }
 
     public TerminalHostViewModel TerminalHost { get; }
+
+    /// <summary>仕様書62章「Undo」：直近のファイル操作（移動・コピー・名前変更・複製・新規作成・
+    /// ショートカット作成）を元に戻す。削除（ごみ箱送り）は対象外。</summary>
+    public RelayCommand UndoCommand { get; }
+
+    /// <summary>メニュー表示用：次にUndoされる操作の説明を含むラベル。</summary>
+    public string UndoMenuLabel => _undoService.NextUndoDescription is { } description
+        ? $"元に戻す: {description}"
+        : "元に戻す";
 
     public RelayCommand AddTabCommand { get; }
 
@@ -317,6 +335,18 @@ public sealed class MainWindowViewModel : ObservableObject
         ActiveTab = Tabs[(index + 1) % Tabs.Count];
     }
 
+    private void Undo()
+    {
+        try
+        {
+            _undoService.Undo();
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+    }
+
     private void NavigateActiveTo(string path)
     {
         ActiveTab?.ActivePane.NavigateTo(path);
@@ -356,6 +386,7 @@ public sealed class MainWindowViewModel : ObservableObject
             _versionControlOperationsService,
             _diffService,
             _projectDetectionService,
+            _undoService,
             _folderWatcherServiceFactory,
             initialPath,
             initialViewMode);

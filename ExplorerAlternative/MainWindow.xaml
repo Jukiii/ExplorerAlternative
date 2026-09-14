@@ -144,6 +144,8 @@
         <KeyBinding Key="F" Modifiers="Control" Command="{Binding DataContext.OpenSearchCommand, ElementName=RootWindow}" />
         <!-- Ctrl+D：選択したファイル・フォルダを複製する（お気に入り追加のショートカットは廃止）。 -->
         <KeyBinding Key="D" Modifiers="Control" Command="{Binding DataContext.ActiveTab.ActivePane.DuplicateSelectionCommand, ElementName=RootWindow}" />
+        <!-- 仕様書62章：Ctrl+Zでファイル操作を元に戻す（アプリ全体で1つの履歴を共有）。 -->
+        <KeyBinding Key="Z" Modifiers="Control" Command="{Binding DataContext.UndoCommand, ElementName=RootWindow}" />
         <!-- 仕様書46章：コマンドパレット。 -->
         <KeyBinding Key="P" Modifiers="Control+Shift" Command="{Binding DataContext.OpenCommandPaletteCommand, ElementName=RootWindow}" />
         <KeyBinding Key="F5" Command="{Binding DataContext.ActiveTab.ActivePane.RefreshCommand, ElementName=RootWindow}" />
@@ -176,6 +178,9 @@
             <DockPanel LastChildFill="True">
                 <Menu DockPanel.Dock="Right" Background="Transparent" VerticalAlignment="Center">
                     <MenuItem Header="☰ メニュー" Padding="8,6">
+                        <!-- 仕様書62章：直近のファイル操作を元に戻す。ラベルに対象操作の説明を表示する。 -->
+                        <MenuItem Header="{Binding UndoMenuLabel}" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z" />
+                        <Separator />
                         <MenuItem Header="お気に入りに追加" Command="{Binding AddFavoriteCommand}" />
                         <Separator />
                         <MenuItem Header="右に分割" Command="{Binding SplitHorizontalCommand}" />

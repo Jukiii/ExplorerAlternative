@@ -28,6 +28,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     private readonly IVersionControlOperationsService _versionControlOperationsService;
     private readonly IDiffService _diffService;
     private readonly IProjectDetectionService _projectDetectionService;
+    private readonly IUndoService _undoService;
     private readonly IFolderWatcherService _folderWatcherService;
     private readonly Stack<string> _backStack = new();
     private readonly Stack<string> _forwardStack = new();
@@ -63,6 +64,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         IVersionControlOperationsService versionControlOperationsService,
         IDiffService diffService,
         IProjectDetectionService projectDetectionService,
+        IUndoService undoService,
         Func<IFolderWatcherService> folderWatcherServiceFactory,
         string initialPath,
         ViewMode initialViewMode)
@@ -76,6 +78,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         _versionControlOperationsService = versionControlOperationsService;
         _diffService = diffService;
         _projectDetectionService = projectDetectionService;
+        _undoService = undoService;
         _folderWatcherService = folderWatcherServiceFactory();
         _folderWatcherService.Changed += OnFolderChangedExternally;
         _currentPath = initialPath;
@@ -1093,6 +1096,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         try
         {
             _fileSystemService.CreateDirectory(CurrentPath, name);
+            var createdPath = Path.Combine(CurrentPath, name);
+            _undoService.Record($"「{name}」の新規作成", () => _fileSystemService.Delete(new[] { createdPath }));
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
@@ -1113,6 +1118,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         try
         {
             _fileSystemService.CreateFile(CurrentPath, name);
+            var createdPath = Path.Combine(CurrentPath, name);
+            _undoService.Record($"「{name}」の新規作成", () => _fileSystemService.Delete(new[] { createdPath }));
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
@@ -1180,7 +1187,10 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
         try
         {
+            var oldName = target.Name;
+            var newPath = Path.Combine(Path.GetDirectoryName(target.FullPath) ?? CurrentPath, newName);
             _fileSystemService.Rename(target.FullPath, newName);
+            _undoService.Record($"「{oldName}」→「{newName}」の名前変更", () => _fileSystemService.Rename(newPath, oldName));
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
@@ -1189,6 +1199,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         }
     }
 
+    // 仕様書62章「Undo」：ごみ箱からの復元にはWindowsごみ箱APIとの連携（COM相互運用）が
+    // 必要になるため、削除はUndo対象外とする（ごみ箱から手動復元、またはWindows
+    // エクスプローラー自体のUndoで対応可能）。
     private void DeleteSelection()
     {
         if (SelectedNodes.Count == 0)
@@ -1262,10 +1275,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             if (isMove)
             {
                 _fileSystemService.Move(files, CurrentPath);
+                RecordMoveUndo(files, CurrentPath);
             }
             else
             {
                 _fileSystemService.Copy(files, CurrentPath);
+                RecordCopyUndo(files, CurrentPath);
             }
 
             RefreshCurrentFolder();
@@ -1274,6 +1289,40 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         {
             _dialogService.ShowError(ex.Message);
         }
+    }
+
+    // 仕様書62章「Undo」：移動は元の親フォルダへ戻す。選択項目が複数フォルダの階層に
+    // またがっている場合に備え、項目ごとに元の親フォルダを個別に記録する。
+    private void RecordMoveUndo(IReadOnlyList<string> sourcePaths, string destinationDirectory)
+    {
+        var items = sourcePaths
+            .Select(source => (
+                Destination: Path.Combine(destinationDirectory, Path.GetFileName(source)),
+                OriginalParent: Path.GetDirectoryName(source) ?? destinationDirectory))
+            .ToList();
+
+        var description = items.Count == 1
+            ? $"「{Path.GetFileName(items[0].Destination)}」の移動"
+            : $"{items.Count}件の移動";
+
+        _undoService.Record(description, () =>
+        {
+            foreach (var item in items)
+            {
+                _fileSystemService.Move(new[] { item.Destination }, item.OriginalParent);
+            }
+        });
+    }
+
+    private void RecordCopyUndo(IReadOnlyList<string> sourcePaths, string destinationDirectory)
+    {
+        var destinations = sourcePaths.Select(source => Path.Combine(destinationDirectory, Path.GetFileName(source))).ToList();
+
+        var description = destinations.Count == 1
+            ? $"「{Path.GetFileName(destinations[0])}」のコピー"
+            : $"{destinations.Count}件のコピー";
+
+        _undoService.Record(description, () => _fileSystemService.Delete(destinations));
     }
 
     private void DuplicateSelection()
@@ -1287,7 +1336,16 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
         try
         {
-            _fileSystemService.Duplicate(targets);
+            var created = _fileSystemService.Duplicate(targets);
+
+            if (created.Count > 0)
+            {
+                var description = created.Count == 1
+                    ? $"「{Path.GetFileName(created[0])}」の複製"
+                    : $"{created.Count}件の複製";
+                _undoService.Record(description, () => _fileSystemService.Delete(created));
+            }
+
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
@@ -1315,10 +1373,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             if (isMove)
             {
                 _fileSystemService.Move(targets, destinationFolder);
+                RecordMoveUndo(targets, destinationFolder);
             }
             else
             {
                 _fileSystemService.Copy(targets, destinationFolder);
+                RecordCopyUndo(targets, destinationFolder);
             }
 
             RefreshCurrentFolder();
@@ -1359,6 +1419,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var undoActions = new List<(string Name, Action Undo)>();
+
         try
         {
             foreach (var source in targets)
@@ -1366,21 +1428,27 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 var normalizedSource = Path.TrimEndingDirectorySeparator(source);
                 var normalizedDestination = Path.TrimEndingDirectorySeparator(destinationFolder);
                 var sourceParent = Path.GetDirectoryName(normalizedSource);
+                var fileName = Path.GetFileName(source);
 
                 if (string.Equals(sourceParent, normalizedDestination, StringComparison.OrdinalIgnoreCase))
                 {
-                    _fileSystemService.Duplicate(new[] { source });
+                    var created = _fileSystemService.Duplicate(new[] { source });
+                    if (created.Count > 0)
+                    {
+                        undoActions.Add((fileName, () => _fileSystemService.Delete(created)));
+                    }
+
                     continue;
                 }
 
-                var destinationPath = Path.Combine(destinationFolder, Path.GetFileName(source));
+                var destinationPath = Path.Combine(destinationFolder, fileName);
                 if (!Directory.Exists(destinationPath) && !File.Exists(destinationPath))
                 {
                     _fileSystemService.Copy(new[] { source }, destinationFolder);
+                    undoActions.Add((fileName, () => _fileSystemService.Delete(new[] { destinationPath })));
                     continue;
                 }
 
-                var fileName = Path.GetFileName(source);
                 var choice = _dialogService.SelectFromList(
                     "ファイルの競合",
                     $"「{fileName}」は移動先に既に存在します。どうしますか？",
@@ -1388,14 +1456,30 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
                 if (choice == "名前を変更してコピー（*_copy）")
                 {
-                    _fileSystemService.CopyRenamed(source, destinationFolder);
+                    var renamedPath = _fileSystemService.CopyRenamed(source, destinationFolder);
+                    undoActions.Add((fileName, () => _fileSystemService.Delete(new[] { renamedPath })));
                 }
                 else if (choice == "上書きする")
                 {
                     _fileSystemService.CopyReplacing(source, destinationFolder);
+                    // 上書きコピーは置き換え前の内容を保持しないためUndo対象外。
                 }
 
                 // それ以外（キャンセル・ダイアログを閉じた）は何もしない。
+            }
+
+            if (undoActions.Count > 0)
+            {
+                var description = undoActions.Count == 1
+                    ? $"「{undoActions[0].Name}」のコピー"
+                    : $"{undoActions.Count}件のコピー";
+                _undoService.Record(description, () =>
+                {
+                    foreach (var (_, undo) in undoActions)
+                    {
+                        undo();
+                    }
+                });
             }
 
             RefreshCurrentFolder();
@@ -1417,7 +1501,16 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
         try
         {
-            _fileSystemService.CreateShortcuts(targets, destinationFolder);
+            var created = _fileSystemService.CreateShortcuts(targets, destinationFolder);
+
+            if (created.Count > 0)
+            {
+                var description = created.Count == 1
+                    ? $"「{Path.GetFileName(created[0])}」のショートカット作成"
+                    : $"{created.Count}件のショートカット作成";
+                _undoService.Record(description, () => _fileSystemService.Delete(created));
+            }
+
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
@@ -1506,17 +1599,34 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     // パターン展開と検索/置換のどちらのモードでも、プレビューと実際の結果が食い違わないようにするため。
     public void BulkRename(IReadOnlyList<FileSystemNodeViewModel> targets, IReadOnlyList<BulkRenamePreviewItem> previewItems)
     {
+        var renamed = new List<(string NewPath, string OldName)>();
+
         for (var i = 0; i < targets.Count && i < previewItems.Count; i++)
         {
             try
             {
+                var oldName = targets[i].Name;
+                var newPath = Path.Combine(Path.GetDirectoryName(targets[i].FullPath) ?? CurrentPath, previewItems[i].NewName);
                 _fileSystemService.Rename(targets[i].FullPath, previewItems[i].NewName);
+                renamed.Add((newPath, oldName));
             }
             catch (AppOperationException ex)
             {
                 _dialogService.ShowError(ex.Message);
                 break;
             }
+        }
+
+        if (renamed.Count > 0)
+        {
+            var description = renamed.Count == 1 ? "1件の名前変更" : $"{renamed.Count}件の名前変更";
+            _undoService.Record(description, () =>
+            {
+                foreach (var (newPath, oldName) in renamed)
+                {
+                    _fileSystemService.Rename(newPath, oldName);
+                }
+            });
         }
 
         RefreshCurrentFolder();
