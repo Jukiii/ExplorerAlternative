@@ -514,6 +514,17 @@ OS / File System / PowerShell
 
 将来的な機能追加・テストが容易な構造にする。
 
+## 横スクロール対応（共通実装済み）
+
+横スクロールが存在する箇所（ナビ/VCSペイン、Log、フォルダ比較、Diff、Quick
+Lookプレビュー等）は、`TrackpadScrollSupport`（`ExplorerAlternative/TrackpadScrollSupport.cs`）
+により、トラックパッドの横スワイプと、通常ホイール＋Shift（Windows/Office等の
+慣習）の両方が自動的に有効になっている。`App.xaml.cs`起動時に
+`TrackpadScrollSupport.RegisterForAllWindows()`を1回呼び出すだけで、以降に
+開かれる全てのWindow（新規に追加するWindowも含む）へ自動適用される。新しい
+ウィンドウやScrollViewerを追加する際、個別に`WM_MOUSEHWHEEL`等をフックする
+実装を重複して書かないこと。
+
 ---
 
 # 27. エラーハンドリング
