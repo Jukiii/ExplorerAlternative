@@ -311,6 +311,10 @@ public sealed class VersionControlService : IVersionControlService
         }
     }
 
+    // 仕様書21章「ブランチ一覧」：ローカルブランチを先に、リモートブランチを後にまとめて
+    // 名前順に並べる。単純に`refname:short`の"/"有無で判定すると"feature/foo"のような
+    // "/"を含むローカルブランチ名を誤ってリモート扱いしてしまうため、完全な参照名
+    // （refs/heads/ か refs/remotes/ か）で判定する。
     public IReadOnlyList<string> GetBranches(VersionControlInfo vcsInfo)
     {
         if (vcsInfo.Kind != VersionControlKind.Git || vcsInfo.RootPath is null)
@@ -320,12 +324,45 @@ public sealed class VersionControlService : IVersionControlService
 
         try
         {
-            var output = RunCommand(vcsInfo.RootPath, "git", "branch -a --format=%(refname:short)");
-            return output
-                .Split('\n')
-                .Select(l => l.Trim())
-                .Where(l => l.Length > 0 && !l.Contains("->", StringComparison.Ordinal))
-                .Distinct()
+            var output = RunCommand(
+                vcsInfo.RootPath,
+                "git",
+                "for-each-ref --format=%(refname:short)%09%(refname) refs/heads refs/remotes");
+
+            var local = new List<string>();
+            var remote = new List<string>();
+
+            foreach (var line in output.Split('\n'))
+            {
+                var parts = line.Trim().Split('\t');
+                if (parts.Length != 2)
+                {
+                    continue;
+                }
+
+                var shortName = parts[0];
+                var fullRef = parts[1];
+
+                // "origin/HEAD"はorigin/mainなどへのシンボリック参照であり、
+                // チェックアウト/マージ対象の選択肢としては不要なので除外する。
+                if (fullRef.EndsWith("/HEAD", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (fullRef.StartsWith("refs/heads/", StringComparison.Ordinal))
+                {
+                    local.Add(shortName);
+                }
+                else if (fullRef.StartsWith("refs/remotes/", StringComparison.Ordinal))
+                {
+                    remote.Add(shortName);
+                }
+            }
+
+            return local.Distinct()
+                .OrderBy(b => b, StringComparer.OrdinalIgnoreCase)
+                .Concat(remote.Distinct().OrderBy(b => b, StringComparer.OrdinalIgnoreCase))
                 .ToList();
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
