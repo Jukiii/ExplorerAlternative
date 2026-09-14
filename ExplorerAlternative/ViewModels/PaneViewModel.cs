@@ -468,6 +468,15 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 ? _fileSystemService.GetDrives()
                 : _fileSystemService.GetChildren(path);
 
+            // 仕様書64章「既知の制限」：同じフォルダの再読み込み（F5・外部変更検知）の場合のみ、
+            // 選択状態・展開状態をパスで照合して復元する（別フォルダへの移動時は復元不要）。
+            Dictionary<string, NodeState>? previousState = null;
+            if (string.Equals(_currentPath, path, StringComparison.OrdinalIgnoreCase) && RootNodes.Count > 0)
+            {
+                previousState = new Dictionary<string, NodeState>(StringComparer.OrdinalIgnoreCase);
+                CollectNodeState(RootNodes, previousState);
+            }
+
             CurrentPath = path;
 
             var generation = ++_loadGeneration;
@@ -503,6 +512,11 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             foreach (var node in SortNodes(newNodes))
             {
                 RootNodes.Add(node);
+            }
+
+            if (previousState is not null)
+            {
+                ApplyNodeState(RootNodes, previousState);
             }
 
             RebuildVisibleNodes();
@@ -729,6 +743,52 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             if (node.IsDirectory && node.IsExpanded && node.Children is not null)
             {
                 CollectVisible(node.Children, result);
+            }
+        }
+    }
+
+    private readonly record struct NodeState(bool IsExpanded, bool IsSelected);
+
+    /// <summary>再読み込み前の選択・展開状態をフルパスで記録する（展開済みの子孫も再帰的に対象）。</summary>
+    private static void CollectNodeState(IEnumerable<FileSystemNodeViewModel> nodes, Dictionary<string, NodeState> result)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.IsExpanded || node.IsSelected)
+            {
+                result[node.FullPath] = new NodeState(node.IsExpanded, node.IsSelected);
+            }
+
+            if (node.Children is not null)
+            {
+                CollectNodeState(node.Children, result);
+            }
+        }
+    }
+
+    /// <summary>再読み込み後の新しいノードに、記録しておいた選択・展開状態をパス一致で復元する。</summary>
+    private static void ApplyNodeState(IEnumerable<FileSystemNodeViewModel> nodes, IReadOnlyDictionary<string, NodeState> previousState)
+    {
+        foreach (var node in nodes)
+        {
+            if (!previousState.TryGetValue(node.FullPath, out var state))
+            {
+                continue;
+            }
+
+            if (state.IsExpanded && node.IsDirectory)
+            {
+                node.IsExpanded = true;
+
+                if (node.Children is not null)
+                {
+                    ApplyNodeState(node.Children, previousState);
+                }
+            }
+
+            if (state.IsSelected)
+            {
+                node.IsSelected = true;
             }
         }
     }
