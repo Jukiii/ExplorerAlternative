@@ -51,6 +51,8 @@
             <!-- 仕様書25章：任意の2ファイル比較（Git管理外でも利用可能）。 -->
             <MenuItem Header="比較対象として保持" Command="{Binding HoldForComparisonCommand}" />
             <MenuItem Header="比較対象と比較" Command="{Binding CompareWithHeldCommand}" />
+            <!-- 2ファイル選択時のみ有効：保持→比較の2手順を省いて直接比較する。 -->
+            <MenuItem Header="選択した2ファイルを比較" Command="{Binding CompareSelectedCommand}" />
             <Separator />
             <!-- 仕様書6.2章：ファイル・フォルダへのタグ付与。チェック状態は選択の代表ノード
                  （PrimarySelectedNode）が持つタグから判定する。 -->

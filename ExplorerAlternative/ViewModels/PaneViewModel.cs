@@ -142,6 +142,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             _ => PrimarySelectedNode is { IsDirectory: false } node &&
                  _heldComparisonPath is not null &&
                  !string.Equals(_heldComparisonPath, node.FullPath, StringComparison.OrdinalIgnoreCase));
+        CompareSelectedCommand = new RelayCommand(
+            _ => CompareSelected(),
+            _ => SelectedNodes.Count == 2 && SelectedNodes.All(n => !n.IsDirectory));
 
         LoadPath(_currentPath);
     }
@@ -286,6 +289,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
     /// <summary>仕様書25章「比較対象と比較」。</summary>
     public RelayCommand CompareWithHeldCommand { get; }
+
+    /// <summary>ファイルを2つ選択している場合に、保持の手順を省いて直接比較する簡易コマンド。</summary>
+    public RelayCommand CompareSelectedCommand { get; }
 
     /// <summary>コンテキストメニューの「タグ」サブメニューに表示する、登録済みタグ一覧。</summary>
     public IReadOnlyList<TagDefinition> AvailableTags => _settingsService.Current.TagDefinitions;
@@ -1785,13 +1791,33 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
+        ShowFileDiff(_heldComparisonPath, target.FullPath, $"{Path.GetFileName(_heldComparisonPath)} ⇔ {target.Name}");
+    }
+
+    // 「比較対象として保持」→「比較対象と比較」の2手順を省き、ファイルを2つ選択した状態から
+    // 直接比較する（保持したパスは変更しない）。
+    private void CompareSelected()
+    {
+        if (SelectedNodes.Count != 2)
+        {
+            return;
+        }
+
+        var left = SelectedNodes[0];
+        var right = SelectedNodes[1];
+
+        ShowFileDiff(left.FullPath, right.FullPath, $"{left.Name} ⇔ {right.Name}");
+    }
+
+    private void ShowFileDiff(string leftPath, string rightPath, string title)
+    {
         string leftText;
         string rightText;
 
         try
         {
-            leftText = _fileSystemService.ReadTextPreview(_heldComparisonPath, 5_000_000, out _);
-            rightText = _fileSystemService.ReadTextPreview(target.FullPath, 5_000_000, out _);
+            leftText = _fileSystemService.ReadTextPreview(leftPath, 5_000_000, out _);
+            rightText = _fileSystemService.ReadTextPreview(rightPath, 5_000_000, out _);
         }
         catch (AppOperationException ex)
         {
@@ -1799,15 +1825,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var diffViewModel = DiffViewModel.Create(
-            $"{Path.GetFileName(_heldComparisonPath)} ⇔ {target.Name}",
-            _heldComparisonPath,
-            target.FullPath,
-            leftText,
-            rightText,
-            _diffService,
-            _dialogService);
-
+        var diffViewModel = DiffViewModel.Create(title, leftPath, rightPath, leftText, rightText, _diffService, _dialogService);
         _dialogService.ShowDiff(diffViewModel);
     }
 
