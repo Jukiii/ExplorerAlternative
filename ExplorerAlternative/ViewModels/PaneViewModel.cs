@@ -127,6 +127,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         InitRepositoryCommand = new RelayCommand(_ => InitRepository(), _ => VcsInfo.Kind == VersionControlKind.None);
         CloneRepositoryCommand = new RelayCommand(_ => CloneRepository());
         ShowDiffCommand = new RelayCommand(_ => ShowDiff(), _ => VcsInfo.Kind != VersionControlKind.None && PrimarySelectedNode is { IsDirectory: false });
+        ShowLogCommand = new RelayCommand(_ => ShowLog(null), _ => VcsInfo.Kind != VersionControlKind.None);
+        ShowCommitCommand = new RelayCommand(p => ShowLog(p as CommitLogEntry), _ => VcsInfo.Kind != VersionControlKind.None);
         GoToProjectRootCommand = new RelayCommand(_ => NavigateTo(CurrentProject!.RootPath), _ => CurrentProject is not null && CurrentProject.RootPath != CurrentPath);
         GoToSolutionRootCommand = new RelayCommand(_ => NavigateTo(_solutionRootPath!), _ => _solutionRootPath is not null && _solutionRootPath != CurrentPath);
         GoToGitRootCommand = new RelayCommand(_ => NavigateTo(VcsInfo.RootPath!), _ => VcsInfo.Kind != VersionControlKind.None && VcsInfo.RootPath is not null && VcsInfo.RootPath != CurrentPath);
@@ -265,6 +267,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
     /// <summary>仕様書23章「Show Diff」：選択ファイルをコミット済み内容と比較する。</summary>
     public RelayCommand ShowDiffCommand { get; }
+
+    /// <summary>仕様書21章「Log」：コミット履歴と変更内容（Show Commit）をまとめて閲覧するウィンドウを開く。</summary>
+    public RelayCommand ShowLogCommand { get; }
+
+    /// <summary>仕様書21章「Show Commit」：右ペインの簡易履歴から特定のコミットを選んで開く。</summary>
+    public RelayCommand ShowCommitCommand { get; }
 
     /// <summary>仕様書25章「比較対象として保持」。</summary>
     public RelayCommand HoldForComparisonCommand { get; }
@@ -1257,15 +1265,15 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         }
     }
 
-    public void BulkRename(IReadOnlyList<FileSystemNodeViewModel> targets, string pattern)
+    // プレビュー（BulkRenameViewModel.PreviewItems）で計算済みの新しい名前をそのまま使う。
+    // パターン展開と検索/置換のどちらのモードでも、プレビューと実際の結果が食い違わないようにするため。
+    public void BulkRename(IReadOnlyList<FileSystemNodeViewModel> targets, IReadOnlyList<BulkRenamePreviewItem> previewItems)
     {
-        for (var i = 0; i < targets.Count; i++)
+        for (var i = 0; i < targets.Count && i < previewItems.Count; i++)
         {
-            var newName = RenamePatternExpander.Expand(pattern, targets[i].Name, i);
-
             try
             {
-                _fileSystemService.Rename(targets[i].FullPath, newName);
+                _fileSystemService.Rename(targets[i].FullPath, previewItems[i].NewName);
             }
             catch (AppOperationException ex)
             {
@@ -1289,7 +1297,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
         if (_dialogService.ShowBulkRename(viewModel))
         {
-            BulkRename(targets, viewModel.Pattern);
+            BulkRename(targets, viewModel.PreviewItems.ToList());
         }
     }
 
@@ -1482,6 +1490,14 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         {
             _dialogService.ShowError(ex.Message);
         }
+    }
+
+    // 仕様書21章「Log」「Show Commit」：コミット履歴一覧と、選択コミットの変更内容を表示する。
+    private void ShowLog(CommitLogEntry? initialSelection)
+    {
+        var repoName = VcsInfo.RootPath is null ? string.Empty : Path.GetFileName(VcsInfo.RootPath.TrimEnd('\\', '/'));
+        var viewModel = new GitLogViewModel(_versionControlService, VcsInfo, $"Log - {repoName}", initialSelection);
+        _dialogService.ShowGitLog(viewModel);
     }
 
     // 仕様書23章「Show Diff」：選択ファイルのコミット済み内容と現在の内容を比較する。

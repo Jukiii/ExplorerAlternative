@@ -146,6 +146,34 @@ public partial class MainWindow : Window
     }
 
     // 仕様書11章：パンくずドロップダウンの左クリック＝パス全体を置換。
+    // 仕様書21章「Show Commit」：Git/SVN情報ペインの簡易コミット履歴をクリックすると、
+    // そのコミットを選択した状態でLogウィンドウ（変更内容つき）を開く。
+    private void CommitLogEntry_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: CommitLogEntry entry } element)
+        {
+            return;
+        }
+
+        var current = (DependencyObject)element;
+        while (current is not null)
+        {
+            if (current is FrameworkElement { DataContext: PaneViewModel pane })
+            {
+                if (pane.ShowCommitCommand.CanExecute(entry))
+                {
+                    pane.ShowCommitCommand.Execute(entry);
+                }
+
+                break;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        e.Handled = true;
+    }
+
     private void BreadcrumbDropdownItem_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: BreadcrumbDropdownItem item } && item.NavigateCommand.CanExecute(null))

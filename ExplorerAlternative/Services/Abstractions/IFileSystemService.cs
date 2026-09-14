@@ -40,4 +40,8 @@ public interface IFileSystemService
     void CreateShortcuts(IEnumerable<string> sourcePaths, string destinationDirectory);
 
     string ReadTextPreview(string filePath, int maxBytes, out bool truncated);
+
+    /// <summary>仕様書45章「フォルダ同期」：1ファイルを任意の完全パスへコピーする（既存があれば上書き）。
+    /// コピー先の親フォルダが存在しない場合は作成する。</summary>
+    void CopyFileTo(string sourceFullPath, string destinationFullPath);
 }

@@ -49,7 +49,9 @@ public partial class App : Application
         var patchService = new PatchService();
         var sshService = new SshService();
         var sshCredentialStore = new WindowsCredentialSshStore();
+        var sftpService = new SftpService();
         var folderScanService = new FolderScanService();
+        var folderCompareService = new FolderCompareService();
         var versionControlOperationsService = new VersionControlOperationsService();
         var diffService = new DiffService();
         var explorerIntegrationService = new ExplorerIntegrationService();
@@ -87,10 +89,12 @@ public partial class App : Application
             themeService,
             patchService,
             sshService,
+            sftpService,
             versionControlOperationsService,
             diffService,
             sshCredentialStore,
             folderScanService,
+            folderCompareService,
             explorerIntegrationService,
             trayIconService,
             globalHotkeyService,

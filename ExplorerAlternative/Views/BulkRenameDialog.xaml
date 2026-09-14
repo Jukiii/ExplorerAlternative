@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:ExplorerAlternative.ViewModels"
         Title="一括名前変更"
-        Height="480" Width="520"
+        Height="620" Width="620"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource WindowBackgroundBrush}"
         TextElement.Foreground="{DynamicResource TextPrimaryBrush}">
@@ -16,20 +16,101 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="新しい名前のパターンを入力してください。" Margin="0,0,0,4" />
-        <TextBlock Grid.Row="1"
-                   Text="{}{n} = 連番（1から）　{name} = 元の名前（拡張子を除く）　{ext} = 拡張子"
-                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,10" />
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+            <RadioButton GroupName="Mode" Content="パターン" Margin="0,0,16,0" VerticalAlignment="Center"
+                         IsChecked="{Binding Mode, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static vm:BulkRenameMode.Pattern}, Mode=OneWay}"
+                         Command="{Binding SetModeCommand}" CommandParameter="{x:Static vm:BulkRenameMode.Pattern}" />
+            <RadioButton GroupName="Mode" Content="検索と置換" VerticalAlignment="Center"
+                         IsChecked="{Binding Mode, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static vm:BulkRenameMode.FindReplace}, Mode=OneWay}"
+                         Command="{Binding SetModeCommand}" CommandParameter="{x:Static vm:BulkRenameMode.FindReplace}" />
+        </StackPanel>
 
-        <TextBox Grid.Row="2" Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}"
-                 Padding="6,4" Margin="0,0,0,10" />
+        <!-- パターンモード -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,10">
+            <StackPanel.Style>
+                <Style TargetType="StackPanel">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Mode}" Value="{x:Static vm:BulkRenameMode.Pattern}">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Style>
+            <TextBlock Text="新しい名前のパターンを入力してください。" Margin="0,0,0,4" />
+            <TextBlock Text="{}{n} = 連番（1から。{n:000}でゼロ埋め）　{name} = 元の名前　{ext} = 拡張子　{date} = 日付（{date:yyyyMMdd}で書式指定）"
+                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,8" TextWrapping="Wrap" />
+            <TextBox Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}" Padding="6,4" />
+        </StackPanel>
+
+        <!-- 検索と置換モード -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,10">
+            <StackPanel.Style>
+                <Style TargetType="StackPanel">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Mode}" Value="{x:Static vm:BulkRenameMode.FindReplace}">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Style>
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="検索文字列:" VerticalAlignment="Center" Margin="0,0,8,4" />
+                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding FindText, UpdateSourceTrigger=PropertyChanged}" Padding="6,4" Margin="0,0,0,4" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="置換文字列:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ReplaceText, UpdateSourceTrigger=PropertyChanged}" Padding="6,4" />
+            </Grid>
+            <StackPanel Orientation="Horizontal">
+                <CheckBox Content="正規表現を使用" Margin="0,0,16,0" IsChecked="{Binding UseRegex, Mode=TwoWay}" />
+                <CheckBox Content="大文字と小文字を区別" IsChecked="{Binding CaseSensitive, Mode=TwoWay}" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- 共通の追加変換 -->
+        <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,1,0,0" Padding="0,10,0,10" Margin="0,0,0,10">
+            <StackPanel>
+                <TextBlock Text="追加の変換（任意）" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <RadioButton GroupName="Case" Content="変換なし" Margin="0,0,12,0" VerticalAlignment="Center"
+                                 IsChecked="{Binding CaseConversion, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static vm:CaseConversionMode.None}, Mode=OneWay}"
+                                 Command="{Binding SetCaseConversionCommand}" CommandParameter="{x:Static vm:CaseConversionMode.None}" />
+                    <RadioButton GroupName="Case" Content="大文字に変換" Margin="0,0,12,0" VerticalAlignment="Center"
+                                 IsChecked="{Binding CaseConversion, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static vm:CaseConversionMode.UpperCase}, Mode=OneWay}"
+                                 Command="{Binding SetCaseConversionCommand}" CommandParameter="{x:Static vm:CaseConversionMode.UpperCase}" />
+                    <RadioButton GroupName="Case" Content="小文字に変換" VerticalAlignment="Center"
+                                 IsChecked="{Binding CaseConversion, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static vm:CaseConversionMode.LowerCase}, Mode=OneWay}"
+                                 Command="{Binding SetCaseConversionCommand}" CommandParameter="{x:Static vm:CaseConversionMode.LowerCase}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <RadioButton GroupName="Width" Content="変換なし" Margin="0,0,12,0" VerticalAlignment="Center"
+                                 IsChecked="{Binding WidthConversion, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static vm:WidthConversionMode.None}, Mode=OneWay}"
+                                 Command="{Binding SetWidthConversionCommand}" CommandParameter="{x:Static vm:WidthConversionMode.None}" />
+                    <RadioButton GroupName="Width" Content="半角に変換" Margin="0,0,12,0" VerticalAlignment="Center"
+                                 IsChecked="{Binding WidthConversion, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static vm:WidthConversionMode.ToHalfWidth}, Mode=OneWay}"
+                                 Command="{Binding SetWidthConversionCommand}" CommandParameter="{x:Static vm:WidthConversionMode.ToHalfWidth}" />
+                    <RadioButton GroupName="Width" Content="全角に変換" VerticalAlignment="Center"
+                                 IsChecked="{Binding WidthConversion, Converter={StaticResource EnumEqualsConverter}, ConverterParameter={x:Static vm:WidthConversionMode.ToFullWidth}, Mode=OneWay}"
+                                 Command="{Binding SetWidthConversionCommand}" CommandParameter="{x:Static vm:WidthConversionMode.ToFullWidth}" />
+                </StackPanel>
+                <CheckBox Content="Unicode正規化（NFKC）を適用" IsChecked="{Binding NormalizeUnicode, Mode=TwoWay}" />
+            </StackPanel>
+        </Border>
 
         <Border Grid.Row="3" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1">
             <ListView ItemsSource="{Binding PreviewItems}" BorderThickness="0">
                 <ListView.View>
                     <GridView>
-                        <GridViewColumn Header="現在の名前" Width="220" DisplayMemberBinding="{Binding OriginalName}" />
-                        <GridViewColumn Header="変更後の名前" Width="220" DisplayMemberBinding="{Binding NewName}" />
+                        <GridViewColumn Header="現在の名前" Width="270" DisplayMemberBinding="{Binding OriginalName}" />
+                        <GridViewColumn Header="変更後の名前" Width="270" DisplayMemberBinding="{Binding NewName}" />
                     </GridView>
                 </ListView.View>
             </ListView>

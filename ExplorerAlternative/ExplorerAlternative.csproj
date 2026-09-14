@@ -26,4 +26,11 @@
     <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
+  <!-- 仕様書44章「SFTPリモートファイル操作」用。sshコマンド自体は引き続きssh.exe（OpenSSH）へ
+       委譲するが、SFTPはファイル一覧取得・転送を対話プロンプトなしで行う必要があるため、
+       プログラムから直接扱えるSSH.NETライブラリを使用する。 -->
+  <ItemGroup>
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
+  </ItemGroup>
+
 </Project>

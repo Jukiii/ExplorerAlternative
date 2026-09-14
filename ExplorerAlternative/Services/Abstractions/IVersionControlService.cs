@@ -24,4 +24,8 @@ public interface IVersionControlService
 
     /// <summary>仕様書21章「Log」：直近のコミット履歴を新しい順に返す。管理外の場合は空。</summary>
     IReadOnlyList<CommitLogEntry> GetCommitLog(VersionControlInfo vcsInfo, int maxCount);
+
+    /// <summary>仕様書21章「Show Commit」：指定したコミット/リビジョンの変更内容（diff形式）を返す。
+    /// 取得できない場合は空文字列。</summary>
+    string GetCommitDiff(VersionControlInfo vcsInfo, string revision);
 }

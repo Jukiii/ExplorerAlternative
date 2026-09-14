@@ -353,6 +353,28 @@ public sealed class VersionControlService : IVersionControlService
         }
     }
 
+    public string GetCommitDiff(VersionControlInfo vcsInfo, string revision)
+    {
+        if (vcsInfo.Kind == VersionControlKind.None || vcsInfo.RootPath is null || string.IsNullOrWhiteSpace(revision))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var (output, success) = vcsInfo.Kind == VersionControlKind.Git
+                ? RunCommandAllowFailure(vcsInfo.RootPath, "git", $"show {revision}")
+                : RunCommandAllowFailure(vcsInfo.RootPath, "svn", $"diff -c {revision}");
+
+            return success ? output : string.Empty;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            // 27章：git/svnが見つからない等でクラッシュさせない。
+            return string.Empty;
+        }
+    }
+
     private static IReadOnlyList<CommitLogEntry> GetGitCommitLog(string root, int maxCount)
     {
         // \x1f（フィールド区切り）はコミットメッセージ中に出現しない制御文字のため、
