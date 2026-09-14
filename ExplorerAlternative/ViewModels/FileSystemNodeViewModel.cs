@@ -107,6 +107,13 @@ public sealed class FileSystemNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(TagsDisplay));
     }
 
+    /// <summary>VCSステータスをバックグラウンドで取得し終えた後、表示を更新するために呼び出す。</summary>
+    public void RefreshVcsStatus()
+    {
+        OnPropertyChanged(nameof(VcsStatus));
+        OnPropertyChanged(nameof(HasVcsStatus));
+    }
+
     public bool IsExpanded
     {
         get => _isExpanded;

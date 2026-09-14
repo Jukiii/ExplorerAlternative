@@ -49,6 +49,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     private ProjectInfo? _currentProject;
     private string? _solutionRootPath;
     private string? _lastCommitLogRoot;
+    private int _loadGeneration;
 
     public PaneViewModel(
         IFileSystemService fileSystemService,
@@ -355,17 +356,6 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     /// <summary>仕様書21章「Log」：直近のコミット履歴（新しい順）。</summary>
     public ObservableCollection<CommitLogEntry> CommitLog { get; } = new();
 
-    private void RefreshCommitLog()
-    {
-        CommitLog.Clear();
-        _lastCommitLogRoot = VcsInfo.RootPath;
-
-        foreach (var entry in _versionControlService.GetCommitLog(VcsInfo, maxCount: 20))
-        {
-            CommitLog.Add(entry);
-        }
-    }
-
     /// <summary>仕様書54章：現在パスまたはその祖先で検出されたプロジェクト。</summary>
     public ProjectInfo? CurrentProject
     {
@@ -463,33 +453,28 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
             CurrentPath = path;
 
-            VcsInfo = IsPathComputerRoot(path) ? VersionControlInfo.None : _versionControlService.Detect(path);
-            _vcsStatusByPath = _versionControlService.GetFileStatuses(VcsInfo);
-            _folderWatcherService.SetPath(IsPathComputerRoot(path) ? null : path);
+            var generation = ++_loadGeneration;
+            var isComputerRoot = IsPathComputerRoot(path);
 
-            // 仕様書21章「Log」：VCSルートが変わった場合のみ取得し直す（同じリポジトリ内の
-            // フォルダ移動のたびにgit/svnプロセスを起動しないようにするため）。
-            if (VcsInfo.Kind != VersionControlKind.None && VcsInfo.RootPath != _lastCommitLogRoot)
-            {
-                RefreshCommitLog();
-            }
-            else if (VcsInfo.Kind == VersionControlKind.None && _lastCommitLogRoot is not null)
+            // VCS種別の判定自体はファイルの存在確認のみで軽量なため同期で行う。ただし
+            // git/svnプロセスを起動するステータス取得・コミットログ取得、および複数階層を
+            // walkするプロジェクト検出は重く、フォルダ移動のたびにUIスレッドを固まらせて
+            // いたため、以下でLoadVcsAndProjectInfoAsyncへ逃がして非同期に取得する。
+            VcsInfo = isComputerRoot ? VersionControlInfo.None : _versionControlService.Detect(path);
+            _folderWatcherService.SetPath(isComputerRoot ? null : path);
+            _vcsStatusByPath = new Dictionary<string, string>();
+
+            if (VcsInfo.Kind == VersionControlKind.None && _lastCommitLogRoot is not null)
             {
                 CommitLog.Clear();
                 _lastCommitLogRoot = null;
             }
 
-            var previousProjectRoot = CurrentProject?.RootPath;
-            CurrentProject = IsPathComputerRoot(path) ? null : _projectDetectionService.Detect(path);
-            _solutionRootPath = IsPathComputerRoot(path) ? null : _projectDetectionService.FindSolutionRoot(path);
+            CurrentProject = null;
+            _solutionRootPath = null;
             GoToProjectRootCommand.RaiseCanExecuteChanged();
             GoToSolutionRootCommand.RaiseCanExecuteChanged();
             GoToGitRootCommand.RaiseCanExecuteChanged();
-
-            if (CurrentProject is not null && CurrentProject.RootPath != previousProjectRoot)
-            {
-                ProjectDetected?.Invoke(CurrentProject);
-            }
 
             RootNodes.Clear();
 
@@ -522,10 +507,77 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             InitRepositoryCommand.RaiseCanExecuteChanged();
 
             PathChanged?.Invoke(path);
+
+            if (!isComputerRoot)
+            {
+                LoadVcsAndProjectInfoAsync(path, VcsInfo, generation);
+            }
         }
         catch (AppOperationException ex)
         {
             _dialogService.ShowError(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// git/svnプロセスを起動するステータス取得・コミットログ取得と、複数階層をwalkする
+    /// プロジェクト検出をバックグラウンドスレッドで行う。完了時点で既に別のフォルダへ
+    /// 移動済み（generationが不一致）の場合は結果を破棄する。
+    /// </summary>
+    private void LoadVcsAndProjectInfoAsync(string path, VersionControlInfo vcsInfo, int generation)
+    {
+        var needsCommitLog = vcsInfo.Kind != VersionControlKind.None && vcsInfo.RootPath != _lastCommitLogRoot;
+
+        Task.Run(() =>
+        {
+            var statuses = vcsInfo.Kind != VersionControlKind.None
+                ? _versionControlService.GetFileStatuses(vcsInfo)
+                : new Dictionary<string, string>();
+            var commitLogEntries = needsCommitLog
+                ? _versionControlService.GetCommitLog(vcsInfo, maxCount: 20)
+                : null;
+            var project = _projectDetectionService.Detect(path);
+            var solutionRoot = _projectDetectionService.FindSolutionRoot(path);
+
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (_isDisposed || generation != _loadGeneration)
+                {
+                    return;
+                }
+
+                _vcsStatusByPath = statuses;
+                RefreshVisibleVcsStatusDisplay();
+
+                if (commitLogEntries is not null)
+                {
+                    CommitLog.Clear();
+                    _lastCommitLogRoot = vcsInfo.RootPath;
+                    foreach (var entry in commitLogEntries)
+                    {
+                        CommitLog.Add(entry);
+                    }
+                }
+
+                var previousProjectRoot = CurrentProject?.RootPath;
+                CurrentProject = project;
+                _solutionRootPath = solutionRoot;
+                GoToProjectRootCommand.RaiseCanExecuteChanged();
+                GoToSolutionRootCommand.RaiseCanExecuteChanged();
+
+                if (CurrentProject is not null && CurrentProject.RootPath != previousProjectRoot)
+                {
+                    ProjectDetected?.Invoke(CurrentProject);
+                }
+            }));
+        });
+    }
+
+    private void RefreshVisibleVcsStatusDisplay()
+    {
+        foreach (var node in VisibleNodes)
+        {
+            node.RefreshVcsStatus();
         }
     }
 
