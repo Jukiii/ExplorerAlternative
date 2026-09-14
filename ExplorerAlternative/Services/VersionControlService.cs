@@ -195,7 +195,8 @@ public sealed class VersionControlService : IVersionControlService
             // 削れて列がずれてしまう。ここでは列位置が壊れないRunCommandAllowFailure()を使う。
             if (vcsInfo.Kind == VersionControlKind.Git)
             {
-                var (output, _) = RunCommandAllowFailure(vcsInfo.RootPath, "git", "status --porcelain");
+                // core.quotepath=false: 日本語ファイル名等が8進数エスケープされて文字化けするのを防ぐ。
+                var (output, _) = RunCommandAllowFailure(vcsInfo.RootPath, "git", "-c core.quotepath=false status --porcelain");
                 ParseGitStatus(vcsInfo.RootPath, output, result);
             }
             else
@@ -362,8 +363,11 @@ public sealed class VersionControlService : IVersionControlService
 
         try
         {
+            // core.quotepath=false: 既定では非ASCII文字（日本語ファイル名等）を含むパスを
+            // \344\273\225... のような8進数エスケープ表記にしてしまい文字化けして見えるため、
+            // 明示的に無効化してそのままのUTF-8文字で出力させる。
             var (output, success) = vcsInfo.Kind == VersionControlKind.Git
-                ? RunCommandAllowFailure(vcsInfo.RootPath, "git", $"show {revision}")
+                ? RunCommandAllowFailure(vcsInfo.RootPath, "git", $"-c core.quotepath=false show {revision}")
                 : RunCommandAllowFailure(vcsInfo.RootPath, "svn", $"diff -c {revision}");
 
             return success ? output : string.Empty;

@@ -5,7 +5,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ExplorerAlternative.Models;
@@ -18,11 +17,6 @@ public partial class MainWindow : Window
     private static readonly string SourcePaneFormat = "ExplorerAlternative.SourcePane";
     private static readonly string FavoriteReorderFormat = "ExplorerAlternative.FavoriteEntry";
 
-    // トラックパッドの横スワイプはWM_MOUSEHWHEELとしてOSから送られてくるが、WPFの
-    // ScrollViewerは既定でこれをハンドリングしない（縦方向のWM_MOUSEWHEELのみ対応）ため、
-    // ウィンドウメッセージを直接フックしてカーソル位置直下のScrollViewerへ手動で反映する。
-    private const int WM_MOUSEHWHEEL = 0x020E;
-
     private Point? _tabDragStartPoint;
     private bool _tabDragDuplicated;
     private Point? _fileDragStartPoint;
@@ -34,65 +28,6 @@ public partial class MainWindow : Window
         InitializeComponent();
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         Closing += MainWindow_Closing;
-        SourceInitialized += MainWindow_SourceInitialized;
-    }
-
-    private void MainWindow_SourceInitialized(object? sender, EventArgs e)
-    {
-        if (PresentationSource.FromVisual(this) is HwndSource source)
-        {
-            source.AddHook(HorizontalScrollWndProc);
-        }
-    }
-
-    private IntPtr HorizontalScrollWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        if (msg != WM_MOUSEHWHEEL)
-        {
-            return IntPtr.Zero;
-        }
-
-        var delta = unchecked((short)((wParam.ToInt64() >> 16) & 0xFFFF));
-        var screenX = unchecked((short)(lParam.ToInt64() & 0xFFFF));
-        var screenY = unchecked((short)((lParam.ToInt64() >> 16) & 0xFFFF));
-
-        var point = PointFromScreen(new Point(screenX, screenY));
-        var scrollViewer = FindScrollViewerAt(point);
-        if (scrollViewer is null)
-        {
-            return IntPtr.Zero;
-        }
-
-        scrollViewer.ScrollToHorizontalOffset(scrollViewer.HorizontalOffset + delta / 3.0);
-        handled = true;
-        return IntPtr.Zero;
-    }
-
-    // カーソル直下から祖先方向へScrollViewerを探す際、最初に見つかったものをそのまま
-    // 使うと、ナビゲーションペイン内のListBoxが持つ内部ScrollViewer（既定では横スクロール
-    // 無効）に当たってしまい、ペイン全体を横スクロールさせたいケース（ペインをGridSplitter
-    // で狭めた場合）で何も起きなくなる。横方向に実際にスクロール可能な最も内側の
-    // ScrollViewerを優先し、見つからなければ最初に見つかったものにフォールバックする。
-    private ScrollViewer? FindScrollViewerAt(Point point)
-    {
-        var hit = VisualTreeHelper.HitTest(this, point)?.VisualHit;
-        ScrollViewer? fallback = null;
-        while (hit is not null)
-        {
-            if (hit is ScrollViewer scrollViewer)
-            {
-                if (scrollViewer.ScrollableWidth > 0)
-                {
-                    return scrollViewer;
-                }
-
-                fallback ??= scrollViewer;
-            }
-
-            hit = VisualTreeHelper.GetParent(hit);
-        }
-
-        return fallback;
     }
 
     // 仕様書40章：システムトレイに常駐中は、ウィンドウを閉じてもアプリを終了せずトレイへ格納する。

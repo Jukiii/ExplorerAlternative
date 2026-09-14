@@ -40,6 +40,10 @@ public partial class App : Application
                 }
             }));
 
+        // 仕様書4章：トラックパッドの横スワイプによる水平スクロールを、MainWindowだけでなく
+        // Log/フォルダ比較/SFTPブラウザ等、以降に開かれる全てのWindowで有効にする。
+        TrackpadScrollSupport.RegisterForAllWindows();
+
         IPowerShellTerminalService TerminalServiceFactory() =>
             new PowerShellTerminalService(
                 settingsService.Current.Terminal.ShellExecutable,
