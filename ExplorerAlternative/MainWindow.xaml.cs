@@ -204,31 +204,78 @@ public partial class MainWindow : Window
     }
 
     // 仕様書7章：階層表示のみ →(展開)/←(折りたたみ) に対応。
+    // ←は、選択中がすでに折りたたみ済み/ファイルの場合は親フォルダを選択し、
+    // 展開中のフォルダを選択している場合はそのフォルダを折りたたむ（Windows標準ツリーの挙動）。
     private void TreeListBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         NodeListBox_PreviewKeyDown(sender, e);
 
-        if (e.Handled || sender is not FrameworkElement element || element.DataContext is not PaneViewModel pane)
+        if (e.Handled || sender is not ListBox listBox || listBox.DataContext is not PaneViewModel pane)
         {
             return;
         }
 
         var node = pane.PrimarySelectedNode;
-        if (node is null || !node.IsDirectory)
+        if (node is null)
         {
             return;
         }
 
-        if (e.Key == Key.Right && !node.IsExpanded)
+        if (e.Key == Key.Right && node.IsDirectory && !node.IsExpanded)
         {
             node.IsExpanded = true;
             e.Handled = true;
         }
-        else if (e.Key == Key.Left && node.IsExpanded)
+        else if (e.Key == Key.Left)
         {
-            node.IsExpanded = false;
-            e.Handled = true;
+            if (node.IsDirectory && node.IsExpanded)
+            {
+                node.IsExpanded = false;
+                e.Handled = true;
+            }
+            else
+            {
+                var parent = FindParentNode(pane.VisibleNodes, node);
+                if (parent is not null)
+                {
+                    SelectTreeNode(listBox, parent);
+                    e.Handled = true;
+                }
+            }
         }
+    }
+
+    private static FileSystemNodeViewModel? FindParentNode(IList<FileSystemNodeViewModel> visibleNodes, FileSystemNodeViewModel node)
+    {
+        var index = visibleNodes.IndexOf(node);
+        if (index < 0)
+        {
+            return null;
+        }
+
+        for (var i = index - 1; i >= 0; i--)
+        {
+            if (visibleNodes[i].Depth == node.Depth - 1)
+            {
+                return visibleNodes[i];
+            }
+        }
+
+        return null;
+    }
+
+    private static void SelectTreeNode(ListBox listBox, FileSystemNodeViewModel node)
+    {
+        listBox.SelectedItem = node;
+        listBox.ScrollIntoView(node);
+
+        listBox.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (listBox.ItemContainerGenerator.ContainerFromItem(node) is ListBoxItem container)
+            {
+                container.Focus();
+            }
+        }), DispatcherPriority.ContextIdle);
     }
 
     // 仕様書20章：ファイル/フォルダのドラッグ&ドロップによる移動・コピー。
