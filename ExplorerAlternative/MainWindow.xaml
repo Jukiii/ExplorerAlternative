@@ -736,14 +736,19 @@
                                         <ListView.View>
                                             <GridView>
                                                 <GridView.ColumnHeaderContainerStyle>
+                                                    <!-- 列ヘッダーをクリックすると、その列を基準に並び替える（コードビハインドでDisplayMemberBindingから列を判定）。 -->
                                                     <Style TargetType="GridViewColumnHeader">
                                                         <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
                                                         <Setter Property="Padding" Value="6,6" />
                                                         <Setter Property="HorizontalContentAlignment" Value="Left" />
                                                         <Setter Property="FontWeight" Value="SemiBold" />
+                                                        <EventSetter Event="Click" Handler="GridViewColumnHeader_Click" />
                                                     </Style>
                                                 </GridView.ColumnHeaderContainerStyle>
-                                                <GridViewColumn Header="名前" Width="260">
+                                                <GridViewColumn Width="260">
+                                                    <GridViewColumn.Header>
+                                                        <TextBlock Text="{Binding SortIndicatorName, StringFormat=名前{0}}" />
+                                                    </GridViewColumn.Header>
                                                     <GridViewColumn.CellTemplate>
                                                         <DataTemplate DataType="{x:Type vm:FileSystemNodeViewModel}">
                                                             <StackPanel Orientation="Horizontal">
@@ -753,9 +758,21 @@
                                                         </DataTemplate>
                                                     </GridViewColumn.CellTemplate>
                                                 </GridViewColumn>
-                                                <GridViewColumn Header="サイズ" Width="90" DisplayMemberBinding="{Binding SizeDisplay}" />
-                                                <GridViewColumn Header="更新日時" Width="140" DisplayMemberBinding="{Binding LastModifiedDisplay}" />
-                                                <GridViewColumn Header="種類" Width="110" DisplayMemberBinding="{Binding KindDisplay}" />
+                                                <GridViewColumn Width="90" DisplayMemberBinding="{Binding SizeDisplay}">
+                                                    <GridViewColumn.Header>
+                                                        <TextBlock Text="{Binding SortIndicatorSize, StringFormat=サイズ{0}}" />
+                                                    </GridViewColumn.Header>
+                                                </GridViewColumn>
+                                                <GridViewColumn Width="140" DisplayMemberBinding="{Binding LastModifiedDisplay}">
+                                                    <GridViewColumn.Header>
+                                                        <TextBlock Text="{Binding SortIndicatorLastModified, StringFormat=更新日時{0}}" />
+                                                    </GridViewColumn.Header>
+                                                </GridViewColumn>
+                                                <GridViewColumn Width="110" DisplayMemberBinding="{Binding KindDisplay}">
+                                                    <GridViewColumn.Header>
+                                                        <TextBlock Text="{Binding SortIndicatorKind, StringFormat=種類{0}}" />
+                                                    </GridViewColumn.Header>
+                                                </GridViewColumn>
                                                 <GridViewColumn Header="タグ" Width="140" DisplayMemberBinding="{Binding TagsDisplay}" />
                                             </GridView>
                                         </ListView.View>
