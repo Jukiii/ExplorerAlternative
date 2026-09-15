@@ -53,6 +53,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     private int _loadGeneration;
     private string _sortColumn = "Name";
     private bool _sortAscending = true;
+    private bool _suppressNodeToggleRebuild;
 
     public PaneViewModel(
         IFileSystemService fileSystemService,
@@ -525,7 +526,18 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
             if (previousState is not null)
             {
-                ApplyNodeState(RootNodes, previousState);
+                // 展開状態の復元中は、展開済みフォルダ1件ごとにOnNodeToggledが表示リスト全体を
+                // 再構築してしまうと、展開済みフォルダ数が多い場合に再構築が連鎖してフリーズ
+                // したように見える不具合があったため、復元完了後に1回だけ再構築する。
+                _suppressNodeToggleRebuild = true;
+                try
+                {
+                    ApplyNodeState(RootNodes, previousState);
+                }
+                finally
+                {
+                    _suppressNodeToggleRebuild = false;
+                }
             }
 
             RebuildVisibleNodes();
@@ -706,6 +718,11 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     /// </summary>
     private void OnNodeToggled(FileSystemNodeViewModel node)
     {
+        if (_suppressNodeToggleRebuild)
+        {
+            return;
+        }
+
         var index = VisibleNodes.IndexOf(node);
         if (index < 0)
         {
