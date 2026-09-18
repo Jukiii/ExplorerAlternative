@@ -71,4 +71,7 @@ public interface IDialogService
 
     /// <summary>操作履歴ダイアログ（仕様書30章「GUI Undo履歴」）を非モーダルで表示する。</summary>
     void ShowUndoHistory(UndoHistoryViewModel undoHistoryViewModel);
+
+    /// <summary>ファイル操作履歴ダイアログ（仕様書31章）を非モーダルで表示する。</summary>
+    void ShowFileOperationHistory(FileOperationHistoryViewModel fileOperationHistoryViewModel);
 }

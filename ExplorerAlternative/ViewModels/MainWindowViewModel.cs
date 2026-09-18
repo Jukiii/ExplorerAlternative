@@ -37,6 +37,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IJumpListService _jumpListService;
     private readonly IProjectDetectionService _projectDetectionService;
     private readonly IUndoService _undoService;
+    private readonly IFileOperationHistoryService _fileOperationHistoryService;
     private readonly Func<IFolderWatcherService> _folderWatcherServiceFactory;
 
     private TabViewModel? _activeTab;
@@ -69,6 +70,7 @@ public sealed class MainWindowViewModel : ObservableObject
         IJumpListService jumpListService,
         IProjectDetectionService projectDetectionService,
         IUndoService undoService,
+        IFileOperationHistoryService fileOperationHistoryService,
         Func<IFolderWatcherService> folderWatcherServiceFactory,
         string? startupPath = null)
     {
@@ -93,6 +95,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _jumpListService = jumpListService;
         _projectDetectionService = projectDetectionService;
         _undoService = undoService;
+        _fileOperationHistoryService = fileOperationHistoryService;
         _folderWatcherServiceFactory = folderWatcherServiceFactory;
 
         NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, dialogService, NavigateActiveTo);
@@ -101,6 +104,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         UndoCommand = new RelayCommand(_ => Undo(), _ => _undoService.CanUndo);
         OpenUndoHistoryCommand = new RelayCommand(_ => OpenUndoHistory());
+        OpenFileOperationHistoryCommand = new RelayCommand(_ => OpenFileOperationHistory());
         _undoService.Changed += () =>
         {
             UndoCommand.RaiseCanExecuteChanged();
@@ -149,6 +153,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     /// <summary>仕様書30章「GUI Undo履歴」：操作履歴一覧ダイアログを開く。</summary>
     public RelayCommand OpenUndoHistoryCommand { get; }
+
+    /// <summary>仕様書31章「ファイル操作履歴」：永続化された操作履歴一覧ダイアログを開く。</summary>
+    public RelayCommand OpenFileOperationHistoryCommand { get; }
 
     /// <summary>メニュー表示用：次にUndoされる操作の説明を含むラベル。</summary>
     public string UndoMenuLabel => _undoService.NextUndoDescription is { } description
@@ -356,6 +363,11 @@ public sealed class MainWindowViewModel : ObservableObject
         _dialogService.ShowUndoHistory(new UndoHistoryViewModel(_undoService, _dialogService));
     }
 
+    private void OpenFileOperationHistory()
+    {
+        _dialogService.ShowFileOperationHistory(new FileOperationHistoryViewModel(_fileOperationHistoryService, _dialogService));
+    }
+
     private void NavigateActiveTo(string path)
     {
         ActiveTab?.ActivePane.NavigateTo(path);
@@ -396,6 +408,7 @@ public sealed class MainWindowViewModel : ObservableObject
             _diffService,
             _projectDetectionService,
             _undoService,
+            _fileOperationHistoryService,
             _folderWatcherServiceFactory,
             initialPath,
             initialViewMode);

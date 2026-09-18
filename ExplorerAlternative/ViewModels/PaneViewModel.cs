@@ -29,6 +29,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     private readonly IDiffService _diffService;
     private readonly IProjectDetectionService _projectDetectionService;
     private readonly IUndoService _undoService;
+    private readonly IFileOperationHistoryService _fileOperationHistoryService;
     private readonly IFolderWatcherService _folderWatcherService;
     private readonly Stack<string> _backStack = new();
     private readonly Stack<string> _forwardStack = new();
@@ -66,6 +67,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         IDiffService diffService,
         IProjectDetectionService projectDetectionService,
         IUndoService undoService,
+        IFileOperationHistoryService fileOperationHistoryService,
         Func<IFolderWatcherService> folderWatcherServiceFactory,
         string initialPath,
         ViewMode initialViewMode)
@@ -80,6 +82,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         _diffService = diffService;
         _projectDetectionService = projectDetectionService;
         _undoService = undoService;
+        _fileOperationHistoryService = fileOperationHistoryService;
         _folderWatcherService = folderWatcherServiceFactory();
         _folderWatcherService.Changed += OnFolderChangedExternally;
         _currentPath = initialPath;
@@ -1115,10 +1118,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             _fileSystemService.CreateDirectory(CurrentPath, name);
             var createdPath = Path.Combine(CurrentPath, name);
             _undoService.Record($"「{name}」の新規作成", () => _fileSystemService.Delete(new[] { createdPath }));
+            LogHistory("新規作成", name, destination: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("新規作成", name, destination: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1137,10 +1142,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             _fileSystemService.CreateFile(CurrentPath, name);
             var createdPath = Path.Combine(CurrentPath, name);
             _undoService.Record($"「{name}」の新規作成", () => _fileSystemService.Delete(new[] { createdPath }));
+            LogHistory("新規作成", name, destination: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("新規作成", name, destination: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1205,13 +1212,16 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         try
         {
             var oldName = target.Name;
-            var newPath = Path.Combine(Path.GetDirectoryName(target.FullPath) ?? CurrentPath, newName);
+            var oldParent = Path.GetDirectoryName(target.FullPath) ?? CurrentPath;
+            var newPath = Path.Combine(oldParent, newName);
             _fileSystemService.Rename(target.FullPath, newName);
             _undoService.Record($"「{oldName}」→「{newName}」の名前変更", () => _fileSystemService.Rename(newPath, oldName));
+            LogHistory("名前変更", oldName, originalLocation: oldParent, destination: newName);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("名前変更", target.Name, originalLocation: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1231,13 +1241,18 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var targetPaths = SelectedNodes.Select(n => n.FullPath).ToList();
+        var target = targetPaths.Count == 1 ? Path.GetFileName(targetPaths[0]) : $"{targetPaths.Count}件";
+
         try
         {
-            _fileSystemService.Delete(SelectedNodes.Select(n => n.FullPath));
+            _fileSystemService.Delete(targetPaths);
+            LogHistory("削除", target, originalLocation: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("削除", target, originalLocation: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1292,6 +1307,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var verb = isMove ? "移動" : "コピー";
+
         try
         {
             if (isMove)
@@ -1305,12 +1322,53 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 RecordCopyUndo(files, CurrentPath);
             }
 
+            LogHistory(verb, DescribeTargets(files), originalLocation: DescribeSourceFolder(files), destination: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory(verb, DescribeTargets(files), originalLocation: DescribeSourceFolder(files), destination: CurrentPath,
+                success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
+    }
+
+    private static string DescribeTargets(IReadOnlyList<string> paths) =>
+        paths.Count == 1 ? Path.GetFileName(paths[0]) : $"{paths.Count}件";
+
+    private static string? DescribeSourceFolder(IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0)
+        {
+            return null;
+        }
+
+        var folders = paths
+            .Select(p => Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(p)) ?? p)
+            .Distinct()
+            .ToList();
+
+        return folders.Count == 1 ? folders[0] : string.Join(", ", folders);
+    }
+
+    private void LogHistory(
+        string operation,
+        string target,
+        string? originalLocation = null,
+        string? destination = null,
+        bool success = true,
+        string? errorMessage = null)
+    {
+        _fileOperationHistoryService.Record(new FileOperationHistoryEntry
+        {
+            Timestamp = DateTime.Now,
+            Operation = operation,
+            Target = target,
+            OriginalLocation = originalLocation,
+            Destination = destination,
+            Success = success,
+            ErrorMessage = errorMessage
+        });
     }
 
     // 仕様書62章「Undo」：移動は元の親フォルダへ戻す。選択項目が複数フォルダの階層に
@@ -1368,10 +1426,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 _undoService.Record(description, () => _fileSystemService.Delete(created));
             }
 
+            LogHistory("複製", DescribeTargets(targets), originalLocation: CurrentPath, destination: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("複製", DescribeTargets(targets), originalLocation: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1412,6 +1472,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var verb = isMove ? "移動" : "コピー";
+
         try
         {
             if (isMove)
@@ -1425,10 +1487,13 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 RecordCopyUndo(targets, destinationFolder);
             }
 
+            LogHistory(verb, DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory(verb, DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder,
+                success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1531,10 +1596,13 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 });
             }
 
+            LogHistory("コピー", DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("コピー", DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder,
+                success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1560,10 +1628,13 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 _undoService.Record(description, () => _fileSystemService.Delete(created));
             }
 
+            LogHistory("ショートカット作成", DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("ショートカット作成", DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets),
+                destination: destinationFolder, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1676,6 +1747,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                     _fileSystemService.Rename(newPath, oldName);
                 }
             });
+
+            LogHistory("一括リネーム", description, originalLocation: CurrentPath);
         }
 
         RefreshCurrentFolder();

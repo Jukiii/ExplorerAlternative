@@ -136,6 +136,12 @@ public sealed class DialogService : IDialogService
         window.Show();
     }
 
+    public void ShowFileOperationHistory(FileOperationHistoryViewModel fileOperationHistoryViewModel)
+    {
+        var window = new FileOperationHistoryDialog(fileOperationHistoryViewModel) { Owner = Application.Current?.MainWindow };
+        window.Show();
+    }
+
     public void ShowSshProfiles(SshProfilesViewModel sshProfilesViewModel)
     {
         var window = new SshProfilesDialog(sshProfilesViewModel) { Owner = Application.Current?.MainWindow };
