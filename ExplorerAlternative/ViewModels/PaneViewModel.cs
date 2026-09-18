@@ -1287,6 +1287,11 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             isMove = effect.HasFlag(DragDropEffects.Move);
         }
 
+        if (!ConfirmOperationIfNeeded(isMove ? "移動" : "コピー", files, CurrentPath))
+        {
+            return;
+        }
+
         try
         {
             if (isMove)
@@ -1374,6 +1379,23 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     // 仕様書20章「移動」に対応するドラッグ&ドロップ本体。ドロップ先フォルダの内部/子孫への
     // 移動・コピーや、同じフォルダへの無意味なドロップは黙って無視する（既存フォルダへの
     // File.Move/Directory.Move例外を避けるための最小限の防御）。
+    /// <summary>仕様書32章「ファイル操作プレビュー」：設定でONの場合のみ、実行前に対象件数と
+    /// 移動元/移動先を確認する。OFF時（既定）は常にtrueを返す。</summary>
+    private bool ConfirmOperationIfNeeded(string verb, IReadOnlyList<string> targets, string destinationFolder)
+    {
+        if (!_settingsService.Current.View.ConfirmMoveAndCopy)
+        {
+            return true;
+        }
+
+        var sourceFolder = targets.Count == 1
+            ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(targets[0])) ?? targets[0]
+            : string.Join(", ", targets.Select(t => Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(t)) ?? t).Distinct());
+
+        return _dialogService.Confirm(
+            $"{targets.Count}個の項目を{verb}します。\n\n移動元：{sourceFolder}\n移動先：{destinationFolder}");
+    }
+
     public void DropFiles(IReadOnlyList<string> sourcePaths, string destinationFolder, bool isMove)
     {
         var targets = sourcePaths
@@ -1381,6 +1403,11 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             .ToList();
 
         if (targets.Count == 0)
+        {
+            return;
+        }
+
+        if (!ConfirmOperationIfNeeded(isMove ? "移動" : "コピー", targets, destinationFolder))
         {
             return;
         }
@@ -1432,6 +1459,11 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     {
         var targets = sourcePaths.Where(source => !IsSelfOrDescendantDrop(source, destinationFolder)).ToList();
         if (targets.Count == 0)
+        {
+            return;
+        }
+
+        if (!ConfirmOperationIfNeeded("コピー", targets, destinationFolder))
         {
             return;
         }

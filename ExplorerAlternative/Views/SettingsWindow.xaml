@@ -64,6 +64,10 @@
                              即座に行う（HKEY_CURRENT_USERのみ使用するため管理者権限は不要）。 -->
                         <CheckBox Content="フォルダの右クリックメニューに「ExplorerAlternativeで開く」を追加する" Margin="0,12,0,0"
                                   IsChecked="{Binding ExplorerIntegrationEnabled, Mode=TwoWay}" />
+                        <!-- 仕様書32章「ファイル操作プレビュー」。既定OFF（従来通りドラッグ&ドロップ／
+                             切り取り貼り付けを即実行）。 -->
+                        <CheckBox Content="移動・コピーの実行前に対象と内容を確認する" Margin="0,12,0,0"
+                                  IsChecked="{Binding ConfirmMoveAndCopy, Mode=TwoWay}" />
                     </StackPanel>
                 </Grid>
             </TabItem>
