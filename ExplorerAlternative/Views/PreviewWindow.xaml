@@ -102,7 +102,11 @@
 
             <!-- 仕様書13章：画像プレビュー。マウスホイールで拡大縮小、スクロールバーでパンする。 -->
             <ScrollViewer x:Name="ImageScrollViewer" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                          PreviewMouseWheel="ImageScrollViewer_PreviewMouseWheel">
+                          PreviewMouseWheel="ImageScrollViewer_PreviewMouseWheel"
+                          PreviewMouseLeftButtonDown="ImageScrollViewer_PreviewMouseLeftButtonDown"
+                          PreviewMouseMove="ImageScrollViewer_PreviewMouseMove"
+                          PreviewMouseLeftButtonUp="ImageScrollViewer_PreviewMouseLeftButtonUp"
+                          Cursor="SizeAll">
                 <ScrollViewer.Style>
                     <Style TargetType="ScrollViewer">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -120,6 +124,22 @@
                 </Image>
             </ScrollViewer>
 
+            <!-- 仕様書13章「PDF」：フルレンダリングは行わず、ファイル情報＋既定アプリで開くボタンのみ表示する。 -->
+            <StackPanel VerticalAlignment="Top">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Kind}" Value="{x:Static vm:PreviewKind.Pdf}">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <TextBlock Text="{Binding TextContent}" TextWrapping="Wrap" Margin="0,0,0,12" />
+                <Button Content="既定のアプリで開く" HorizontalAlignment="Left" Padding="10,6" Command="{Binding OpenExternallyCommand}" />
+            </StackPanel>
+
             <!-- 仕様書14章：フォルダQuick Look（項目数・サイズ・更新日時・Git/SVN状態・タグ・最近変更されたファイル）。 -->
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <ScrollViewer.Style>
@@ -134,6 +154,18 @@
                 </ScrollViewer.Style>
                 <StackPanel>
                     <TextBlock Text="{Binding FolderSummary}" FontSize="14" Margin="0,0,0,6" />
+                    <TextBlock Margin="0,0,0,4">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding FolderSizeDisplay}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                        <Run Text="サイズ（合計）: " FontWeight="Bold" /><Run Text="{Binding FolderSizeDisplay, Mode=OneWay}" />
+                    </TextBlock>
                     <TextBlock Margin="0,0,0,4">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">

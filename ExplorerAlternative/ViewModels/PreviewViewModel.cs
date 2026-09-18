@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Documents;
 using System.Windows.Media.Imaging;
@@ -32,14 +34,17 @@ public sealed class PreviewViewModel : ObservableObject
 
     private bool _isShowingMarkdownSource;
     private bool _isPinned;
+    private string _folderSizeDisplay = string.Empty;
+    private CancellationTokenSource? _folderSizeCts;
 
     private PreviewViewModel(
-        string title, PreviewKind kind, string textContent, FlowDocument? markdownDocument,
+        string title, string fullPath, PreviewKind kind, string textContent, FlowDocument? markdownDocument,
         string folderSummary, bool truncated, BitmapImage? imageSource,
         string folderModified, string folderVcsSummary, string folderTagsSummary,
         IReadOnlyList<string> recentFiles)
     {
         Title = title;
+        FullPath = fullPath;
         Kind = kind;
         TextContent = textContent;
         MarkdownDocument = markdownDocument;
@@ -55,9 +60,13 @@ public sealed class PreviewViewModel : ObservableObject
         TogglePinCommand = new RelayCommand(_ => IsPinned = !IsPinned);
         PreviousCommand = new RelayCommand(_ => RequestPrevious?.Invoke());
         NextCommand = new RelayCommand(_ => RequestNext?.Invoke());
+        OpenExternallyCommand = new RelayCommand(_ => OpenExternally());
     }
 
     public string Title { get; }
+
+    /// <summary>仕様書13章：PDFを既定のアプリで開くボタン等に使う対象の完全パス。</summary>
+    public string FullPath { get; }
 
     public PreviewKind Kind { get; }
 
@@ -116,14 +125,50 @@ public sealed class PreviewViewModel : ObservableObject
     /// </summary>
     public Action? Closed { get; set; }
 
+    /// <summary>仕様書14章「フォルダQuick Look」：合計サイズ（非同期集計）。計算中は"計算中..."を表示する。</summary>
+    public string FolderSizeDisplay
+    {
+        get => _folderSizeDisplay;
+        private set => SetProperty(ref _folderSizeDisplay, value);
+    }
+
+    /// <summary>仕様書13章「PDF」：フルレンダリング非対応のため、既定のアプリで開くボタンを提供する。</summary>
+    public RelayCommand OpenExternallyCommand { get; }
+
+    private void OpenExternally()
+    {
+        if (string.IsNullOrEmpty(FullPath))
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(FullPath) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
+        {
+            // プレビュー表示自体は継続する（27章：エラーで落とさない）。
+        }
+    }
+
+    /// <summary>プレビューが閉じられる・別項目に切り替わる際に呼び出し、進行中のフォルダサイズ集計を中断する。</summary>
+    public void CancelPendingWork()
+    {
+        _folderSizeCts?.Cancel();
+    }
+
+    private static readonly string[] OfficeExtensions = { "docx", "xlsx", "pptx" };
+
     public static PreviewViewModel Create(
         FileSystemNodeViewModel node,
         IFileSystemService fileSystemService,
         IVersionControlService versionControlService,
-        ISettingsService settingsService)
+        ISettingsService settingsService,
+        IFolderScanService folderScanService)
     {
         return node.IsDirectory
-            ? CreateForFolder(node, fileSystemService, versionControlService, settingsService)
+            ? CreateForFolder(node, fileSystemService, versionControlService, settingsService, folderScanService)
             : CreateForFile(node, fileSystemService, settingsService.Current.TextFileExtensions);
     }
 
@@ -131,7 +176,8 @@ public sealed class PreviewViewModel : ObservableObject
         FileSystemNodeViewModel node,
         IFileSystemService fileSystemService,
         IVersionControlService versionControlService,
-        ISettingsService settingsService)
+        ISettingsService settingsService,
+        IFolderScanService folderScanService)
     {
         try
         {
@@ -160,17 +206,59 @@ public sealed class PreviewViewModel : ObservableObject
                 .Select(c => $"{c.Name}（{c.LastModified:yyyy/MM/dd HH:mm}）")
                 .ToList();
 
-            return new PreviewViewModel(
-                node.Name, PreviewKind.Folder, string.Empty, null, summary, false, null,
+            var preview = new PreviewViewModel(
+                node.Name, node.FullPath, PreviewKind.Folder, string.Empty, null, summary, false, null,
                 node.LastModified?.ToString("yyyy/MM/dd HH:mm") ?? string.Empty,
                 vcsSummary, tagsSummary, recentFiles);
+
+            preview.StartFolderSizeCalculation(node.FullPath, folderScanService);
+            return preview;
         }
         catch (AppOperationException ex)
         {
             return new PreviewViewModel(
-                node.Name, PreviewKind.Folder, string.Empty, null, ex.Message, false, null,
+                node.Name, node.FullPath, PreviewKind.Folder, string.Empty, null, ex.Message, false, null,
                 string.Empty, string.Empty, string.Empty, Array.Empty<string>());
         }
+    }
+
+    // 仕様書14章：フォルダの合計サイズは大きいフォルダだと時間がかかるため、非同期・キャンセル可能にする。
+    private void StartFolderSizeCalculation(string path, IFolderScanService folderScanService)
+    {
+        _folderSizeCts = new CancellationTokenSource();
+        var token = _folderSizeCts.Token;
+        FolderSizeDisplay = "計算中...";
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var totalBytes = await folderScanService.CalculateFolderSizeAsync(path, token);
+                if (!token.IsCancellationRequested)
+                {
+                    FolderSizeDisplay = FormatSize(totalBytes);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // プレビューが切り替わった・閉じられたことによるキャンセルは無視する。
+            }
+        }, token);
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        string[] units = { "B", "KB", "MB", "GB", "TB" };
+        double size = bytes;
+        var unitIndex = 0;
+
+        while (size >= 1024 && unitIndex < units.Length - 1)
+        {
+            size /= 1024;
+            unitIndex++;
+        }
+
+        return unitIndex == 0 ? $"{size:0} {units[unitIndex]}" : $"{size:0.#} {units[unitIndex]}";
     }
 
     private static PreviewViewModel CreateForFile(FileSystemNodeViewModel node, IFileSystemService fileSystemService, IReadOnlyList<string> customTextExtensions)
@@ -183,6 +271,16 @@ public sealed class PreviewViewModel : ObservableObject
             return CreateForImage(node);
         }
 
+        if (extension == "pdf")
+        {
+            return CreateForPdf(node);
+        }
+
+        if (OfficeExtensions.Contains(extension))
+        {
+            return CreateForOffice(node, extension);
+        }
+
         var textExtensions = new HashSet<string>(DefaultTextExtensions, StringComparer.OrdinalIgnoreCase);
         foreach (var ext in customTextExtensions)
         {
@@ -191,7 +289,7 @@ public sealed class PreviewViewModel : ObservableObject
 
         if (!isMarkdown && !textExtensions.Contains(extension))
         {
-            return Unsupported(node.Name, "このファイル形式はプレビューに対応していません。");
+            return Unsupported(node.Name, node.FullPath, "このファイル形式はプレビューに対応していません。");
         }
 
         try
@@ -202,17 +300,51 @@ public sealed class PreviewViewModel : ObservableObject
             {
                 var document = MarkdownRenderer.Render(content);
                 return new PreviewViewModel(
-                    node.Name, PreviewKind.Markdown, content, document, string.Empty, truncated, null,
+                    node.Name, node.FullPath, PreviewKind.Markdown, content, document, string.Empty, truncated, null,
                     string.Empty, string.Empty, string.Empty, Array.Empty<string>());
             }
 
             return new PreviewViewModel(
-                node.Name, PreviewKind.Text, content, null, string.Empty, truncated, null,
+                node.Name, node.FullPath, PreviewKind.Text, content, null, string.Empty, truncated, null,
                 string.Empty, string.Empty, string.Empty, Array.Empty<string>());
         }
         catch (AppOperationException ex)
         {
-            return Unsupported(node.Name, ex.Message);
+            return Unsupported(node.Name, node.FullPath, ex.Message);
+        }
+    }
+
+    // 仕様書13章「PDF」：完全なレンダリングは行わず、ファイル情報表示＋既定アプリで開くボタンのみ
+    // 提供する（外部NuGet依存を追加しない方針のため）。
+    private static PreviewViewModel CreateForPdf(FileSystemNodeViewModel node)
+    {
+        var info = new FileInfo(node.FullPath);
+        var summary = $"サイズ: {FormatSize(info.Length)}\n更新日時: {info.LastWriteTime:yyyy/MM/dd HH:mm}\n\n" +
+            "このアプリはPDFのページ内容そのものは表示しません。「既定のアプリで開く」から確認してください。";
+
+        return new PreviewViewModel(
+            node.Name, node.FullPath, PreviewKind.Pdf, summary, null, string.Empty, false, null,
+            string.Empty, string.Empty, string.Empty, Array.Empty<string>());
+    }
+
+    // 仕様書13章「Office」：docx/xlsx/pptxはOOXML(ZIP+XML)であることを利用し、本文テキストのみを
+    // 抽出して表示する（書式・レイアウトの再現は行わない簡易プレビュー）。
+    private static PreviewViewModel CreateForOffice(FileSystemNodeViewModel node, string extension)
+    {
+        try
+        {
+            var text = OfficeTextExtractor.Extract(node.FullPath, extension);
+            var content = string.IsNullOrWhiteSpace(text)
+                ? "（テキストを抽出できませんでした。画像のみのファイル等の可能性があります）"
+                : text;
+
+            return new PreviewViewModel(
+                node.Name, node.FullPath, PreviewKind.Text, content, null, string.Empty, false, null,
+                string.Empty, string.Empty, string.Empty, Array.Empty<string>());
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or System.Xml.XmlException)
+        {
+            return Unsupported(node.Name, node.FullPath, $"このファイルを読み込めませんでした。({ex.Message})");
         }
     }
 
@@ -230,19 +362,19 @@ public sealed class PreviewViewModel : ObservableObject
             image.Freeze();
 
             return new PreviewViewModel(
-                node.Name, PreviewKind.Image, string.Empty, null, string.Empty, false, image,
+                node.Name, node.FullPath, PreviewKind.Image, string.Empty, null, string.Empty, false, image,
                 string.Empty, string.Empty, string.Empty, Array.Empty<string>());
         }
         catch (Exception ex) when (ex is NotSupportedException or IOException or ArgumentException or InvalidOperationException)
         {
-            return Unsupported(node.Name, $"この画像を読み込めませんでした。実行環境に対応するコーデックがない可能性があります。({ex.Message})");
+            return Unsupported(node.Name, node.FullPath, $"この画像を読み込めませんでした。実行環境に対応するコーデックがない可能性があります。({ex.Message})");
         }
     }
 
-    private static PreviewViewModel Unsupported(string title, string reason)
+    private static PreviewViewModel Unsupported(string title, string fullPath, string reason)
     {
         return new PreviewViewModel(
-            title, PreviewKind.Unsupported, reason, null, string.Empty, false, null,
+            title, fullPath, PreviewKind.Unsupported, reason, null, string.Empty, false, null,
             string.Empty, string.Empty, string.Empty, Array.Empty<string>());
     }
 }

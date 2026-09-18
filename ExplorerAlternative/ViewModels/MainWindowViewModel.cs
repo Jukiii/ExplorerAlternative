@@ -550,8 +550,9 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         var wasPinned = _currentPreview?.IsPinned ?? false;
+        _currentPreview?.CancelPendingWork();
 
-        var preview = PreviewViewModel.Create(_previewNodes[_previewIndex], _fileSystemService, _versionControlService, _settingsService);
+        var preview = PreviewViewModel.Create(_previewNodes[_previewIndex], _fileSystemService, _versionControlService, _settingsService, _folderScanService);
         preview.IsPinned = wasPinned;
         preview.RequestPrevious = () => MovePreview(-1);
         preview.RequestNext = () => MovePreview(1);
@@ -585,6 +586,7 @@ public sealed class MainWindowViewModel : ObservableObject
     // OnActivePaneSelectionChangedが「プレビュー表示中」と誤認し、勝手に再表示してしまう。
     private void OnPreviewWindowClosed()
     {
+        _currentPreview?.CancelPendingWork();
         _currentPreview = null;
         _previewNodes = new List<FileSystemNodeViewModel>();
         _previewIndex = -1;

@@ -68,4 +68,43 @@ public partial class PreviewWindow : Window
         ImageScaleTransform.ScaleY = newScale;
         e.Handled = true;
     }
+
+    // 仕様書13章「画像ズーム/パン」：ドラッグでスクロール位置を動かす（拡大時に全体を確認できるように）。
+    private Point? _imagePanStart;
+    private double _imagePanStartHorizontalOffset;
+    private double _imagePanStartVerticalOffset;
+
+    private void ImageScrollViewer_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is not PreviewViewModel { Kind: PreviewKind.Image })
+        {
+            return;
+        }
+
+        _imagePanStart = e.GetPosition(ImageScrollViewer);
+        _imagePanStartHorizontalOffset = ImageScrollViewer.HorizontalOffset;
+        _imagePanStartVerticalOffset = ImageScrollViewer.VerticalOffset;
+        ImageScrollViewer.CaptureMouse();
+    }
+
+    private void ImageScrollViewer_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_imagePanStart is not { } start || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        var current = e.GetPosition(ImageScrollViewer);
+        var offsetX = current.X - start.X;
+        var offsetY = current.Y - start.Y;
+
+        ImageScrollViewer.ScrollToHorizontalOffset(_imagePanStartHorizontalOffset - offsetX);
+        ImageScrollViewer.ScrollToVerticalOffset(_imagePanStartVerticalOffset - offsetY);
+    }
+
+    private void ImageScrollViewer_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _imagePanStart = null;
+        ImageScrollViewer.ReleaseMouseCapture();
+    }
 }
