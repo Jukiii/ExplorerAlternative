@@ -23,6 +23,24 @@ public partial class PreviewWindow : Window
         MarkdownViewer.Document = previewViewModel.MarkdownDocument ?? new FlowDocument();
         ImageScaleTransform.ScaleX = 1;
         ImageScaleTransform.ScaleY = 1;
+        previewViewModel.RequestJumpToLine = JumpToLine;
+    }
+
+    // 仕様書16章「シンボルクリックで該当位置へジャンプ」。
+    private void JumpToLine(int line)
+    {
+        var lineIndex = Math.Max(0, line - 1);
+        TextViewer.UpdateLayout();
+
+        var charIndex = TextViewer.GetCharacterIndexFromLineIndex(lineIndex);
+        if (charIndex < 0)
+        {
+            return;
+        }
+
+        TextViewer.Focus();
+        TextViewer.Select(charIndex, 0);
+        TextViewer.ScrollToLine(lineIndex);
     }
 
     // 仕様書13章：← / → で前後移動、Escで閉じる。

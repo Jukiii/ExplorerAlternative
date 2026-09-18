@@ -36,12 +36,14 @@ public sealed class PreviewViewModel : ObservableObject
     private bool _isPinned;
     private string _folderSizeDisplay = string.Empty;
     private CancellationTokenSource? _folderSizeCts;
+    private CodeSymbol? _selectedSymbol;
 
     private PreviewViewModel(
         string title, string fullPath, PreviewKind kind, string textContent, FlowDocument? markdownDocument,
         string folderSummary, bool truncated, BitmapImage? imageSource,
         string folderModified, string folderVcsSummary, string folderTagsSummary,
-        IReadOnlyList<string> recentFiles)
+        IReadOnlyList<string> recentFiles,
+        IReadOnlyList<CodeSymbol>? symbols = null)
     {
         Title = title;
         FullPath = fullPath;
@@ -55,6 +57,7 @@ public sealed class PreviewViewModel : ObservableObject
         FolderVcsSummary = folderVcsSummary;
         FolderTagsSummary = folderTagsSummary;
         RecentFiles = recentFiles;
+        Symbols = symbols ?? Array.Empty<CodeSymbol>();
 
         ToggleMarkdownSourceCommand = new RelayCommand(_ => IsShowingMarkdownSource = !IsShowingMarkdownSource);
         TogglePinCommand = new RelayCommand(_ => IsPinned = !IsPinned);
@@ -62,6 +65,27 @@ public sealed class PreviewViewModel : ObservableObject
         NextCommand = new RelayCommand(_ => RequestNext?.Invoke());
         OpenExternallyCommand = new RelayCommand(_ => OpenExternally());
     }
+
+    /// <summary>仕様書16章「コードシンボル表示」：対応言語のソースコードのみ非空。</summary>
+    public IReadOnlyList<CodeSymbol> Symbols { get; }
+
+    public bool HasSymbols => Symbols.Count > 0;
+
+    /// <summary>シンボル一覧で選択した項目。選択と同時に該当行へジャンプする（RequestJumpToLine）。</summary>
+    public CodeSymbol? SelectedSymbol
+    {
+        get => _selectedSymbol;
+        set
+        {
+            if (SetProperty(ref _selectedSymbol, value) && value is not null)
+            {
+                RequestJumpToLine?.Invoke(value.Line);
+            }
+        }
+    }
+
+    /// <summary>仕様書16章「シンボルクリックで該当位置へジャンプ」。呼び出し側（View）が実際のスクロール・選択を行う。</summary>
+    public Action<int>? RequestJumpToLine { get; set; }
 
     public string Title { get; }
 
@@ -304,9 +328,13 @@ public sealed class PreviewViewModel : ObservableObject
                     string.Empty, string.Empty, string.Empty, Array.Empty<string>());
             }
 
+            var symbols = CodeSymbolExtractor.IsSupported(extension)
+                ? CodeSymbolExtractor.Extract(content, extension)
+                : Array.Empty<CodeSymbol>();
+
             return new PreviewViewModel(
                 node.Name, node.FullPath, PreviewKind.Text, content, null, string.Empty, truncated, null,
-                string.Empty, string.Empty, string.Empty, Array.Empty<string>());
+                string.Empty, string.Empty, string.Empty, Array.Empty<string>(), symbols);
         }
         catch (AppOperationException ex)
         {
