@@ -130,6 +130,12 @@ public sealed class DialogService : IDialogService
         return window.ShowDialog() == true;
     }
 
+    public void ShowUndoHistory(UndoHistoryViewModel undoHistoryViewModel)
+    {
+        var window = new UndoHistoryDialog(undoHistoryViewModel) { Owner = Application.Current?.MainWindow };
+        window.Show();
+    }
+
     public void ShowSshProfiles(SshProfilesViewModel sshProfilesViewModel)
     {
         var window = new SshProfilesDialog(sshProfilesViewModel) { Owner = Application.Current?.MainWindow };

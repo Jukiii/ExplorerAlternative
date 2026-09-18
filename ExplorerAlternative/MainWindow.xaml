@@ -180,6 +180,8 @@
                     <MenuItem Header="☰ メニュー" Padding="8,6">
                         <!-- 仕様書62章：直近のファイル操作を元に戻す。ラベルに対象操作の説明を表示する。 -->
                         <MenuItem Header="{Binding UndoMenuLabel}" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z" />
+                        <!-- 仕様書30章：操作履歴を一覧表示し、任意の地点までまとめて元に戻す。 -->
+                        <MenuItem Header="操作履歴..." Command="{Binding OpenUndoHistoryCommand}" />
                         <Separator />
                         <MenuItem Header="お気に入りに追加" Command="{Binding AddFavoriteCommand}" />
                         <Separator />

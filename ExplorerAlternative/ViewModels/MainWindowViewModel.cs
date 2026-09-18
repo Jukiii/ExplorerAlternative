@@ -100,6 +100,7 @@ public sealed class MainWindowViewModel : ObservableObject
         TerminalHost = new TerminalHostViewModel(terminalServiceFactory, settingsService.Current.Terminal.SyncByDefault);
 
         UndoCommand = new RelayCommand(_ => Undo(), _ => _undoService.CanUndo);
+        OpenUndoHistoryCommand = new RelayCommand(_ => OpenUndoHistory());
         _undoService.Changed += () =>
         {
             UndoCommand.RaiseCanExecuteChanged();
@@ -145,6 +146,9 @@ public sealed class MainWindowViewModel : ObservableObject
     /// <summary>仕様書62章「Undo」：直近のファイル操作（移動・コピー・名前変更・複製・新規作成・
     /// ショートカット作成）を元に戻す。削除（ごみ箱送り）は対象外。</summary>
     public RelayCommand UndoCommand { get; }
+
+    /// <summary>仕様書30章「GUI Undo履歴」：操作履歴一覧ダイアログを開く。</summary>
+    public RelayCommand OpenUndoHistoryCommand { get; }
 
     /// <summary>メニュー表示用：次にUndoされる操作の説明を含むラベル。</summary>
     public string UndoMenuLabel => _undoService.NextUndoDescription is { } description
@@ -345,6 +349,11 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             _dialogService.ShowError(ex.Message);
         }
+    }
+
+    private void OpenUndoHistory()
+    {
+        _dialogService.ShowUndoHistory(new UndoHistoryViewModel(_undoService, _dialogService));
     }
 
     private void NavigateActiveTo(string path)

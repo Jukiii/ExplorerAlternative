@@ -68,4 +68,7 @@ public interface IDialogService
 
     /// <summary>タグの追加・編集ダイアログ（仕様書5章：アイコン・色の選択）を表示する。「保存」で確定された場合はtrueを返す。</summary>
     bool ShowTagEditor(TagEditorViewModel tagEditorViewModel);
+
+    /// <summary>操作履歴ダイアログ（仕様書30章「GUI Undo履歴」）を非モーダルで表示する。</summary>
+    void ShowUndoHistory(UndoHistoryViewModel undoHistoryViewModel);
 }
