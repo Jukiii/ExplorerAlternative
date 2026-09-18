@@ -24,6 +24,7 @@ public sealed class SettingsViewModel : ObservableObject
     private double _activePaneHighlightOpacity;
     private DuplicateTabBehavior _duplicateTabBehavior;
     private bool _loadTerminalProfile;
+    private bool _confirmMoveAndCopy;
     private bool _explorerIntegrationEnabled;
     private bool _minimizeToTray;
     private bool _globalHotkeyEnabled;
@@ -51,6 +52,7 @@ public sealed class SettingsViewModel : ObservableObject
         _activePaneHighlightOpacity = settingsService.Current.Appearance.ActivePaneHighlightOpacity;
         _duplicateTabBehavior = settingsService.Current.Tabs.DuplicateBehavior;
         _loadTerminalProfile = settingsService.Current.Terminal.LoadProfile;
+        _confirmMoveAndCopy = settingsService.Current.View.ConfirmMoveAndCopy;
         _explorerIntegrationEnabled = explorerIntegrationService.IsEnabled;
 
         var windowsIntegration = settingsService.Current.WindowsIntegration;
@@ -111,6 +113,20 @@ public sealed class SettingsViewModel : ObservableObject
             if (SetProperty(ref _loadTerminalProfile, value))
             {
                 _settingsService.Current.Terminal.LoadProfile = value;
+                _settingsService.Save();
+            }
+        }
+    }
+
+    /// <summary>仕様書32章「ファイル操作プレビュー」：移動・コピー実行前に対象と内容を確認するか。</summary>
+    public bool ConfirmMoveAndCopy
+    {
+        get => _confirmMoveAndCopy;
+        set
+        {
+            if (SetProperty(ref _confirmMoveAndCopy, value))
+            {
+                _settingsService.Current.View.ConfirmMoveAndCopy = value;
                 _settingsService.Save();
             }
         }

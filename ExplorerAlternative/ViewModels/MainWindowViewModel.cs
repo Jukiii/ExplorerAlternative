@@ -37,6 +37,8 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IJumpListService _jumpListService;
     private readonly IProjectDetectionService _projectDetectionService;
     private readonly IUndoService _undoService;
+    private readonly IFileOperationHistoryService _fileOperationHistoryService;
+    private readonly IFileOperationQueueService _fileOperationQueueService;
     private readonly Func<IFolderWatcherService> _folderWatcherServiceFactory;
 
     private TabViewModel? _activeTab;
@@ -69,6 +71,8 @@ public sealed class MainWindowViewModel : ObservableObject
         IJumpListService jumpListService,
         IProjectDetectionService projectDetectionService,
         IUndoService undoService,
+        IFileOperationHistoryService fileOperationHistoryService,
+        IFileOperationQueueService fileOperationQueueService,
         Func<IFolderWatcherService> folderWatcherServiceFactory,
         string? startupPath = null)
     {
@@ -93,6 +97,8 @@ public sealed class MainWindowViewModel : ObservableObject
         _jumpListService = jumpListService;
         _projectDetectionService = projectDetectionService;
         _undoService = undoService;
+        _fileOperationHistoryService = fileOperationHistoryService;
+        _fileOperationQueueService = fileOperationQueueService;
         _folderWatcherServiceFactory = folderWatcherServiceFactory;
 
         NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, dialogService, NavigateActiveTo);
@@ -100,6 +106,9 @@ public sealed class MainWindowViewModel : ObservableObject
         TerminalHost = new TerminalHostViewModel(terminalServiceFactory, settingsService.Current.Terminal.SyncByDefault);
 
         UndoCommand = new RelayCommand(_ => Undo(), _ => _undoService.CanUndo);
+        OpenUndoHistoryCommand = new RelayCommand(_ => OpenUndoHistory());
+        OpenFileOperationHistoryCommand = new RelayCommand(_ => OpenFileOperationHistory());
+        OpenFileOperationQueueCommand = new RelayCommand(_ => OpenFileOperationQueue());
         _undoService.Changed += () =>
         {
             UndoCommand.RaiseCanExecuteChanged();
@@ -145,6 +154,15 @@ public sealed class MainWindowViewModel : ObservableObject
     /// <summary>仕様書62章「Undo」：直近のファイル操作（移動・コピー・名前変更・複製・新規作成・
     /// ショートカット作成）を元に戻す。削除（ごみ箱送り）は対象外。</summary>
     public RelayCommand UndoCommand { get; }
+
+    /// <summary>仕様書30章「GUI Undo履歴」：操作履歴一覧ダイアログを開く。</summary>
+    public RelayCommand OpenUndoHistoryCommand { get; }
+
+    /// <summary>仕様書31章「ファイル操作履歴」：永続化された操作履歴一覧ダイアログを開く。</summary>
+    public RelayCommand OpenFileOperationHistoryCommand { get; }
+
+    /// <summary>仕様書26章「ファイル操作キュー」：進行中/完了した操作の一覧ダイアログを開く。</summary>
+    public RelayCommand OpenFileOperationQueueCommand { get; }
 
     /// <summary>メニュー表示用：次にUndoされる操作の説明を含むラベル。</summary>
     public string UndoMenuLabel => _undoService.NextUndoDescription is { } description
@@ -347,6 +365,21 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    private void OpenUndoHistory()
+    {
+        _dialogService.ShowUndoHistory(new UndoHistoryViewModel(_undoService, _dialogService));
+    }
+
+    private void OpenFileOperationHistory()
+    {
+        _dialogService.ShowFileOperationHistory(new FileOperationHistoryViewModel(_fileOperationHistoryService, _dialogService));
+    }
+
+    private void OpenFileOperationQueue()
+    {
+        _dialogService.ShowFileOperationQueue(new FileOperationQueueViewModel(_fileOperationQueueService));
+    }
+
     private void NavigateActiveTo(string path)
     {
         ActiveTab?.ActivePane.NavigateTo(path);
@@ -387,6 +420,8 @@ public sealed class MainWindowViewModel : ObservableObject
             _diffService,
             _projectDetectionService,
             _undoService,
+            _fileOperationHistoryService,
+            _fileOperationQueueService,
             _folderWatcherServiceFactory,
             initialPath,
             initialViewMode);
@@ -528,8 +563,9 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         var wasPinned = _currentPreview?.IsPinned ?? false;
+        _currentPreview?.CancelPendingWork();
 
-        var preview = PreviewViewModel.Create(_previewNodes[_previewIndex], _fileSystemService, _versionControlService, _settingsService);
+        var preview = PreviewViewModel.Create(_previewNodes[_previewIndex], _fileSystemService, _versionControlService, _settingsService, _folderScanService);
         preview.IsPinned = wasPinned;
         preview.RequestPrevious = () => MovePreview(-1);
         preview.RequestNext = () => MovePreview(1);
@@ -563,6 +599,7 @@ public sealed class MainWindowViewModel : ObservableObject
     // OnActivePaneSelectionChangedが「プレビュー表示中」と誤認し、勝手に再表示してしまう。
     private void OnPreviewWindowClosed()
     {
+        _currentPreview?.CancelPendingWork();
         _currentPreview = null;
         _previewNodes = new List<FileSystemNodeViewModel>();
         _previewIndex = -1;
@@ -941,13 +978,19 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void AddNewTag()
     {
-        var name = _dialogService.PromptText("新しいタグ", "タグ名を入力してください。");
-        if (string.IsNullOrWhiteSpace(name))
+        var editor = TagEditorViewModel.CreateNew();
+        if (_dialogService.ShowTagEditor(editor) != true)
         {
             return;
         }
 
-        NavigationPane.AddTag(name.Trim());
+        var tag = editor.ToDefinition();
+        if (string.IsNullOrWhiteSpace(tag.Name))
+        {
+            return;
+        }
+
+        NavigationPane.AddTag(tag);
     }
 
     private void SaveWorkspace(Window window)

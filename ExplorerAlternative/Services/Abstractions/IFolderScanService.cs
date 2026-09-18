@@ -19,4 +19,7 @@ public interface IFolderScanService
 
     /// <summary>仕様書59章「空フォルダ検索」：ファイルを一切含まない（再帰的に空の）フォルダを返す。</summary>
     Task<IReadOnlyList<string>> FindEmptyFoldersAsync(string rootPath, CancellationToken cancellationToken);
+
+    /// <summary>仕様書14章「フォルダQuick Look」：フォルダ以下の合計サイズ（バイト）を再帰的に集計する。</summary>
+    Task<long> CalculateFolderSizeAsync(string rootPath, CancellationToken cancellationToken);
 }

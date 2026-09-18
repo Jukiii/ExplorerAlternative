@@ -405,6 +405,10 @@ public partial class MainWindow : Window
             destinationPane.DropFilesAsCopy(sourcePaths, destinationFolder);
         }
 
+        // 仕様書26章：DropFilesは実際の移動をファイル操作キュー（バックグラウンド）へ委譲するため
+        // 非同期。ここでのRefreshCurrentFolder()は移動完了前に呼ばれる可能性があるが、完了後は
+        // 移動元フォルダのFileSystemWatcher（20章・64章）が自動的に再読み込みするため、最終的な
+        // 表示状態は正しくなる。
         if (isMove && sourcePane is not null && !ReferenceEquals(sourcePane, destinationPane))
         {
             sourcePane.RefreshCurrentFolder();
@@ -1060,6 +1064,17 @@ public partial class MainWindow : Window
     {
         _tabDragStartPoint = null;
         _tabDragDuplicated = false;
+    }
+
+    /// <summary>仕様書5章：タグ一覧のダブルクリックでアイコン・色の編集ダイアログを開く。</summary>
+    private void TagRow_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2 &&
+            sender is FrameworkElement { DataContext: TagDefinition tag } &&
+            DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.NavigationPane.EditTagCommand.Execute(tag);
+        }
     }
 
     // 仕様書4章：ナビゲーションペイン内のListBox（お気に入り等）は既定でホイール/トラックパッドの

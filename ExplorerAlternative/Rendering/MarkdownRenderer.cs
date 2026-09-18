@@ -16,6 +16,8 @@ public static class MarkdownRenderer
         @"(?<bold>\*\*(?<boldtext>.+?)\*\*)|(?<code>`(?<codetext>.+?)`)|(?<link>\[(?<linktext>.+?)\]\((?<linkurl>.+?)\))|(?<italic>\*(?<italictext>.+?)\*)",
         RegexOptions.Compiled);
 
+    private static readonly Regex NumberedListPattern = new(@"^(?<num>\d+)\.\s+(?<text>.*)$", RegexOptions.Compiled);
+
     public static FlowDocument Render(string markdown)
     {
         var document = new FlowDocument { PagePadding = new Thickness(4) };
@@ -23,8 +25,10 @@ public static class MarkdownRenderer
         var inCodeBlock = false;
         List<string>? codeBlockLines = null;
 
-        foreach (var line in lines)
+        for (var i = 0; i < lines.Length; i++)
         {
+            var line = lines[i];
+
             if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
             {
                 if (!inCodeBlock)
@@ -61,9 +65,40 @@ public static class MarkdownRenderer
             }
 
             var trimmed = line.TrimStart();
+
+            // GFM形式のパイプテーブル：ヘッダー行の次が区切り行（|---|---|等）であるかで判定する。
+            if (trimmed.StartsWith("|", StringComparison.Ordinal) &&
+                i + 1 < lines.Length && IsTableSeparatorRow(lines[i + 1]))
+            {
+                var tableLines = new List<string> { line };
+                var j = i + 2;
+                while (j < lines.Length && lines[j].TrimStart().StartsWith("|", StringComparison.Ordinal))
+                {
+                    tableLines.Add(lines[j]);
+                    j++;
+                }
+
+                document.Blocks.Add(CreateTable(tableLines));
+                i = j - 1;
+                continue;
+            }
+
+            if (trimmed.StartsWith(">", StringComparison.Ordinal))
+            {
+                document.Blocks.Add(CreateBlockquoteParagraph(trimmed.TrimStart('>').TrimStart()));
+                continue;
+            }
+
             if (trimmed.StartsWith("- ", StringComparison.Ordinal) || trimmed.StartsWith("* ", StringComparison.Ordinal))
             {
                 document.Blocks.Add(CreateBulletParagraph(trimmed[2..]));
+                continue;
+            }
+
+            var numberedMatch = NumberedListPattern.Match(trimmed);
+            if (numberedMatch.Success)
+            {
+                document.Blocks.Add(CreateNumberedParagraph(numberedMatch.Groups["num"].Value, numberedMatch.Groups["text"].Value));
                 continue;
             }
 
@@ -81,6 +116,110 @@ public static class MarkdownRenderer
         }
 
         return document;
+    }
+
+    private static bool IsTableSeparatorRow(string line)
+    {
+        var trimmed = line.Trim();
+        if (!trimmed.StartsWith("|", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var cells = SplitTableRow(trimmed);
+        return cells.Count > 0 && cells.All(c => Regex.IsMatch(c.Trim(), @"^:?-+:?$"));
+    }
+
+    private static List<string> SplitTableRow(string line)
+    {
+        var trimmed = line.Trim().Trim('|');
+        return trimmed.Split('|').ToList();
+    }
+
+    private static Table CreateTable(List<string> tableLines)
+    {
+        var table = new Table { CellSpacing = 0, Margin = new Thickness(0, 4, 0, 8) };
+        var headerCells = SplitTableRow(tableLines[0]);
+
+        foreach (var _ in headerCells)
+        {
+            table.Columns.Add(new TableColumn());
+        }
+
+        var headerGroup = new TableRowGroup();
+        table.RowGroups.Add(headerGroup);
+        headerGroup.Rows.Add(CreateTableRow(headerCells, isHeader: true));
+
+        var bodyGroup = new TableRowGroup();
+        table.RowGroups.Add(bodyGroup);
+
+        // tableLinesは区切り行を含まない（呼び出し元で除外済み）。0番目=ヘッダーなので、
+        // 本文は1番目以降。
+        for (var i = 1; i < tableLines.Count; i++)
+        {
+            bodyGroup.Rows.Add(CreateTableRow(SplitTableRow(tableLines[i]), isHeader: false));
+        }
+
+        return table;
+    }
+
+    private static TableRow CreateTableRow(List<string> cells, bool isHeader)
+    {
+        var row = new TableRow();
+
+        foreach (var cellText in cells)
+        {
+            var paragraph = new Paragraph { Margin = new Thickness(4, 2, 4, 2) };
+            if (isHeader)
+            {
+                paragraph.FontWeight = FontWeights.Bold;
+            }
+
+            foreach (var inline in ParseInlines(cellText.Trim()))
+            {
+                paragraph.Inlines.Add(inline);
+            }
+
+            var cell = new TableCell(paragraph)
+            {
+                BorderBrush = Brushes.Gray,
+                BorderThickness = new Thickness(0, 0, 0, 1)
+            };
+            row.Cells.Add(cell);
+        }
+
+        return row;
+    }
+
+    private static Paragraph CreateNumberedParagraph(string number, string text)
+    {
+        var paragraph = new Paragraph { Margin = new Thickness(16, 0, 0, 2) };
+        paragraph.Inlines.Add(new Run($"{number}. "));
+        foreach (var inline in ParseInlines(text))
+        {
+            paragraph.Inlines.Add(inline);
+        }
+
+        return paragraph;
+    }
+
+    private static Paragraph CreateBlockquoteParagraph(string text)
+    {
+        var paragraph = new Paragraph
+        {
+            Margin = new Thickness(12, 2, 0, 2),
+            Padding = new Thickness(8, 2, 0, 2),
+            BorderBrush = Brushes.Gray,
+            BorderThickness = new Thickness(2, 0, 0, 0),
+            FontStyle = FontStyles.Italic
+        };
+
+        foreach (var inline in ParseInlines(text))
+        {
+            paragraph.Inlines.Add(inline);
+        }
+
+        return paragraph;
     }
 
     private static int CountLeading(string line, char c)

@@ -64,6 +64,33 @@ public sealed class FolderScanService : IFolderScanService
         }, cancellationToken);
     }
 
+    public Task<long> CalculateFolderSizeAsync(string rootPath, CancellationToken cancellationToken)
+    {
+        return Task.Run(() =>
+        {
+            long total = 0;
+
+            foreach (var info in EnumerateAll(rootPath, cancellationToken))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (info is FileInfo file)
+                {
+                    try
+                    {
+                        total += file.Length;
+                    }
+                    catch (IOException)
+                    {
+                        // アクセス不可・削除済み等は読み飛ばす（27章）。
+                    }
+                }
+            }
+
+            return total;
+        }, cancellationToken);
+    }
+
     public Task<IReadOnlyList<DuplicateFileGroup>> FindDuplicateFilesAsync(string rootPath, CancellationToken cancellationToken)
     {
         return Task.Run<IReadOnlyList<DuplicateFileGroup>>(() =>

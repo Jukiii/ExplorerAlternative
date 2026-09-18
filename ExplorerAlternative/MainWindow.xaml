@@ -180,6 +180,12 @@
                     <MenuItem Header="☰ メニュー" Padding="8,6">
                         <!-- 仕様書62章：直近のファイル操作を元に戻す。ラベルに対象操作の説明を表示する。 -->
                         <MenuItem Header="{Binding UndoMenuLabel}" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z" />
+                        <!-- 仕様書30章：操作履歴を一覧表示し、任意の地点までまとめて元に戻す。 -->
+                        <MenuItem Header="操作履歴..." Command="{Binding OpenUndoHistoryCommand}" />
+                        <!-- 仕様書31章：永続化されたファイル操作履歴（Undo対象外の削除・失敗した操作も含む）。 -->
+                        <MenuItem Header="ファイル操作履歴..." Command="{Binding OpenFileOperationHistoryCommand}" />
+                        <!-- 仕様書26章：大量コピー/移動の一時停止・再開・キャンセルを行うキュー。 -->
+                        <MenuItem Header="ファイル操作キュー..." Command="{Binding OpenFileOperationQueueCommand}" />
                         <Separator />
                         <MenuItem Header="お気に入りに追加" Command="{Binding AddFavoriteCommand}" />
                         <Separator />
@@ -489,13 +495,16 @@
                                      PreviewMouseWheel="NavListBox_PreviewMouseWheel">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:TagDefinition}">
-                                        <DockPanel Margin="4,3">
+                                        <DockPanel Margin="4,3" ToolTip="ダブルクリックでアイコン・色を編集"
+                                                   MouseLeftButtonUp="TagRow_MouseLeftButtonUp">
                                             <Button DockPanel.Dock="Right" Content="✕" FontSize="9" Width="20" Height="20" Padding="0"
                                                     ToolTip="タグを削除"
                                                     Command="{Binding DataContext.NavigationPane.RemoveTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                     CommandParameter="{Binding}" />
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="🏷" Margin="0,0,6,0" FontSize="11" />
+                                                <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,6,0"
+                                                        Background="{Binding ColorHex, Converter={StaticResource HexColorToBrushConverter}}" />
+                                                <TextBlock Text="{Binding IconGlyph}" Margin="0,0,6,0" FontSize="11" />
                                                 <TextBlock Text="{Binding Name}" />
                                             </StackPanel>
                                         </DockPanel>

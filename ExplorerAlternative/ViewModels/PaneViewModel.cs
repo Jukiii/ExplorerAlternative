@@ -29,6 +29,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     private readonly IDiffService _diffService;
     private readonly IProjectDetectionService _projectDetectionService;
     private readonly IUndoService _undoService;
+    private readonly IFileOperationHistoryService _fileOperationHistoryService;
+    private readonly IFileOperationQueueService _fileOperationQueueService;
+    private readonly HashSet<Guid> _ownedQueueItemIds = new();
     private readonly IFolderWatcherService _folderWatcherService;
     private readonly Stack<string> _backStack = new();
     private readonly Stack<string> _forwardStack = new();
@@ -66,6 +69,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         IDiffService diffService,
         IProjectDetectionService projectDetectionService,
         IUndoService undoService,
+        IFileOperationHistoryService fileOperationHistoryService,
+        IFileOperationQueueService fileOperationQueueService,
         Func<IFolderWatcherService> folderWatcherServiceFactory,
         string initialPath,
         ViewMode initialViewMode)
@@ -80,6 +85,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         _diffService = diffService;
         _projectDetectionService = projectDetectionService;
         _undoService = undoService;
+        _fileOperationHistoryService = fileOperationHistoryService;
+        _fileOperationQueueService = fileOperationQueueService;
+        _fileOperationQueueService.ItemCompleted += OnQueueItemCompleted;
         _folderWatcherService = folderWatcherServiceFactory();
         _folderWatcherService.Changed += OnFolderChangedExternally;
         _currentPath = initialPath;
@@ -677,6 +685,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         _externalChangeDebounceTimer?.Stop();
         _folderWatcherService.Changed -= OnFolderChangedExternally;
         _folderWatcherService.Dispose();
+        _fileOperationQueueService.ItemCompleted -= OnQueueItemCompleted;
     }
 
     private static bool IsPathComputerRoot(string path) => string.IsNullOrEmpty(path);
@@ -1115,10 +1124,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             _fileSystemService.CreateDirectory(CurrentPath, name);
             var createdPath = Path.Combine(CurrentPath, name);
             _undoService.Record($"「{name}」の新規作成", () => _fileSystemService.Delete(new[] { createdPath }));
+            LogHistory("新規作成", name, destination: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("新規作成", name, destination: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1137,10 +1148,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             _fileSystemService.CreateFile(CurrentPath, name);
             var createdPath = Path.Combine(CurrentPath, name);
             _undoService.Record($"「{name}」の新規作成", () => _fileSystemService.Delete(new[] { createdPath }));
+            LogHistory("新規作成", name, destination: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("新規作成", name, destination: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1205,13 +1218,16 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         try
         {
             var oldName = target.Name;
-            var newPath = Path.Combine(Path.GetDirectoryName(target.FullPath) ?? CurrentPath, newName);
+            var oldParent = Path.GetDirectoryName(target.FullPath) ?? CurrentPath;
+            var newPath = Path.Combine(oldParent, newName);
             _fileSystemService.Rename(target.FullPath, newName);
             _undoService.Record($"「{oldName}」→「{newName}」の名前変更", () => _fileSystemService.Rename(newPath, oldName));
+            LogHistory("名前変更", oldName, originalLocation: oldParent, destination: newName);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("名前変更", target.Name, originalLocation: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1231,13 +1247,18 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var targetPaths = SelectedNodes.Select(n => n.FullPath).ToList();
+        var target = targetPaths.Count == 1 ? Path.GetFileName(targetPaths[0]) : $"{targetPaths.Count}件";
+
         try
         {
-            _fileSystemService.Delete(SelectedNodes.Select(n => n.FullPath));
+            _fileSystemService.Delete(targetPaths);
+            LogHistory("削除", target, originalLocation: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("削除", target, originalLocation: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1287,25 +1308,95 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             isMove = effect.HasFlag(DragDropEffects.Move);
         }
 
-        try
+        if (!ConfirmOperationIfNeeded(isMove ? "移動" : "コピー", files, CurrentPath))
         {
-            if (isMove)
+            return;
+        }
+
+        EnqueueOperation(isMove ? "移動" : "コピー", files, CurrentPath, isMove);
+    }
+
+    private static string DescribeTargets(IReadOnlyList<string> paths) =>
+        paths.Count == 1 ? Path.GetFileName(paths[0]) : $"{paths.Count}件";
+
+    private static string? DescribeSourceFolder(IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0)
+        {
+            return null;
+        }
+
+        var folders = paths
+            .Select(p => Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(p)) ?? p)
+            .Distinct()
+            .ToList();
+
+        return folders.Count == 1 ? folders[0] : string.Join(", ", folders);
+    }
+
+    private void LogHistory(
+        string operation,
+        string target,
+        string? originalLocation = null,
+        string? destination = null,
+        bool success = true,
+        string? errorMessage = null)
+    {
+        _fileOperationHistoryService.Record(new FileOperationHistoryEntry
+        {
+            Timestamp = DateTime.Now,
+            Operation = operation,
+            Target = target,
+            OriginalLocation = originalLocation,
+            Destination = destination,
+            Success = success,
+            ErrorMessage = errorMessage
+        });
+    }
+
+    // 仕様書26章「ファイル操作キュー」：大量コピー/移動をバックグラウンドのキューへ委譲する。
+    // 完了後の処理（Undo記録・履歴記録・一覧更新）はOnQueueItemCompletedで行う。
+    private void EnqueueOperation(string kind, IReadOnlyList<string> sourcePaths, string destinationFolder, bool isMove)
+    {
+        var item = _fileOperationQueueService.Enqueue(kind, sourcePaths, destinationFolder, isMove);
+        _ownedQueueItemIds.Add(item.Id);
+    }
+
+    // キューは全ペイン共有のため、自分（このペイン）がEnqueueした項目のみ処理する。
+    private void OnQueueItemCompleted(FileOperationQueueItem item)
+    {
+        if (!_ownedQueueItemIds.Remove(item.Id))
+        {
+            return;
+        }
+
+        if (item.CompletedSourcePaths.Count > 0)
+        {
+            if (item.IsMove)
             {
-                _fileSystemService.Move(files, CurrentPath);
-                RecordMoveUndo(files, CurrentPath);
+                RecordMoveUndo(item.CompletedSourcePaths, item.DestinationFolder);
             }
             else
             {
-                _fileSystemService.Copy(files, CurrentPath);
-                RecordCopyUndo(files, CurrentPath);
+                RecordCopyUndo(item.CompletedSourcePaths, item.DestinationFolder);
             }
+        }
 
-            RefreshCurrentFolder();
-        }
-        catch (AppOperationException ex)
+        var succeeded = item.Status == FileOperationQueueItemStatus.Completed;
+        LogHistory(
+            item.Kind,
+            DescribeTargets(item.SourcePaths),
+            originalLocation: DescribeSourceFolder(item.SourcePaths),
+            destination: item.DestinationFolder,
+            success: succeeded,
+            errorMessage: item.ErrorMessage);
+
+        if (!succeeded && item.Status == FileOperationQueueItemStatus.Failed)
         {
-            _dialogService.ShowError(ex.Message);
+            _dialogService.ShowError($"{item.Kind}に失敗しました。({item.ErrorMessage})");
         }
+
+        RefreshCurrentFolder();
     }
 
     // 仕様書62章「Undo」：移動は元の親フォルダへ戻す。選択項目が複数フォルダの階層に
@@ -1363,10 +1454,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 _undoService.Record(description, () => _fileSystemService.Delete(created));
             }
 
+            LogHistory("複製", DescribeTargets(targets), originalLocation: CurrentPath, destination: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("複製", DescribeTargets(targets), originalLocation: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1374,6 +1467,23 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     // 仕様書20章「移動」に対応するドラッグ&ドロップ本体。ドロップ先フォルダの内部/子孫への
     // 移動・コピーや、同じフォルダへの無意味なドロップは黙って無視する（既存フォルダへの
     // File.Move/Directory.Move例外を避けるための最小限の防御）。
+    /// <summary>仕様書32章「ファイル操作プレビュー」：設定でONの場合のみ、実行前に対象件数と
+    /// 移動元/移動先を確認する。OFF時（既定）は常にtrueを返す。</summary>
+    private bool ConfirmOperationIfNeeded(string verb, IReadOnlyList<string> targets, string destinationFolder)
+    {
+        if (!_settingsService.Current.View.ConfirmMoveAndCopy)
+        {
+            return true;
+        }
+
+        var sourceFolder = targets.Count == 1
+            ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(targets[0])) ?? targets[0]
+            : string.Join(", ", targets.Select(t => Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(t)) ?? t).Distinct());
+
+        return _dialogService.Confirm(
+            $"{targets.Count}個の項目を{verb}します。\n\n移動元：{sourceFolder}\n移動先：{destinationFolder}");
+    }
+
     public void DropFiles(IReadOnlyList<string> sourcePaths, string destinationFolder, bool isMove)
     {
         var targets = sourcePaths
@@ -1385,25 +1495,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
-        try
+        if (!ConfirmOperationIfNeeded(isMove ? "移動" : "コピー", targets, destinationFolder))
         {
-            if (isMove)
-            {
-                _fileSystemService.Move(targets, destinationFolder);
-                RecordMoveUndo(targets, destinationFolder);
-            }
-            else
-            {
-                _fileSystemService.Copy(targets, destinationFolder);
-                RecordCopyUndo(targets, destinationFolder);
-            }
+            return;
+        }
 
-            RefreshCurrentFolder();
-        }
-        catch (AppOperationException ex)
-        {
-            _dialogService.ShowError(ex.Message);
-        }
+        EnqueueOperation(isMove ? "移動" : "コピー", targets, destinationFolder, isMove);
     }
 
     private static bool IsNoOpOrInvalidDrop(string sourcePath, string destinationFolder)
@@ -1432,6 +1529,11 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     {
         var targets = sourcePaths.Where(source => !IsSelfOrDescendantDrop(source, destinationFolder)).ToList();
         if (targets.Count == 0)
+        {
+            return;
+        }
+
+        if (!ConfirmOperationIfNeeded("コピー", targets, destinationFolder))
         {
             return;
         }
@@ -1499,10 +1601,13 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 });
             }
 
+            LogHistory("コピー", DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("コピー", DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder,
+                success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1528,10 +1633,13 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 _undoService.Record(description, () => _fileSystemService.Delete(created));
             }
 
+            LogHistory("ショートカット作成", DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("ショートカット作成", DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets),
+                destination: destinationFolder, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1644,6 +1752,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                     _fileSystemService.Rename(newPath, oldName);
                 }
             });
+
+            LogHistory("一括リネーム", description, originalLocation: CurrentPath);
         }
 
         RefreshCurrentFolder();
@@ -1690,7 +1800,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         }
     }
 
-    // 仕様書14.2章：Patchファイルを選択して現在のGit/SVN管理フォルダへ適用する。
+    // 仕様書14.2章・24章：Patchファイルを選択し、内容確認ダイアログで承認後に
+    // 現在のGit/SVN管理フォルダへ適用する。
     private void ApplyPatch()
     {
         var patchPath = _dialogService.ShowOpenFileDialog(
@@ -1698,6 +1809,23 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             "Patchファイル (*.patch;*.diff)|*.patch;*.diff|すべてのファイル (*.*)|*.*");
 
         if (patchPath is null)
+        {
+            return;
+        }
+
+        string patchText;
+        try
+        {
+            patchText = File.ReadAllText(patchPath);
+        }
+        catch (IOException ex)
+        {
+            _dialogService.ShowError($"Patchファイルを読み込めませんでした。({ex.Message})");
+            return;
+        }
+
+        var preview = PatchPreviewViewModel.Create(patchPath, VcsInfo.RootPath ?? CurrentPath, patchText);
+        if (!_dialogService.ShowPatchPreview(preview))
         {
             return;
         }

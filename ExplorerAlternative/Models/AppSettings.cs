@@ -40,4 +40,7 @@ public sealed class AppSettings
 
     /// <summary>システムトレイ・グローバルホットキー（仕様書40章・41章）。</summary>
     public WindowsIntegrationSettings WindowsIntegration { get; set; } = new();
+
+    /// <summary>ファイル操作履歴（仕様書31章）。先頭が最古、末尾が最新。</summary>
+    public List<FileOperationHistoryEntry> FileOperationHistory { get; set; } = new();
 }

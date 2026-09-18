@@ -1,3 +1,4 @@
+using ExplorerAlternative.Models;
 using ExplorerAlternative.ViewModels;
 
 namespace ExplorerAlternative.Services.Abstractions;
@@ -65,4 +66,23 @@ public interface IDialogService
 
     /// <summary>SFTPリモートブラウザウィンドウ（仕様書44章）を非モーダルで表示する。</summary>
     void ShowSftpBrowser(SftpBrowserViewModel sftpBrowserViewModel);
+
+    /// <summary>タグの追加・編集ダイアログ（仕様書5章：アイコン・色の選択）を表示する。「保存」で確定された場合はtrueを返す。</summary>
+    bool ShowTagEditor(TagEditorViewModel tagEditorViewModel);
+
+    /// <summary>操作履歴ダイアログ（仕様書30章「GUI Undo履歴」）を非モーダルで表示する。</summary>
+    void ShowUndoHistory(UndoHistoryViewModel undoHistoryViewModel);
+
+    /// <summary>ファイル操作履歴ダイアログ（仕様書31章）を非モーダルで表示する。</summary>
+    void ShowFileOperationHistory(FileOperationHistoryViewModel fileOperationHistoryViewModel);
+
+    /// <summary>Patch内容確認ダイアログ（仕様書24章）を表示する。「適用」で確定された場合はtrueを返す。</summary>
+    bool ShowPatchPreview(PatchPreviewViewModel patchPreviewViewModel);
+
+    /// <summary>ファイル操作キューダイアログ（仕様書26章）を非モーダルで表示する。</summary>
+    void ShowFileOperationQueue(FileOperationQueueViewModel fileOperationQueueViewModel);
+
+    /// <summary>仕様書26章「同名ファイル競合」の解決を尋ねる（バックグラウンドスレッドから
+    /// UIスレッドへ委譲して呼び出される）。</summary>
+    FileOperationConflictResolution AskFileOperationConflict(string fileName);
 }
