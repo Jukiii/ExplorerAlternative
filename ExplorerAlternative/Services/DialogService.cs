@@ -142,6 +142,12 @@ public sealed class DialogService : IDialogService
         window.Show();
     }
 
+    public bool ShowPatchPreview(PatchPreviewViewModel patchPreviewViewModel)
+    {
+        var window = new PatchPreviewDialog(patchPreviewViewModel) { Owner = Application.Current?.MainWindow };
+        return window.ShowDialog() == true;
+    }
+
     public void ShowSshProfiles(SshProfilesViewModel sshProfilesViewModel)
     {
         var window = new SshProfilesDialog(sshProfilesViewModel) { Owner = Application.Current?.MainWindow };

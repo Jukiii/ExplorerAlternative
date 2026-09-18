@@ -1795,7 +1795,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         }
     }
 
-    // 仕様書14.2章：Patchファイルを選択して現在のGit/SVN管理フォルダへ適用する。
+    // 仕様書14.2章・24章：Patchファイルを選択し、内容確認ダイアログで承認後に
+    // 現在のGit/SVN管理フォルダへ適用する。
     private void ApplyPatch()
     {
         var patchPath = _dialogService.ShowOpenFileDialog(
@@ -1803,6 +1804,23 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             "Patchファイル (*.patch;*.diff)|*.patch;*.diff|すべてのファイル (*.*)|*.*");
 
         if (patchPath is null)
+        {
+            return;
+        }
+
+        string patchText;
+        try
+        {
+            patchText = File.ReadAllText(patchPath);
+        }
+        catch (IOException ex)
+        {
+            _dialogService.ShowError($"Patchファイルを読み込めませんでした。({ex.Message})");
+            return;
+        }
+
+        var preview = PatchPreviewViewModel.Create(patchPath, VcsInfo.RootPath ?? CurrentPath, patchText);
+        if (!_dialogService.ShowPatchPreview(preview))
         {
             return;
         }

@@ -74,4 +74,7 @@ public interface IDialogService
 
     /// <summary>ファイル操作履歴ダイアログ（仕様書31章）を非モーダルで表示する。</summary>
     void ShowFileOperationHistory(FileOperationHistoryViewModel fileOperationHistoryViewModel);
+
+    /// <summary>Patch内容確認ダイアログ（仕様書24章）を表示する。「適用」で確定された場合はtrueを返す。</summary>
+    bool ShowPatchPreview(PatchPreviewViewModel patchPreviewViewModel);
 }
