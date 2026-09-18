@@ -184,6 +184,8 @@
                         <MenuItem Header="操作履歴..." Command="{Binding OpenUndoHistoryCommand}" />
                         <!-- 仕様書31章：永続化されたファイル操作履歴（Undo対象外の削除・失敗した操作も含む）。 -->
                         <MenuItem Header="ファイル操作履歴..." Command="{Binding OpenFileOperationHistoryCommand}" />
+                        <!-- 仕様書26章：大量コピー/移動の一時停止・再開・キャンセルを行うキュー。 -->
+                        <MenuItem Header="ファイル操作キュー..." Command="{Binding OpenFileOperationQueueCommand}" />
                         <Separator />
                         <MenuItem Header="お気に入りに追加" Command="{Binding AddFavoriteCommand}" />
                         <Separator />

@@ -65,6 +65,8 @@ public partial class App : Application
         var projectDetectionService = new ProjectDetectionService();
         var undoService = new UndoService();
         var fileOperationHistoryService = new FileOperationHistoryService(settingsService);
+        var fileOperationQueueService = new FileOperationQueueService();
+        fileOperationQueueService.ConflictResolver = dialogService.AskFileOperationConflict;
         IFolderWatcherService FolderWatcherServiceFactory() => new FolderWatcherService();
 
         // 仕様書39章：`--workspace 名前` はジャンプリストからのワークスペース直接起動。
@@ -108,6 +110,7 @@ public partial class App : Application
             projectDetectionService,
             undoService,
             fileOperationHistoryService,
+            fileOperationQueueService,
             FolderWatcherServiceFactory,
             startupPath);
 

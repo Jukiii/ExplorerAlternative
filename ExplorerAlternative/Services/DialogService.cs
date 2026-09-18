@@ -1,4 +1,5 @@
 using System.Windows;
+using ExplorerAlternative.Models;
 using ExplorerAlternative.Services.Abstractions;
 using ExplorerAlternative.ViewModels;
 using ExplorerAlternative.Views;
@@ -146,6 +147,30 @@ public sealed class DialogService : IDialogService
     {
         var window = new PatchPreviewDialog(patchPreviewViewModel) { Owner = Application.Current?.MainWindow };
         return window.ShowDialog() == true;
+    }
+
+    public void ShowFileOperationQueue(FileOperationQueueViewModel fileOperationQueueViewModel)
+    {
+        var window = new FileOperationQueueDialog(fileOperationQueueViewModel) { Owner = Application.Current?.MainWindow };
+        window.Show();
+    }
+
+    public FileOperationConflictResolution AskFileOperationConflict(string fileName)
+    {
+        var choice = SelectFromList(
+            "ファイルの競合",
+            $"「{fileName}」は移動先に既に存在します。どうしますか？",
+            new[] { "上書きする", "すべて上書きする", "スキップ", "すべてスキップ", "名前を変更してコピー" });
+
+        return choice switch
+        {
+            "上書きする" => FileOperationConflictResolution.Overwrite,
+            "すべて上書きする" => FileOperationConflictResolution.OverwriteAll,
+            "スキップ" => FileOperationConflictResolution.Skip,
+            "すべてスキップ" => FileOperationConflictResolution.SkipAll,
+            "名前を変更してコピー" => FileOperationConflictResolution.Rename,
+            _ => FileOperationConflictResolution.Cancel
+        };
     }
 
     public void ShowSshProfiles(SshProfilesViewModel sshProfilesViewModel)

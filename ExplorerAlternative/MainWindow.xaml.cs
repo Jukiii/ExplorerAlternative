@@ -405,6 +405,10 @@ public partial class MainWindow : Window
             destinationPane.DropFilesAsCopy(sourcePaths, destinationFolder);
         }
 
+        // 仕様書26章：DropFilesは実際の移動をファイル操作キュー（バックグラウンド）へ委譲するため
+        // 非同期。ここでのRefreshCurrentFolder()は移動完了前に呼ばれる可能性があるが、完了後は
+        // 移動元フォルダのFileSystemWatcher（20章・64章）が自動的に再読み込みするため、最終的な
+        // 表示状態は正しくなる。
         if (isMove && sourcePane is not null && !ReferenceEquals(sourcePane, destinationPane))
         {
             sourcePane.RefreshCurrentFolder();

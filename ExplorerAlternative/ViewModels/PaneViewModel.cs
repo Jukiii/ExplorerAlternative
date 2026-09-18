@@ -30,6 +30,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     private readonly IProjectDetectionService _projectDetectionService;
     private readonly IUndoService _undoService;
     private readonly IFileOperationHistoryService _fileOperationHistoryService;
+    private readonly IFileOperationQueueService _fileOperationQueueService;
+    private readonly HashSet<Guid> _ownedQueueItemIds = new();
     private readonly IFolderWatcherService _folderWatcherService;
     private readonly Stack<string> _backStack = new();
     private readonly Stack<string> _forwardStack = new();
@@ -68,6 +70,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         IProjectDetectionService projectDetectionService,
         IUndoService undoService,
         IFileOperationHistoryService fileOperationHistoryService,
+        IFileOperationQueueService fileOperationQueueService,
         Func<IFolderWatcherService> folderWatcherServiceFactory,
         string initialPath,
         ViewMode initialViewMode)
@@ -83,6 +86,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         _projectDetectionService = projectDetectionService;
         _undoService = undoService;
         _fileOperationHistoryService = fileOperationHistoryService;
+        _fileOperationQueueService = fileOperationQueueService;
+        _fileOperationQueueService.ItemCompleted += OnQueueItemCompleted;
         _folderWatcherService = folderWatcherServiceFactory();
         _folderWatcherService.Changed += OnFolderChangedExternally;
         _currentPath = initialPath;
@@ -680,6 +685,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         _externalChangeDebounceTimer?.Stop();
         _folderWatcherService.Changed -= OnFolderChangedExternally;
         _folderWatcherService.Dispose();
+        _fileOperationQueueService.ItemCompleted -= OnQueueItemCompleted;
     }
 
     private static bool IsPathComputerRoot(string path) => string.IsNullOrEmpty(path);
@@ -1307,30 +1313,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var verb = isMove ? "移動" : "コピー";
-
-        try
-        {
-            if (isMove)
-            {
-                _fileSystemService.Move(files, CurrentPath);
-                RecordMoveUndo(files, CurrentPath);
-            }
-            else
-            {
-                _fileSystemService.Copy(files, CurrentPath);
-                RecordCopyUndo(files, CurrentPath);
-            }
-
-            LogHistory(verb, DescribeTargets(files), originalLocation: DescribeSourceFolder(files), destination: CurrentPath);
-            RefreshCurrentFolder();
-        }
-        catch (AppOperationException ex)
-        {
-            LogHistory(verb, DescribeTargets(files), originalLocation: DescribeSourceFolder(files), destination: CurrentPath,
-                success: false, errorMessage: ex.Message);
-            _dialogService.ShowError(ex.Message);
-        }
+        EnqueueOperation(isMove ? "移動" : "コピー", files, CurrentPath, isMove);
     }
 
     private static string DescribeTargets(IReadOnlyList<string> paths) =>
@@ -1369,6 +1352,51 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             Success = success,
             ErrorMessage = errorMessage
         });
+    }
+
+    // 仕様書26章「ファイル操作キュー」：大量コピー/移動をバックグラウンドのキューへ委譲する。
+    // 完了後の処理（Undo記録・履歴記録・一覧更新）はOnQueueItemCompletedで行う。
+    private void EnqueueOperation(string kind, IReadOnlyList<string> sourcePaths, string destinationFolder, bool isMove)
+    {
+        var item = _fileOperationQueueService.Enqueue(kind, sourcePaths, destinationFolder, isMove);
+        _ownedQueueItemIds.Add(item.Id);
+    }
+
+    // キューは全ペイン共有のため、自分（このペイン）がEnqueueした項目のみ処理する。
+    private void OnQueueItemCompleted(FileOperationQueueItem item)
+    {
+        if (!_ownedQueueItemIds.Remove(item.Id))
+        {
+            return;
+        }
+
+        if (item.CompletedSourcePaths.Count > 0)
+        {
+            if (item.IsMove)
+            {
+                RecordMoveUndo(item.CompletedSourcePaths, item.DestinationFolder);
+            }
+            else
+            {
+                RecordCopyUndo(item.CompletedSourcePaths, item.DestinationFolder);
+            }
+        }
+
+        var succeeded = item.Status == FileOperationQueueItemStatus.Completed;
+        LogHistory(
+            item.Kind,
+            DescribeTargets(item.SourcePaths),
+            originalLocation: DescribeSourceFolder(item.SourcePaths),
+            destination: item.DestinationFolder,
+            success: succeeded,
+            errorMessage: item.ErrorMessage);
+
+        if (!succeeded && item.Status == FileOperationQueueItemStatus.Failed)
+        {
+            _dialogService.ShowError($"{item.Kind}に失敗しました。({item.ErrorMessage})");
+        }
+
+        RefreshCurrentFolder();
     }
 
     // 仕様書62章「Undo」：移動は元の親フォルダへ戻す。選択項目が複数フォルダの階層に
@@ -1472,30 +1500,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var verb = isMove ? "移動" : "コピー";
-
-        try
-        {
-            if (isMove)
-            {
-                _fileSystemService.Move(targets, destinationFolder);
-                RecordMoveUndo(targets, destinationFolder);
-            }
-            else
-            {
-                _fileSystemService.Copy(targets, destinationFolder);
-                RecordCopyUndo(targets, destinationFolder);
-            }
-
-            LogHistory(verb, DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder);
-            RefreshCurrentFolder();
-        }
-        catch (AppOperationException ex)
-        {
-            LogHistory(verb, DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder,
-                success: false, errorMessage: ex.Message);
-            _dialogService.ShowError(ex.Message);
-        }
+        EnqueueOperation(isMove ? "移動" : "コピー", targets, destinationFolder, isMove);
     }
 
     private static bool IsNoOpOrInvalidDrop(string sourcePath, string destinationFolder)

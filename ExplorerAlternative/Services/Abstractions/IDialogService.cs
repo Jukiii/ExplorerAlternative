@@ -1,3 +1,4 @@
+using ExplorerAlternative.Models;
 using ExplorerAlternative.ViewModels;
 
 namespace ExplorerAlternative.Services.Abstractions;
@@ -77,4 +78,11 @@ public interface IDialogService
 
     /// <summary>Patch内容確認ダイアログ（仕様書24章）を表示する。「適用」で確定された場合はtrueを返す。</summary>
     bool ShowPatchPreview(PatchPreviewViewModel patchPreviewViewModel);
+
+    /// <summary>ファイル操作キューダイアログ（仕様書26章）を非モーダルで表示する。</summary>
+    void ShowFileOperationQueue(FileOperationQueueViewModel fileOperationQueueViewModel);
+
+    /// <summary>仕様書26章「同名ファイル競合」の解決を尋ねる（バックグラウンドスレッドから
+    /// UIスレッドへ委譲して呼び出される）。</summary>
+    FileOperationConflictResolution AskFileOperationConflict(string fileName);
 }
