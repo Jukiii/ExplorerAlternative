@@ -133,6 +133,9 @@
                                         <Button Content="削除" DockPanel.Dock="Right"
                                                 Command="{Binding DataContext.RemoveExternalToolCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding}" />
+                                        <!-- 仕様書22章・42章「アイコン」：実行ファイル自体のアイコンを表示する。 -->
+                                        <Image Source="{Binding IconImage}" Width="16" Height="16" Margin="0,0,6,0"
+                                               VerticalAlignment="Center" />
                                         <TextBlock Margin="4,0" VerticalAlignment="Center">
                                             <Run Text="{Binding Name, Mode=OneWay}" FontWeight="Bold" />
                                             <Run Text=" - " />
