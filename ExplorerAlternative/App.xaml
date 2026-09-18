@@ -18,6 +18,7 @@
         <conv:EnumEqualsConverter x:Key="EnumEqualsConverter" />
         <conv:TagAssignedConverter x:Key="TagAssignedConverter" />
         <conv:ByteSizeConverter x:Key="ByteSizeConverter" />
+        <conv:HexColorToBrushConverter x:Key="HexColorToBrushConverter" />
 
         <!-- 既定のウィンドウ外観 -->
         <Style TargetType="Window">

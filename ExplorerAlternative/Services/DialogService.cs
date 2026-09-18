@@ -124,6 +124,12 @@ public sealed class DialogService : IDialogService
         return window.ShowDialog() == true;
     }
 
+    public bool ShowTagEditor(TagEditorViewModel tagEditorViewModel)
+    {
+        var window = new TagEditorDialog(tagEditorViewModel) { Owner = Application.Current?.MainWindow };
+        return window.ShowDialog() == true;
+    }
+
     public void ShowSshProfiles(SshProfilesViewModel sshProfilesViewModel)
     {
         var window = new SshProfilesDialog(sshProfilesViewModel) { Owner = Application.Current?.MainWindow };

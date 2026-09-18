@@ -1062,6 +1062,17 @@ public partial class MainWindow : Window
         _tabDragDuplicated = false;
     }
 
+    /// <summary>仕様書5章：タグ一覧のダブルクリックでアイコン・色の編集ダイアログを開く。</summary>
+    private void TagRow_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2 &&
+            sender is FrameworkElement { DataContext: TagDefinition tag } &&
+            DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.NavigationPane.EditTagCommand.Execute(tag);
+        }
+    }
+
     // 仕様書4章：ナビゲーションペイン内のListBox（お気に入り等）は既定でホイール/トラックパッドの
     // スクロールを自身で消費してしまい、外側のScrollViewer（ペイン全体）へ伝播しない。
     // ただし、MaxHeightで内部スクロールが必要な一覧（最近使った場所等）まで一律に外側へ

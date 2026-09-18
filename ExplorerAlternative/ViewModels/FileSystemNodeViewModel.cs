@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
 using ExplorerAlternative.Services;
@@ -93,7 +94,11 @@ public sealed class FileSystemNodeViewModel : ObservableObject
 
     public bool HasTags => Tags.Count > 0;
 
-    public string TagsDisplay => HasTags ? $"🏷 {string.Join(", ", Tags)}" : string.Empty;
+    /// <summary>仕様書5章：タグごとに選択されたアイコンを使って表示する。</summary>
+    public string TagsDisplay => HasTags
+        ? string.Join(", ", Tags.Select(name =>
+            $"{_settingsService.Current.TagDefinitions.FirstOrDefault(t => t.Name == name)?.IconGlyph ?? "🏷"} {name}"))
+        : string.Empty;
 
     /// <summary>仕様書21章「Explorer上：M Modified / A Added / D Deleted / U Untracked / R Renamed」。</summary>
     public string VcsStatus => _vcsStatusLookup?.Invoke(FullPath) ?? string.Empty;

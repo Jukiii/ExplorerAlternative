@@ -489,13 +489,16 @@
                                      PreviewMouseWheel="NavListBox_PreviewMouseWheel">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:TagDefinition}">
-                                        <DockPanel Margin="4,3">
+                                        <DockPanel Margin="4,3" ToolTip="ダブルクリックでアイコン・色を編集"
+                                                   MouseLeftButtonUp="TagRow_MouseLeftButtonUp">
                                             <Button DockPanel.Dock="Right" Content="✕" FontSize="9" Width="20" Height="20" Padding="0"
                                                     ToolTip="タグを削除"
                                                     Command="{Binding DataContext.NavigationPane.RemoveTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                     CommandParameter="{Binding}" />
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="🏷" Margin="0,0,6,0" FontSize="11" />
+                                                <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,6,0"
+                                                        Background="{Binding ColorHex, Converter={StaticResource HexColorToBrushConverter}}" />
+                                                <TextBlock Text="{Binding IconGlyph}" Margin="0,0,6,0" FontSize="11" />
                                                 <TextBlock Text="{Binding Name}" />
                                             </StackPanel>
                                         </DockPanel>

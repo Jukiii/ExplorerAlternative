@@ -941,13 +941,19 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void AddNewTag()
     {
-        var name = _dialogService.PromptText("新しいタグ", "タグ名を入力してください。");
-        if (string.IsNullOrWhiteSpace(name))
+        var editor = TagEditorViewModel.CreateNew();
+        if (_dialogService.ShowTagEditor(editor) != true)
         {
             return;
         }
 
-        NavigationPane.AddTag(name.Trim());
+        var tag = editor.ToDefinition();
+        if (string.IsNullOrWhiteSpace(tag.Name))
+        {
+            return;
+        }
+
+        NavigationPane.AddTag(tag);
     }
 
     private void SaveWorkspace(Window window)
