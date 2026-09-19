@@ -147,7 +147,7 @@ public partial class MainWindow : Window
                 break;
             }
 
-            current = VisualTreeHelper.GetParent(current);
+            current = VisualTreeUtility.GetParent(current);
         }
 
         e.Handled = true;
@@ -376,7 +376,7 @@ public partial class MainWindow : Window
                 return true;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = VisualTreeUtility.GetParent(source);
         }
 
         return false;
@@ -531,7 +531,7 @@ public partial class MainWindow : Window
                 return node;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = VisualTreeUtility.GetParent(source);
         }
 
         return null;
@@ -767,7 +767,7 @@ public partial class MainWindow : Window
                 return match;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = VisualTreeUtility.GetParent(source);
         }
 
         return null;
@@ -808,7 +808,7 @@ public partial class MainWindow : Window
                 return entry;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = VisualTreeUtility.GetParent(source);
         }
 
         return null;
@@ -874,7 +874,7 @@ public partial class MainWindow : Window
                 return true;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = VisualTreeUtility.GetParent(source);
         }
 
         return false;
@@ -928,7 +928,7 @@ public partial class MainWindow : Window
                 return true;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = VisualTreeUtility.GetParent(source);
         }
 
         return false;
@@ -1113,11 +1113,11 @@ public partial class MainWindow : Window
 
     private static ScrollViewer? FindAncestorScrollViewer(DependencyObject element)
     {
-        var current = VisualTreeHelper.GetParent(element);
+        var current = VisualTreeUtility.GetParent(element);
 
         while (current is not null and not ScrollViewer)
         {
-            current = VisualTreeHelper.GetParent(current);
+            current = VisualTreeUtility.GetParent(current);
         }
 
         return current as ScrollViewer;
