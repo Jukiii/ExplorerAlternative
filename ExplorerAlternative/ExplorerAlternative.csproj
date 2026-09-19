@@ -33,4 +33,9 @@
     <PackageReference Include="SSH.NET" Version="2026.0.0" />
   </ItemGroup>
 
+  <!-- 単体テストプロジェクト（ExplorerAlternative.Tests）からinternalなメンバーを参照するため。 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="ExplorerAlternative.Tests" />
+  </ItemGroup>
+
 </Project>

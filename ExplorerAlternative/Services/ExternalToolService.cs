@@ -32,7 +32,7 @@ public sealed class ExternalToolService : IExternalToolService
     // 仕様書65章「任意EXE起動時の引数を適切にエスケープ」：対象パスに空白が含まれる場合
     // （Windowsでは珍しくない）、置換前のテンプレート側で既に引用符が付いていない限り、
     // 単一の引数として渡るよう自動的に引用符で囲む。
-    private static string BuildArguments(string template, string targetPath)
+    internal static string BuildArguments(string template, string targetPath)
     {
         const string placeholder = "{path}";
         var index = template.IndexOf(placeholder, StringComparison.Ordinal);
