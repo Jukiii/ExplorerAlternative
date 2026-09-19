@@ -28,6 +28,10 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     private readonly IVersionControlOperationsService _versionControlOperationsService;
     private readonly IDiffService _diffService;
     private readonly IProjectDetectionService _projectDetectionService;
+    private readonly IUndoService _undoService;
+    private readonly IFileOperationHistoryService _fileOperationHistoryService;
+    private readonly IFileOperationQueueService _fileOperationQueueService;
+    private readonly HashSet<Guid> _ownedQueueItemIds = new();
     private readonly IFolderWatcherService _folderWatcherService;
     private readonly Stack<string> _backStack = new();
     private readonly Stack<string> _forwardStack = new();
@@ -52,6 +56,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     private int _loadGeneration;
     private string _sortColumn = "Name";
     private bool _sortAscending = true;
+    private bool _suppressNodeToggleRebuild;
 
     public PaneViewModel(
         IFileSystemService fileSystemService,
@@ -63,6 +68,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         IVersionControlOperationsService versionControlOperationsService,
         IDiffService diffService,
         IProjectDetectionService projectDetectionService,
+        IUndoService undoService,
+        IFileOperationHistoryService fileOperationHistoryService,
+        IFileOperationQueueService fileOperationQueueService,
         Func<IFolderWatcherService> folderWatcherServiceFactory,
         string initialPath,
         ViewMode initialViewMode)
@@ -76,6 +84,10 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         _versionControlOperationsService = versionControlOperationsService;
         _diffService = diffService;
         _projectDetectionService = projectDetectionService;
+        _undoService = undoService;
+        _fileOperationHistoryService = fileOperationHistoryService;
+        _fileOperationQueueService = fileOperationQueueService;
+        _fileOperationQueueService.ItemCompleted += OnQueueItemCompleted;
         _folderWatcherService = folderWatcherServiceFactory();
         _folderWatcherService.Changed += OnFolderChangedExternally;
         _currentPath = initialPath;
@@ -142,6 +154,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             _ => PrimarySelectedNode is { IsDirectory: false } node &&
                  _heldComparisonPath is not null &&
                  !string.Equals(_heldComparisonPath, node.FullPath, StringComparison.OrdinalIgnoreCase));
+        CompareSelectedCommand = new RelayCommand(
+            _ => CompareSelected(),
+            _ => SelectedNodes.Count == 2 && SelectedNodes.All(n => !n.IsDirectory));
 
         LoadPath(_currentPath);
     }
@@ -286,6 +301,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
     /// <summary>仕様書25章「比較対象と比較」。</summary>
     public RelayCommand CompareWithHeldCommand { get; }
+
+    /// <summary>ファイルを2つ選択している場合に、保持の手順を省いて直接比較する簡易コマンド。</summary>
+    public RelayCommand CompareSelectedCommand { get; }
 
     /// <summary>コンテキストメニューの「タグ」サブメニューに表示する、登録済みタグ一覧。</summary>
     public IReadOnlyList<TagDefinition> AvailableTags => _settingsService.Current.TagDefinitions;
@@ -468,6 +486,15 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 ? _fileSystemService.GetDrives()
                 : _fileSystemService.GetChildren(path);
 
+            // 仕様書64章「既知の制限」：同じフォルダの再読み込み（F5・外部変更検知）の場合のみ、
+            // 選択状態・展開状態をパスで照合して復元する（別フォルダへの移動時は復元不要）。
+            Dictionary<string, NodeState>? previousState = null;
+            if (string.Equals(_currentPath, path, StringComparison.OrdinalIgnoreCase) && RootNodes.Count > 0)
+            {
+                previousState = new Dictionary<string, NodeState>(StringComparer.OrdinalIgnoreCase);
+                CollectNodeState(RootNodes, previousState);
+            }
+
             CurrentPath = path;
 
             var generation = ++_loadGeneration;
@@ -503,6 +530,22 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             foreach (var node in SortNodes(newNodes))
             {
                 RootNodes.Add(node);
+            }
+
+            if (previousState is not null)
+            {
+                // 展開状態の復元中は、展開済みフォルダ1件ごとにOnNodeToggledが表示リスト全体を
+                // 再構築してしまうと、展開済みフォルダ数が多い場合に再構築が連鎖してフリーズ
+                // したように見える不具合があったため、復元完了後に1回だけ再構築する。
+                _suppressNodeToggleRebuild = true;
+                try
+                {
+                    ApplyNodeState(RootNodes, previousState);
+                }
+                finally
+                {
+                    _suppressNodeToggleRebuild = false;
+                }
             }
 
             RebuildVisibleNodes();
@@ -642,6 +685,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         _externalChangeDebounceTimer?.Stop();
         _folderWatcherService.Changed -= OnFolderChangedExternally;
         _folderWatcherService.Dispose();
+        _fileOperationQueueService.ItemCompleted -= OnQueueItemCompleted;
     }
 
     private static bool IsPathComputerRoot(string path) => string.IsNullOrEmpty(path);
@@ -683,6 +727,11 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     /// </summary>
     private void OnNodeToggled(FileSystemNodeViewModel node)
     {
+        if (_suppressNodeToggleRebuild)
+        {
+            return;
+        }
+
         var index = VisibleNodes.IndexOf(node);
         if (index < 0)
         {
@@ -729,6 +778,52 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             if (node.IsDirectory && node.IsExpanded && node.Children is not null)
             {
                 CollectVisible(node.Children, result);
+            }
+        }
+    }
+
+    private readonly record struct NodeState(bool IsExpanded, bool IsSelected);
+
+    /// <summary>再読み込み前の選択・展開状態をフルパスで記録する（展開済みの子孫も再帰的に対象）。</summary>
+    private static void CollectNodeState(IEnumerable<FileSystemNodeViewModel> nodes, Dictionary<string, NodeState> result)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.IsExpanded || node.IsSelected)
+            {
+                result[node.FullPath] = new NodeState(node.IsExpanded, node.IsSelected);
+            }
+
+            if (node.Children is not null)
+            {
+                CollectNodeState(node.Children, result);
+            }
+        }
+    }
+
+    /// <summary>再読み込み後の新しいノードに、記録しておいた選択・展開状態をパス一致で復元する。</summary>
+    private static void ApplyNodeState(IEnumerable<FileSystemNodeViewModel> nodes, IReadOnlyDictionary<string, NodeState> previousState)
+    {
+        foreach (var node in nodes)
+        {
+            if (!previousState.TryGetValue(node.FullPath, out var state))
+            {
+                continue;
+            }
+
+            if (state.IsExpanded && node.IsDirectory)
+            {
+                node.IsExpanded = true;
+
+                if (node.Children is not null)
+                {
+                    ApplyNodeState(node.Children, previousState);
+                }
+            }
+
+            if (state.IsSelected)
+            {
+                node.IsSelected = true;
             }
         }
     }
@@ -1027,10 +1122,14 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         try
         {
             _fileSystemService.CreateDirectory(CurrentPath, name);
+            var createdPath = Path.Combine(CurrentPath, name);
+            _undoService.Record($"「{name}」の新規作成", () => _fileSystemService.Delete(new[] { createdPath }));
+            LogHistory("新規作成", name, destination: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("新規作成", name, destination: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1047,10 +1146,14 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         try
         {
             _fileSystemService.CreateFile(CurrentPath, name);
+            var createdPath = Path.Combine(CurrentPath, name);
+            _undoService.Record($"「{name}」の新規作成", () => _fileSystemService.Delete(new[] { createdPath }));
+            LogHistory("新規作成", name, destination: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("新規作成", name, destination: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1114,15 +1217,24 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
         try
         {
+            var oldName = target.Name;
+            var oldParent = Path.GetDirectoryName(target.FullPath) ?? CurrentPath;
+            var newPath = Path.Combine(oldParent, newName);
             _fileSystemService.Rename(target.FullPath, newName);
+            _undoService.Record($"「{oldName}」→「{newName}」の名前変更", () => _fileSystemService.Rename(newPath, oldName));
+            LogHistory("名前変更", oldName, originalLocation: oldParent, destination: newName);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("名前変更", target.Name, originalLocation: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
 
+    // 仕様書62章「Undo」：ごみ箱からの復元にはWindowsごみ箱APIとの連携（COM相互運用）が
+    // 必要になるため、削除はUndo対象外とする（ごみ箱から手動復元、またはWindows
+    // エクスプローラー自体のUndoで対応可能）。
     private void DeleteSelection()
     {
         if (SelectedNodes.Count == 0)
@@ -1135,13 +1247,18 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var targetPaths = SelectedNodes.Select(n => n.FullPath).ToList();
+        var target = targetPaths.Count == 1 ? Path.GetFileName(targetPaths[0]) : $"{targetPaths.Count}件";
+
         try
         {
-            _fileSystemService.Delete(SelectedNodes.Select(n => n.FullPath));
+            _fileSystemService.Delete(targetPaths);
+            LogHistory("削除", target, originalLocation: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("削除", target, originalLocation: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1191,23 +1308,129 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             isMove = effect.HasFlag(DragDropEffects.Move);
         }
 
-        try
+        if (!ConfirmOperationIfNeeded(isMove ? "移動" : "コピー", files, CurrentPath))
         {
-            if (isMove)
+            return;
+        }
+
+        EnqueueOperation(isMove ? "移動" : "コピー", files, CurrentPath, isMove);
+    }
+
+    private static string DescribeTargets(IReadOnlyList<string> paths) =>
+        paths.Count == 1 ? Path.GetFileName(paths[0]) : $"{paths.Count}件";
+
+    private static string? DescribeSourceFolder(IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0)
+        {
+            return null;
+        }
+
+        var folders = paths
+            .Select(p => Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(p)) ?? p)
+            .Distinct()
+            .ToList();
+
+        return folders.Count == 1 ? folders[0] : string.Join(", ", folders);
+    }
+
+    private void LogHistory(
+        string operation,
+        string target,
+        string? originalLocation = null,
+        string? destination = null,
+        bool success = true,
+        string? errorMessage = null)
+    {
+        _fileOperationHistoryService.Record(new FileOperationHistoryEntry
+        {
+            Timestamp = DateTime.Now,
+            Operation = operation,
+            Target = target,
+            OriginalLocation = originalLocation,
+            Destination = destination,
+            Success = success,
+            ErrorMessage = errorMessage
+        });
+    }
+
+    // 仕様書26章「ファイル操作キュー」：大量コピー/移動をバックグラウンドのキューへ委譲する。
+    // 完了後の処理（Undo記録・履歴記録・一覧更新）はOnQueueItemCompletedで行う。
+    private void EnqueueOperation(string kind, IReadOnlyList<string> sourcePaths, string destinationFolder, bool isMove)
+    {
+        var item = _fileOperationQueueService.Enqueue(kind, sourcePaths, destinationFolder, isMove);
+        _ownedQueueItemIds.Add(item.Id);
+    }
+
+    // キューは全ペイン共有のため、自分（このペイン）がEnqueueした項目のみ処理する。
+    private void OnQueueItemCompleted(FileOperationQueueItem item)
+    {
+        if (!_ownedQueueItemIds.Remove(item.Id))
+        {
+            return;
+        }
+
+        if (item.CompletedSourcePaths.Count > 0)
+        {
+            if (item.IsMove)
             {
-                _fileSystemService.Move(files, CurrentPath);
+                RecordMoveUndo(item.CompletedSourcePaths, item.DestinationFolder);
             }
             else
             {
-                _fileSystemService.Copy(files, CurrentPath);
+                RecordCopyUndo(item.CompletedSourcePaths, item.DestinationFolder);
             }
+        }
 
-            RefreshCurrentFolder();
-        }
-        catch (AppOperationException ex)
+        var succeeded = item.Status == FileOperationQueueItemStatus.Completed;
+        LogHistory(
+            item.Kind,
+            DescribeTargets(item.SourcePaths),
+            originalLocation: DescribeSourceFolder(item.SourcePaths),
+            destination: item.DestinationFolder,
+            success: succeeded,
+            errorMessage: item.ErrorMessage);
+
+        if (!succeeded && item.Status == FileOperationQueueItemStatus.Failed)
         {
-            _dialogService.ShowError(ex.Message);
+            _dialogService.ShowError($"{item.Kind}に失敗しました。({item.ErrorMessage})");
         }
+
+        RefreshCurrentFolder();
+    }
+
+    // 仕様書62章「Undo」：移動は元の親フォルダへ戻す。選択項目が複数フォルダの階層に
+    // またがっている場合に備え、項目ごとに元の親フォルダを個別に記録する。
+    private void RecordMoveUndo(IReadOnlyList<string> sourcePaths, string destinationDirectory)
+    {
+        var items = sourcePaths
+            .Select(source => (
+                Destination: Path.Combine(destinationDirectory, Path.GetFileName(source)),
+                OriginalParent: Path.GetDirectoryName(source) ?? destinationDirectory))
+            .ToList();
+
+        var description = items.Count == 1
+            ? $"「{Path.GetFileName(items[0].Destination)}」の移動"
+            : $"{items.Count}件の移動";
+
+        _undoService.Record(description, () =>
+        {
+            foreach (var item in items)
+            {
+                _fileSystemService.Move(new[] { item.Destination }, item.OriginalParent);
+            }
+        });
+    }
+
+    private void RecordCopyUndo(IReadOnlyList<string> sourcePaths, string destinationDirectory)
+    {
+        var destinations = sourcePaths.Select(source => Path.Combine(destinationDirectory, Path.GetFileName(source))).ToList();
+
+        var description = destinations.Count == 1
+            ? $"「{Path.GetFileName(destinations[0])}」のコピー"
+            : $"{destinations.Count}件のコピー";
+
+        _undoService.Record(description, () => _fileSystemService.Delete(destinations));
     }
 
     private void DuplicateSelection()
@@ -1221,11 +1444,22 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
         try
         {
-            _fileSystemService.Duplicate(targets);
+            var created = _fileSystemService.Duplicate(targets);
+
+            if (created.Count > 0)
+            {
+                var description = created.Count == 1
+                    ? $"「{Path.GetFileName(created[0])}」の複製"
+                    : $"{created.Count}件の複製";
+                _undoService.Record(description, () => _fileSystemService.Delete(created));
+            }
+
+            LogHistory("複製", DescribeTargets(targets), originalLocation: CurrentPath, destination: CurrentPath);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("複製", DescribeTargets(targets), originalLocation: CurrentPath, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1233,6 +1467,23 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     // 仕様書20章「移動」に対応するドラッグ&ドロップ本体。ドロップ先フォルダの内部/子孫への
     // 移動・コピーや、同じフォルダへの無意味なドロップは黙って無視する（既存フォルダへの
     // File.Move/Directory.Move例外を避けるための最小限の防御）。
+    /// <summary>仕様書32章「ファイル操作プレビュー」：設定でONの場合のみ、実行前に対象件数と
+    /// 移動元/移動先を確認する。OFF時（既定）は常にtrueを返す。</summary>
+    private bool ConfirmOperationIfNeeded(string verb, IReadOnlyList<string> targets, string destinationFolder)
+    {
+        if (!_settingsService.Current.View.ConfirmMoveAndCopy)
+        {
+            return true;
+        }
+
+        var sourceFolder = targets.Count == 1
+            ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(targets[0])) ?? targets[0]
+            : string.Join(", ", targets.Select(t => Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(t)) ?? t).Distinct());
+
+        return _dialogService.Confirm(
+            $"{targets.Count}個の項目を{verb}します。\n\n移動元：{sourceFolder}\n移動先：{destinationFolder}");
+    }
+
     public void DropFiles(IReadOnlyList<string> sourcePaths, string destinationFolder, bool isMove)
     {
         var targets = sourcePaths
@@ -1244,23 +1495,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
-        try
+        if (!ConfirmOperationIfNeeded(isMove ? "移動" : "コピー", targets, destinationFolder))
         {
-            if (isMove)
-            {
-                _fileSystemService.Move(targets, destinationFolder);
-            }
-            else
-            {
-                _fileSystemService.Copy(targets, destinationFolder);
-            }
+            return;
+        }
 
-            RefreshCurrentFolder();
-        }
-        catch (AppOperationException ex)
-        {
-            _dialogService.ShowError(ex.Message);
-        }
+        EnqueueOperation(isMove ? "移動" : "コピー", targets, destinationFolder, isMove);
     }
 
     private static bool IsNoOpOrInvalidDrop(string sourcePath, string destinationFolder)
@@ -1293,6 +1533,13 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
+        if (!ConfirmOperationIfNeeded("コピー", targets, destinationFolder))
+        {
+            return;
+        }
+
+        var undoActions = new List<(string Name, Action Undo)>();
+
         try
         {
             foreach (var source in targets)
@@ -1300,21 +1547,27 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 var normalizedSource = Path.TrimEndingDirectorySeparator(source);
                 var normalizedDestination = Path.TrimEndingDirectorySeparator(destinationFolder);
                 var sourceParent = Path.GetDirectoryName(normalizedSource);
+                var fileName = Path.GetFileName(source);
 
                 if (string.Equals(sourceParent, normalizedDestination, StringComparison.OrdinalIgnoreCase))
                 {
-                    _fileSystemService.Duplicate(new[] { source });
+                    var created = _fileSystemService.Duplicate(new[] { source });
+                    if (created.Count > 0)
+                    {
+                        undoActions.Add((fileName, () => _fileSystemService.Delete(created)));
+                    }
+
                     continue;
                 }
 
-                var destinationPath = Path.Combine(destinationFolder, Path.GetFileName(source));
+                var destinationPath = Path.Combine(destinationFolder, fileName);
                 if (!Directory.Exists(destinationPath) && !File.Exists(destinationPath))
                 {
                     _fileSystemService.Copy(new[] { source }, destinationFolder);
+                    undoActions.Add((fileName, () => _fileSystemService.Delete(new[] { destinationPath })));
                     continue;
                 }
 
-                var fileName = Path.GetFileName(source);
                 var choice = _dialogService.SelectFromList(
                     "ファイルの競合",
                     $"「{fileName}」は移動先に既に存在します。どうしますか？",
@@ -1322,20 +1575,39 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
                 if (choice == "名前を変更してコピー（*_copy）")
                 {
-                    _fileSystemService.CopyRenamed(source, destinationFolder);
+                    var renamedPath = _fileSystemService.CopyRenamed(source, destinationFolder);
+                    undoActions.Add((fileName, () => _fileSystemService.Delete(new[] { renamedPath })));
                 }
                 else if (choice == "上書きする")
                 {
                     _fileSystemService.CopyReplacing(source, destinationFolder);
+                    // 上書きコピーは置き換え前の内容を保持しないためUndo対象外。
                 }
 
                 // それ以外（キャンセル・ダイアログを閉じた）は何もしない。
             }
 
+            if (undoActions.Count > 0)
+            {
+                var description = undoActions.Count == 1
+                    ? $"「{undoActions[0].Name}」のコピー"
+                    : $"{undoActions.Count}件のコピー";
+                _undoService.Record(description, () =>
+                {
+                    foreach (var (_, undo) in undoActions)
+                    {
+                        undo();
+                    }
+                });
+            }
+
+            LogHistory("コピー", DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("コピー", DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder,
+                success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1351,11 +1623,23 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
         try
         {
-            _fileSystemService.CreateShortcuts(targets, destinationFolder);
+            var created = _fileSystemService.CreateShortcuts(targets, destinationFolder);
+
+            if (created.Count > 0)
+            {
+                var description = created.Count == 1
+                    ? $"「{Path.GetFileName(created[0])}」のショートカット作成"
+                    : $"{created.Count}件のショートカット作成";
+                _undoService.Record(description, () => _fileSystemService.Delete(created));
+            }
+
+            LogHistory("ショートカット作成", DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets), destination: destinationFolder);
             RefreshCurrentFolder();
         }
         catch (AppOperationException ex)
         {
+            LogHistory("ショートカット作成", DescribeTargets(targets), originalLocation: DescribeSourceFolder(targets),
+                destination: destinationFolder, success: false, errorMessage: ex.Message);
             _dialogService.ShowError(ex.Message);
         }
     }
@@ -1440,17 +1724,36 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     // パターン展開と検索/置換のどちらのモードでも、プレビューと実際の結果が食い違わないようにするため。
     public void BulkRename(IReadOnlyList<FileSystemNodeViewModel> targets, IReadOnlyList<BulkRenamePreviewItem> previewItems)
     {
+        var renamed = new List<(string NewPath, string OldName)>();
+
         for (var i = 0; i < targets.Count && i < previewItems.Count; i++)
         {
             try
             {
+                var oldName = targets[i].Name;
+                var newPath = Path.Combine(Path.GetDirectoryName(targets[i].FullPath) ?? CurrentPath, previewItems[i].NewName);
                 _fileSystemService.Rename(targets[i].FullPath, previewItems[i].NewName);
+                renamed.Add((newPath, oldName));
             }
             catch (AppOperationException ex)
             {
                 _dialogService.ShowError(ex.Message);
                 break;
             }
+        }
+
+        if (renamed.Count > 0)
+        {
+            var description = renamed.Count == 1 ? "1件の名前変更" : $"{renamed.Count}件の名前変更";
+            _undoService.Record(description, () =>
+            {
+                foreach (var (newPath, oldName) in renamed)
+                {
+                    _fileSystemService.Rename(newPath, oldName);
+                }
+            });
+
+            LogHistory("一括リネーム", description, originalLocation: CurrentPath);
         }
 
         RefreshCurrentFolder();
@@ -1497,7 +1800,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         }
     }
 
-    // 仕様書14.2章：Patchファイルを選択して現在のGit/SVN管理フォルダへ適用する。
+    // 仕様書14.2章・24章：Patchファイルを選択し、内容確認ダイアログで承認後に
+    // 現在のGit/SVN管理フォルダへ適用する。
     private void ApplyPatch()
     {
         var patchPath = _dialogService.ShowOpenFileDialog(
@@ -1505,6 +1809,23 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             "Patchファイル (*.patch;*.diff)|*.patch;*.diff|すべてのファイル (*.*)|*.*");
 
         if (patchPath is null)
+        {
+            return;
+        }
+
+        string patchText;
+        try
+        {
+            patchText = File.ReadAllText(patchPath);
+        }
+        catch (IOException ex)
+        {
+            _dialogService.ShowError($"Patchファイルを読み込めませんでした。({ex.Message})");
+            return;
+        }
+
+        var preview = PatchPreviewViewModel.Create(patchPath, VcsInfo.RootPath ?? CurrentPath, patchText);
+        if (!_dialogService.ShowPatchPreview(preview))
         {
             return;
         }
@@ -1725,13 +2046,33 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
+        ShowFileDiff(_heldComparisonPath, target.FullPath, $"{Path.GetFileName(_heldComparisonPath)} ⇔ {target.Name}");
+    }
+
+    // 「比較対象として保持」→「比較対象と比較」の2手順を省き、ファイルを2つ選択した状態から
+    // 直接比較する（保持したパスは変更しない）。
+    private void CompareSelected()
+    {
+        if (SelectedNodes.Count != 2)
+        {
+            return;
+        }
+
+        var left = SelectedNodes[0];
+        var right = SelectedNodes[1];
+
+        ShowFileDiff(left.FullPath, right.FullPath, $"{left.Name} ⇔ {right.Name}");
+    }
+
+    private void ShowFileDiff(string leftPath, string rightPath, string title)
+    {
         string leftText;
         string rightText;
 
         try
         {
-            leftText = _fileSystemService.ReadTextPreview(_heldComparisonPath, 5_000_000, out _);
-            rightText = _fileSystemService.ReadTextPreview(target.FullPath, 5_000_000, out _);
+            leftText = _fileSystemService.ReadTextPreview(leftPath, 5_000_000, out _);
+            rightText = _fileSystemService.ReadTextPreview(rightPath, 5_000_000, out _);
         }
         catch (AppOperationException ex)
         {
@@ -1739,15 +2080,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var diffViewModel = DiffViewModel.Create(
-            $"{Path.GetFileName(_heldComparisonPath)} ⇔ {target.Name}",
-            _heldComparisonPath,
-            target.FullPath,
-            leftText,
-            rightText,
-            _diffService,
-            _dialogService);
-
+        var diffViewModel = DiffViewModel.Create(title, leftPath, rightPath, leftText, rightText, _diffService, _dialogService);
         _dialogService.ShowDiff(diffViewModel);
     }
 

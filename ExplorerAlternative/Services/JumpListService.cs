@@ -16,6 +16,7 @@ public sealed class JumpListService : IJumpListService
 
     public void Rebuild(
         IEnumerable<(string Name, string Path)> recentPlaces,
+        IEnumerable<(string Name, string Path)> frequentPlaces,
         IEnumerable<(string Name, string Path)> favorites,
         IEnumerable<string> workspaceNames)
     {
@@ -30,6 +31,11 @@ public sealed class JumpListService : IJumpListService
         foreach (var (name, path) in recentPlaces.Take(MaxItemsPerCategory))
         {
             jumpList.JumpItems.Add(CreateTask(exePath, name, path, $"\"{path}\"", "最近使った場所"));
+        }
+
+        foreach (var (name, path) in frequentPlaces.Take(MaxItemsPerCategory))
+        {
+            jumpList.JumpItems.Add(CreateTask(exePath, name, path, $"\"{path}\"", "よく使う場所"));
         }
 
         foreach (var (name, path) in favorites.Take(MaxItemsPerCategory))

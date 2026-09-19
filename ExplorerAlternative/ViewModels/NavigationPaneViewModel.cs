@@ -16,11 +16,13 @@ public sealed class NavigationPaneViewModel : ObservableObject
 {
     private const int MaxRecentPlaces = 5;
     private const int MaxRecentProjects = 10;
+    private const int MaxFrequentPlaces = 5;
 
     private readonly ISettingsService _settingsService;
     private readonly IFileSystemService _fileSystemService;
     private readonly IDialogService _dialogService;
     private readonly Action<string> _navigate;
+    private readonly Dictionary<string, int> _frequentPlaceVisitCounts = new(StringComparer.OrdinalIgnoreCase);
     private bool _isCollapsed;
 
     public NavigationPaneViewModel(ISettingsService settingsService, IFileSystemService fileSystemService, IDialogService dialogService, Action<string> navigate)
@@ -54,6 +56,13 @@ public sealed class NavigationPaneViewModel : ObservableObject
             RecentPlaces.Add(new FavoriteEntry { Name = DisplayNameFor(path), Path = path });
         }
 
+        foreach (var visit in _settingsService.Current.FrequentPlaces)
+        {
+            _frequentPlaceVisitCounts[visit.Path] = visit.VisitCount;
+        }
+
+        RebuildFrequentPlacesDisplay();
+
         // 仕様書55章：起動時の読み込みでは、名前が重複するプロジェクトは先に現れた方
         // （＝保存順は最近使った順のため、より最近使った方）だけを残す（本修正より前の
         // 設定ファイルに含まれる重複の後片付けも兼ねる）。
@@ -84,9 +93,12 @@ public sealed class NavigationPaneViewModel : ObservableObject
         MoveFavoriteDownCommand = new RelayCommand(p => MoveFavorite((FavoriteEntry)p!, 1));
         RemoveRecentPlaceCommand = new RelayCommand(p => RemoveRecentPlace((FavoriteEntry)p!));
         ClearRecentPlacesCommand = new RelayCommand(_ => ClearRecentPlaces());
+        RemoveFrequentPlaceCommand = new RelayCommand(p => RemoveFrequentPlace((FavoriteEntry)p!));
+        ClearFrequentPlacesCommand = new RelayCommand(_ => ClearFrequentPlaces());
         RemoveRecentProjectCommand = new RelayCommand(p => RemoveRecentProject((FavoriteEntry)p!));
         ClearRecentProjectsCommand = new RelayCommand(_ => ClearRecentProjects());
         RemoveTagCommand = new RelayCommand(p => RemoveTag((TagDefinition)p!));
+        EditTagCommand = new RelayCommand(p => EditTag((TagDefinition)p!));
         LoadWorkspaceCommand = new RelayCommand(p => WorkspaceOpenRequested?.Invoke((string)p!));
         ToggleCollapsedCommand = new RelayCommand(_ => IsCollapsed = !IsCollapsed);
     }
@@ -99,6 +111,9 @@ public sealed class NavigationPaneViewModel : ObservableObject
     public ObservableCollection<FavoriteEntry> Favorites { get; } = new();
 
     public ObservableCollection<FavoriteEntry> RecentPlaces { get; } = new();
+
+    /// <summary>よく使う場所（仕様書39章）：アクセス回数の多い順に上位を表示する。</summary>
+    public ObservableCollection<FavoriteEntry> FrequentPlaces { get; } = new();
 
     /// <summary>仕様書55章「最近開いたプロジェクト」。</summary>
     public ObservableCollection<FavoriteEntry> RecentProjects { get; } = new();
@@ -121,11 +136,17 @@ public sealed class NavigationPaneViewModel : ObservableObject
 
     public RelayCommand ClearRecentPlacesCommand { get; }
 
+    public RelayCommand RemoveFrequentPlaceCommand { get; }
+
+    public RelayCommand ClearFrequentPlacesCommand { get; }
+
     public RelayCommand RemoveRecentProjectCommand { get; }
 
     public RelayCommand ClearRecentProjectsCommand { get; }
 
     public RelayCommand RemoveTagCommand { get; }
+
+    public RelayCommand EditTagCommand { get; }
 
     public RelayCommand LoadWorkspaceCommand { get; }
 
@@ -293,6 +314,56 @@ public sealed class NavigationPaneViewModel : ObservableObject
         _settingsService.Save();
     }
 
+    // 仕様書39章「よく使う場所」：ナビゲーション（フォルダ移動）のたびに呼び出し、
+    // フォルダごとのアクセス回数を積み上げる。「最近使った場所」がMRU（直近順）なのに対し、
+    // こちらは頻度ベースで、たまに開くフォルダより日常的によく開くフォルダを上位に残す。
+    public void RecordFrequentPlaceVisit(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        _frequentPlaceVisitCounts[path] = _frequentPlaceVisitCounts.GetValueOrDefault(path) + 1;
+
+        _settingsService.Current.FrequentPlaces = _frequentPlaceVisitCounts
+            .Select(kv => new FrequentPlaceVisit { Path = kv.Key, VisitCount = kv.Value })
+            .ToList();
+        _settingsService.Save();
+
+        RebuildFrequentPlacesDisplay();
+    }
+
+    private void RebuildFrequentPlacesDisplay()
+    {
+        FrequentPlaces.Clear();
+
+        foreach (var path in _frequentPlaceVisitCounts
+                     .OrderByDescending(kv => kv.Value)
+                     .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+                     .Take(MaxFrequentPlaces)
+                     .Select(kv => kv.Key))
+        {
+            FrequentPlaces.Add(new FavoriteEntry { Name = DisplayNameFor(path), Path = path });
+        }
+    }
+
+    private void RemoveFrequentPlace(FavoriteEntry entry)
+    {
+        _frequentPlaceVisitCounts.Remove(entry.Path);
+        _settingsService.Current.FrequentPlaces.RemoveAll(v => string.Equals(v.Path, entry.Path, StringComparison.OrdinalIgnoreCase));
+        _settingsService.Save();
+        RebuildFrequentPlacesDisplay();
+    }
+
+    private void ClearFrequentPlaces()
+    {
+        _frequentPlaceVisitCounts.Clear();
+        _settingsService.Current.FrequentPlaces.Clear();
+        _settingsService.Save();
+        FrequentPlaces.Clear();
+    }
+
     // 仕様書55章：最近開いたプロジェクト。プロジェクトルートへ実際に移動したときに呼び出される。
     // 同じ名前のプロジェクトが既にある場合は、上位階層（パスの階層が浅い方）を優先して
     // 1件のみ保持する。階層が同じかそれ以上に深い場合は、既存の項目を「最近使った」
@@ -343,14 +414,13 @@ public sealed class NavigationPaneViewModel : ObservableObject
         _settingsService.Save();
     }
 
-    public void AddTag(string name)
+    public void AddTag(TagDefinition tag)
     {
-        if (Tags.Any(t => t.Name == name))
+        if (string.IsNullOrWhiteSpace(tag.Name) || Tags.Any(t => t.Name == tag.Name))
         {
             return;
         }
 
-        var tag = new TagDefinition { Name = name };
         Tags.Add(tag);
         _settingsService.Current.TagDefinitions.Add(tag);
         _settingsService.Save();
@@ -367,6 +437,56 @@ public sealed class NavigationPaneViewModel : ObservableObject
         }
 
         _settingsService.Current.TagAssignments.RemoveAll(a => a.Tags.Count == 0);
+        _settingsService.Save();
+    }
+
+    /// <summary>仕様書5章：既存タグのアイコン・色・名前を編集する。</summary>
+    private void EditTag(TagDefinition tag)
+    {
+        var editor = TagEditorViewModel.FromDefinition(tag);
+        if (_dialogService.ShowTagEditor(editor) != true)
+        {
+            return;
+        }
+
+        var updated = editor.ToDefinition();
+        if (string.IsNullOrWhiteSpace(updated.Name))
+        {
+            return;
+        }
+
+        if (updated.Name != tag.Name && Tags.Any(t => t.Name == updated.Name))
+        {
+            _dialogService.ShowError($"タグ「{updated.Name}」は既に存在します。");
+            return;
+        }
+
+        var index = Tags.IndexOf(tag);
+        if (index < 0)
+        {
+            return;
+        }
+
+        // 名前が変わった場合、既存の付与情報（TagAssignments）も新しい名前へ付け替える。
+        if (updated.Name != tag.Name)
+        {
+            foreach (var assignment in _settingsService.Current.TagAssignments)
+            {
+                var i = assignment.Tags.IndexOf(tag.Name);
+                if (i >= 0)
+                {
+                    assignment.Tags[i] = updated.Name;
+                }
+            }
+        }
+
+        Tags[index] = updated;
+        var settingsIndex = _settingsService.Current.TagDefinitions.FindIndex(t => t.Name == tag.Name);
+        if (settingsIndex >= 0)
+        {
+            _settingsService.Current.TagDefinitions[settingsIndex] = updated;
+        }
+
         _settingsService.Save();
     }
 

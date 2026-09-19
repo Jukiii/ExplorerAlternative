@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
 using ExplorerAlternative.Services;
@@ -19,6 +20,7 @@ public sealed class FileSystemNodeViewModel : ObservableObject
     private readonly Action<FileSystemNodeViewModel>? _onTreeChanged;
     private bool _isExpanded;
     private bool _isSelected;
+    private bool _isDropTarget;
     private bool _childrenLoaded;
 
     public FileSystemNodeViewModel(
@@ -92,7 +94,11 @@ public sealed class FileSystemNodeViewModel : ObservableObject
 
     public bool HasTags => Tags.Count > 0;
 
-    public string TagsDisplay => HasTags ? $"🏷 {string.Join(", ", Tags)}" : string.Empty;
+    /// <summary>仕様書5章：タグごとに選択されたアイコンを使って表示する。</summary>
+    public string TagsDisplay => HasTags
+        ? string.Join(", ", Tags.Select(name =>
+            $"{_settingsService.Current.TagDefinitions.FirstOrDefault(t => t.Name == name)?.IconGlyph ?? "🏷"} {name}"))
+        : string.Empty;
 
     /// <summary>仕様書21章「Explorer上：M Modified / A Added / D Deleted / U Untracked / R Renamed」。</summary>
     public string VcsStatus => _vcsStatusLookup?.Invoke(FullPath) ?? string.Empty;
@@ -138,6 +144,13 @@ public sealed class FileSystemNodeViewModel : ObservableObject
     {
         get => _isSelected;
         set => SetProperty(ref _isSelected, value);
+    }
+
+    /// <summary>ドラッグ&ドロップ中、このフォルダがドロップ先として強調表示される対象かどうか。</summary>
+    public bool IsDropTarget
+    {
+        get => _isDropTarget;
+        set => SetProperty(ref _isDropTarget, value);
     }
 
     public void LoadChildren()

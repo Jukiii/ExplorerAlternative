@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -23,6 +24,9 @@ public partial class MainWindow : Window
     private Point? _fileDragStartPoint;
     private FavoriteEntry? _favoriteDragStartEntry;
     private Point? _favoriteDragStartPoint;
+    private InsertionLineAdorner? _favoriteInsertionAdorner;
+    private FileSystemNodeViewModel? _dragHoverNode;
+    private DispatcherTimer? _dragHoverExpandTimer;
 
     public MainWindow()
     {
@@ -346,18 +350,29 @@ public partial class MainWindow : Window
         {
             e.Effects = DragDropEffects.None;
             e.Handled = true;
+            ClearDragHoverState();
             return;
         }
 
         var sourcePaths = (string[])e.Data.GetData(DataFormats.FileDrop)!;
-        var destinationFolder = ResolveDropTargetFolder(e, element, pane);
+        var hoveredNode = FindNodeFromVisual(VisualTreeHelper.HitTest(element, e.GetPosition(element))?.VisualHit);
+        UpdateDragHoverState(hoveredNode);
+
+        var destinationFolder = ResolveDropTargetFolder(hoveredNode, pane);
 
         e.Effects = DetermineDropEffect(sourcePaths, destinationFolder, e);
         e.Handled = true;
     }
 
+    private void PaneGrid_DragLeave(object sender, DragEventArgs e)
+    {
+        ClearDragHoverState();
+    }
+
     private void PaneGrid_Drop(object sender, DragEventArgs e)
     {
+        ClearDragHoverState();
+
         if (sender is not FrameworkElement element || element.DataContext is not PaneViewModel destinationPane ||
             !e.Data.GetDataPresent(DataFormats.FileDrop))
         {
@@ -365,7 +380,8 @@ public partial class MainWindow : Window
         }
 
         var sourcePaths = (string[])e.Data.GetData(DataFormats.FileDrop)!;
-        var destinationFolder = ResolveDropTargetFolder(e, element, destinationPane);
+        var hoveredNode = FindNodeFromVisual(VisualTreeHelper.HitTest(element, e.GetPosition(element))?.VisualHit);
+        var destinationFolder = ResolveDropTargetFolder(hoveredNode, destinationPane);
         var effects = DetermineDropEffect(sourcePaths, destinationFolder, e);
 
         if (effects == DragDropEffects.None)
@@ -389,6 +405,10 @@ public partial class MainWindow : Window
             destinationPane.DropFilesAsCopy(sourcePaths, destinationFolder);
         }
 
+        // 仕様書26章：DropFilesは実際の移動をファイル操作キュー（バックグラウンド）へ委譲するため
+        // 非同期。ここでのRefreshCurrentFolder()は移動完了前に呼ばれる可能性があるが、完了後は
+        // 移動元フォルダのFileSystemWatcher（20章・64章）が自動的に再読み込みするため、最終的な
+        // 表示状態は正しくなる。
         if (isMove && sourcePane is not null && !ReferenceEquals(sourcePane, destinationPane))
         {
             sourcePane.RefreshCurrentFolder();
@@ -397,15 +417,70 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    // 階層表示でフォルダの上に一定時間とどまると、Windows標準Explorerと同様に自動的に
+    // 展開する。ホバー先が変わるたびに、直前のホバー対象のハイライトとタイマーをリセットする。
+    private void UpdateDragHoverState(FileSystemNodeViewModel? hoveredNode)
+    {
+        if (ReferenceEquals(_dragHoverNode, hoveredNode))
+        {
+            return;
+        }
+
+        if (_dragHoverNode is not null)
+        {
+            _dragHoverNode.IsDropTarget = false;
+        }
+
+        _dragHoverExpandTimer?.Stop();
+        _dragHoverNode = hoveredNode;
+
+        if (hoveredNode is not { IsDirectory: true })
+        {
+            return;
+        }
+
+        hoveredNode.IsDropTarget = true;
+
+        if (hoveredNode.IsExpanded)
+        {
+            return;
+        }
+
+        _dragHoverExpandTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) };
+        _dragHoverExpandTimer.Tick -= DragHoverExpandTimer_Tick;
+        _dragHoverExpandTimer.Tick += DragHoverExpandTimer_Tick;
+        _dragHoverExpandTimer.Stop();
+        _dragHoverExpandTimer.Start();
+    }
+
+    private void DragHoverExpandTimer_Tick(object? sender, EventArgs e)
+    {
+        _dragHoverExpandTimer?.Stop();
+
+        if (_dragHoverNode is { IsDirectory: true, IsExpanded: false } node)
+        {
+            node.IsExpanded = true;
+        }
+    }
+
+    private void ClearDragHoverState()
+    {
+        _dragHoverExpandTimer?.Stop();
+
+        if (_dragHoverNode is null)
+        {
+            return;
+        }
+
+        _dragHoverNode.IsDropTarget = false;
+        _dragHoverNode = null;
+    }
+
     // ドロップ先がフォルダ行であればそのフォルダの中へ、それ以外（ファイル行や空白部分）は
     // ペインの現在フォルダへドロップしたものとして扱う。
-    private static string ResolveDropTargetFolder(DragEventArgs e, FrameworkElement relativeTo, PaneViewModel pane)
+    private static string ResolveDropTargetFolder(FileSystemNodeViewModel? hoveredNode, PaneViewModel pane)
     {
-        var position = e.GetPosition(relativeTo);
-        var hit = VisualTreeHelper.HitTest(relativeTo, position)?.VisualHit;
-        var node = FindNodeFromVisual(hit);
-
-        return node is { IsDirectory: true } ? node.FullPath : pane.CurrentPath;
+        return hoveredNode is { IsDirectory: true } ? hoveredNode.FullPath : pane.CurrentPath;
     }
 
     private static FileSystemNodeViewModel? FindNodeFromVisual(DependencyObject? source)
@@ -497,6 +572,11 @@ public partial class MainWindow : Window
         if (e.Data.GetDataPresent(FavoriteReorderFormat))
         {
             e.Effects = DragDropEffects.Move;
+
+            if (sender is ListBox listBox)
+            {
+                UpdateFavoriteInsertionLine(listBox, e);
+            }
         }
         else
         {
@@ -504,14 +584,22 @@ public partial class MainWindow : Window
             // ファイル一覧側のドラッグ開始（NodeListBox_PreviewMouseMove）はCopy|Moveのみを許可しており、
             // ここでLinkを指定すると許可された効果に含まれないためWPFがDropイベントを発火せず、
             // 常にDoDragDropの結果がNoneになってしまう（お気に入りに追加できない不具合の原因）。
+            RemoveFavoriteInsertionLine();
             e.Effects = TryGetDroppedFolder(e, out _) ? DragDropEffects.Copy : DragDropEffects.None;
         }
 
         e.Handled = true;
     }
 
+    private void FavoritesListBox_DragLeave(object sender, DragEventArgs e)
+    {
+        RemoveFavoriteInsertionLine();
+    }
+
     private void FavoritesListBox_Drop(object sender, DragEventArgs e)
     {
+        RemoveFavoriteInsertionLine();
+
         if (DataContext is not MainWindowViewModel viewModel)
         {
             return;
@@ -539,18 +627,137 @@ public partial class MainWindow : Window
         }
     }
 
-    private static int ResolveFavoriteDropIndex(ListBox listBox, DragEventArgs e, ObservableCollection<FavoriteEntry> favorites, FavoriteEntry draggedEntry)
+    // お気に入り欄の並び替え：カーソルが対象行の上半分/下半分のどちらにあるかで、
+    // その行の前/後どちらに挿入するかを決める（挿入線の表示位置とも一致させる）。
+    private static (FavoriteEntry? Entry, bool InsertBefore, ListBoxItem? Container) FindFavoriteDropPosition(ListBox listBox, DragEventArgs e)
     {
         var position = e.GetPosition(listBox);
         var hit = VisualTreeHelper.HitTest(listBox, position)?.VisualHit;
-        var targetEntry = FindFavoriteFromVisual(hit);
+        var container = FindAncestor<ListBoxItem>(hit);
+
+        if (container is null || container.DataContext is not FavoriteEntry entry)
+        {
+            return (null, true, null);
+        }
+
+        var topLeft = container.TranslatePoint(new Point(0, 0), listBox);
+        var insertBefore = position.Y < topLeft.Y + container.ActualHeight / 2;
+
+        return (entry, insertBefore, container);
+    }
+
+    private static int ResolveFavoriteDropIndex(ListBox listBox, DragEventArgs e, ObservableCollection<FavoriteEntry> favorites, FavoriteEntry draggedEntry)
+    {
+        var (targetEntry, insertBefore, _) = FindFavoriteDropPosition(listBox, e);
 
         if (targetEntry is null || ReferenceEquals(targetEntry, draggedEntry))
         {
             return favorites.Count - 1;
         }
 
-        return favorites.IndexOf(targetEntry);
+        var sourceIndex = favorites.IndexOf(draggedEntry);
+        var targetIndex = favorites.IndexOf(targetEntry);
+        // ObservableCollection.Move()はまず除去してから挿入するため、除去後の並びを基準にした
+        // 挿入位置に変換する必要がある（除去元より後ろへ移動する場合は1つ前へ詰める）。
+        var desiredIndexBeforeRemoval = insertBefore ? targetIndex : targetIndex + 1;
+
+        return sourceIndex < desiredIndexBeforeRemoval ? desiredIndexBeforeRemoval - 1 : desiredIndexBeforeRemoval;
+    }
+
+    // 挿入位置を示す線をAdornerとして描画する。挿入位置が変わるたびに呼び出す。
+    private void UpdateFavoriteInsertionLine(ListBox listBox, DragEventArgs e)
+    {
+        var (_, insertBefore, container) = FindFavoriteDropPosition(listBox, e);
+
+        double lineY;
+        if (container is not null)
+        {
+            var topLeft = container.TranslatePoint(new Point(0, 0), listBox);
+            lineY = insertBefore ? topLeft.Y : topLeft.Y + container.ActualHeight;
+        }
+        else if (listBox.Items.Count > 0 &&
+                 listBox.ItemContainerGenerator.ContainerFromIndex(listBox.Items.Count - 1) is ListBoxItem lastContainer)
+        {
+            // 項目の外（末尾の余白等）へのドロップ：最後の項目の下に表示する。
+            lineY = lastContainer.TranslatePoint(new Point(0, lastContainer.ActualHeight), listBox).Y;
+        }
+        else
+        {
+            lineY = 0;
+        }
+
+        EnsureFavoriteInsertionAdorner(listBox);
+        _favoriteInsertionAdorner?.SetLineY(lineY);
+    }
+
+    private void EnsureFavoriteInsertionAdorner(ListBox listBox)
+    {
+        if (_favoriteInsertionAdorner is not null && ReferenceEquals(_favoriteInsertionAdorner.AdornedElement, listBox))
+        {
+            return;
+        }
+
+        RemoveFavoriteInsertionLine();
+
+        if (AdornerLayer.GetAdornerLayer(listBox) is not { } layer)
+        {
+            return;
+        }
+
+        _favoriteInsertionAdorner = new InsertionLineAdorner(listBox);
+        layer.Add(_favoriteInsertionAdorner);
+    }
+
+    private void RemoveFavoriteInsertionLine()
+    {
+        if (_favoriteInsertionAdorner is null)
+        {
+            return;
+        }
+
+        AdornerLayer.GetAdornerLayer((UIElement)_favoriteInsertionAdorner.AdornedElement)?.Remove(_favoriteInsertionAdorner);
+        _favoriteInsertionAdorner = null;
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? source) where T : DependencyObject
+    {
+        while (source is not null)
+        {
+            if (source is T match)
+            {
+                return match;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return null;
+    }
+
+    // お気に入り欄の並び替え中、挿入位置を示す横線を描画するだけの軽量Adorner。
+    private sealed class InsertionLineAdorner : Adorner
+    {
+        private readonly Pen _pen;
+        private double _lineY;
+
+        public InsertionLineAdorner(UIElement adornedElement) : base(adornedElement)
+        {
+            IsHitTestVisible = false;
+            var brush = Application.Current?.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
+            _pen = new Pen(brush, 2);
+        }
+
+        public void SetLineY(double y)
+        {
+            _lineY = y;
+            InvalidateVisual();
+        }
+
+        protected override void OnRender(DrawingContext drawingContext)
+        {
+            var width = AdornedElement.RenderSize.Width;
+            drawingContext.DrawLine(_pen, new Point(0, _lineY), new Point(width, _lineY));
+        }
     }
 
     private static FavoriteEntry? FindFavoriteFromVisual(DependencyObject? source)
@@ -857,6 +1064,17 @@ public partial class MainWindow : Window
     {
         _tabDragStartPoint = null;
         _tabDragDuplicated = false;
+    }
+
+    /// <summary>仕様書5章：タグ一覧のダブルクリックでアイコン・色の編集ダイアログを開く。</summary>
+    private void TagRow_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2 &&
+            sender is FrameworkElement { DataContext: TagDefinition tag } &&
+            DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.NavigationPane.EditTagCommand.Execute(tag);
+        }
     }
 
     // 仕様書4章：ナビゲーションペイン内のListBox（お気に入り等）は既定でホイール/トラックパッドの

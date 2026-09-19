@@ -244,8 +244,10 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
-    public void Duplicate(IEnumerable<string> fullPaths)
+    public IReadOnlyList<string> Duplicate(IEnumerable<string> fullPaths)
     {
+        var results = new List<string>();
+
         foreach (var source in fullPaths)
         {
             try
@@ -266,12 +268,16 @@ public sealed class FileSystemService : IFileSystemService
                 {
                     File.Copy(source, destination, overwrite: false);
                 }
+
+                results.Add(destination);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 throw new AppOperationException($"「{Path.GetFileName(source)}」を複製できませんでした。", ex);
             }
         }
+
+        return results;
     }
 
     private static string GetUniqueDuplicateName(string parent, string source)
@@ -292,7 +298,7 @@ public sealed class FileSystemService : IFileSystemService
     }
 
     // 仕様書20章：Ctrl+ドラッグで移動先に同名の項目が既に存在した場合の「名前を変更してコピー」。
-    public void CopyRenamed(string sourcePath, string destinationDirectory)
+    public string CopyRenamed(string sourcePath, string destinationDirectory)
     {
         try
         {
@@ -306,6 +312,8 @@ public sealed class FileSystemService : IFileSystemService
             {
                 File.Copy(sourcePath, destination, overwrite: false);
             }
+
+            return destination;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -368,7 +376,7 @@ public sealed class FileSystemService : IFileSystemService
 
     // 仕様書20章：Alt+ドラッグでのショートカット（.lnk）作成。外部NuGet依存を増やさないよう、
     // WScript.Shell COMオブジェクトを使う（Windows標準搭載）。
-    public void CreateShortcuts(IEnumerable<string> sourcePaths, string destinationDirectory)
+    public IReadOnlyList<string> CreateShortcuts(IEnumerable<string> sourcePaths, string destinationDirectory)
     {
         var shellType = Type.GetTypeFromProgID("WScript.Shell");
         if (shellType is null)
@@ -377,6 +385,7 @@ public sealed class FileSystemService : IFileSystemService
         }
 
         dynamic shell = Activator.CreateInstance(shellType)!;
+        var results = new List<string>();
 
         foreach (var source in sourcePaths)
         {
@@ -389,12 +398,16 @@ public sealed class FileSystemService : IFileSystemService
                 shortcut.TargetPath = source;
                 shortcut.WorkingDirectory = Directory.Exists(source) ? source : Path.GetDirectoryName(source);
                 shortcut.Save();
+
+                results.Add(shortcutPath);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
             {
                 throw new AppOperationException($"「{Path.GetFileName(source)}」のショートカットを作成できませんでした。", ex);
             }
         }
+
+        return results;
     }
 
     private static string GetUniqueShortcutPath(string destinationDirectory, string name)

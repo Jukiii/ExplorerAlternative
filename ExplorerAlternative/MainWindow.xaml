@@ -51,6 +51,8 @@
             <!-- 仕様書25章：任意の2ファイル比較（Git管理外でも利用可能）。 -->
             <MenuItem Header="比較対象として保持" Command="{Binding HoldForComparisonCommand}" />
             <MenuItem Header="比較対象と比較" Command="{Binding CompareWithHeldCommand}" />
+            <!-- 2ファイル選択時のみ有効：保持→比較の2手順を省いて直接比較する。 -->
+            <MenuItem Header="選択した2ファイルを比較" Command="{Binding CompareSelectedCommand}" />
             <Separator />
             <!-- 仕様書6.2章：ファイル・フォルダへのタグ付与。チェック状態は選択の代表ノード
                  （PrimarySelectedNode）が持つタグから判定する。 -->
@@ -142,6 +144,8 @@
         <KeyBinding Key="F" Modifiers="Control" Command="{Binding DataContext.OpenSearchCommand, ElementName=RootWindow}" />
         <!-- Ctrl+D：選択したファイル・フォルダを複製する（お気に入り追加のショートカットは廃止）。 -->
         <KeyBinding Key="D" Modifiers="Control" Command="{Binding DataContext.ActiveTab.ActivePane.DuplicateSelectionCommand, ElementName=RootWindow}" />
+        <!-- 仕様書62章：Ctrl+Zでファイル操作を元に戻す（アプリ全体で1つの履歴を共有）。 -->
+        <KeyBinding Key="Z" Modifiers="Control" Command="{Binding DataContext.UndoCommand, ElementName=RootWindow}" />
         <!-- 仕様書46章：コマンドパレット。 -->
         <KeyBinding Key="P" Modifiers="Control+Shift" Command="{Binding DataContext.OpenCommandPaletteCommand, ElementName=RootWindow}" />
         <KeyBinding Key="F5" Command="{Binding DataContext.ActiveTab.ActivePane.RefreshCommand, ElementName=RootWindow}" />
@@ -174,6 +178,15 @@
             <DockPanel LastChildFill="True">
                 <Menu DockPanel.Dock="Right" Background="Transparent" VerticalAlignment="Center">
                     <MenuItem Header="☰ メニュー" Padding="8,6">
+                        <!-- 仕様書62章：直近のファイル操作を元に戻す。ラベルに対象操作の説明を表示する。 -->
+                        <MenuItem Header="{Binding UndoMenuLabel}" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z" />
+                        <!-- 仕様書30章：操作履歴を一覧表示し、任意の地点までまとめて元に戻す。 -->
+                        <MenuItem Header="操作履歴..." Command="{Binding OpenUndoHistoryCommand}" />
+                        <!-- 仕様書31章：永続化されたファイル操作履歴（Undo対象外の削除・失敗した操作も含む）。 -->
+                        <MenuItem Header="ファイル操作履歴..." Command="{Binding OpenFileOperationHistoryCommand}" />
+                        <!-- 仕様書26章：大量コピー/移動の一時停止・再開・キャンセルを行うキュー。 -->
+                        <MenuItem Header="ファイル操作キュー..." Command="{Binding OpenFileOperationQueueCommand}" />
+                        <Separator />
                         <MenuItem Header="お気に入りに追加" Command="{Binding AddFavoriteCommand}" />
                         <Separator />
                         <MenuItem Header="右に分割" Command="{Binding SplitHorizontalCommand}" />
@@ -419,7 +432,8 @@
                             Command="{Binding NavigationPane.ToggleCollapsedCommand}" />
 
                     <!-- 仕様書4章：ユーザー指示により表示順を お気に入り→タグ→ドライブ→ワークスペース→
-                         最近使った場所→最近のプロジェクト とした。 -->
+                         最近使った場所→最近のプロジェクト とした。よく使う場所（仕様書39章）は
+                         最近使った場所の直後に追加した。 -->
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
                         <StackPanel>
                             <!-- お気に入り（仕様書4章・36章）：クイックアクセス相当の標準フォルダも統合した単一の一覧。
@@ -434,6 +448,7 @@
                                      PreviewMouseMove="FavoritesListBox_PreviewMouseMove"
                                      AllowDrop="True"
                                      DragOver="FavoritesListBox_DragOver"
+                                     DragLeave="FavoritesListBox_DragLeave"
                                      Drop="FavoritesListBox_Drop">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:FavoriteEntry}">
@@ -480,13 +495,16 @@
                                      PreviewMouseWheel="NavListBox_PreviewMouseWheel">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:TagDefinition}">
-                                        <DockPanel Margin="4,3">
+                                        <DockPanel Margin="4,3" ToolTip="ダブルクリックでアイコン・色を編集"
+                                                   MouseLeftButtonUp="TagRow_MouseLeftButtonUp">
                                             <Button DockPanel.Dock="Right" Content="✕" FontSize="9" Width="20" Height="20" Padding="0"
                                                     ToolTip="タグを削除"
                                                     Command="{Binding DataContext.NavigationPane.RemoveTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                     CommandParameter="{Binding}" />
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="🏷" Margin="0,0,6,0" FontSize="11" />
+                                                <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,6,0"
+                                                        Background="{Binding ColorHex, Converter={StaticResource HexColorToBrushConverter}}" />
+                                                <TextBlock Text="{Binding IconGlyph}" Margin="0,0,6,0" FontSize="11" />
                                                 <TextBlock Text="{Binding Name}" />
                                             </StackPanel>
                                         </DockPanel>
@@ -567,6 +585,42 @@
                                                     <DataTemplate>
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Text="🕘" Margin="0,0,6,0" FontSize="11" />
+                                                            <TextBlock Text="{Binding}" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </Button.ContentTemplate>
+                                            </Button>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- よく使う場所（仕様書39章）：MRU順の「最近使った場所」とは別に、
+                                 アクセス回数の多い順で上位を表示する。 -->
+                            <DockPanel Margin="2,14,0,4">
+                                <Button DockPanel.Dock="Right" Content="クリア" FontSize="9" Padding="4,0"
+                                        ToolTip="よく使う場所をクリア" Command="{Binding NavigationPane.ClearFrequentPlacesCommand}" />
+                                <TextBlock Text="よく使う場所" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <ListBox ItemsSource="{Binding NavigationPane.FrequentPlaces}" MaxHeight="160"
+                                     BorderThickness="0" Background="Transparent"
+                                     ItemContainerStyle="{StaticResource NavListBoxItemStyle}"
+                                     PreviewMouseWheel="NavListBox_PreviewMouseWheel">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:FavoriteEntry}">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="✕" FontSize="9" Width="20" Height="20" Padding="0"
+                                                    ToolTip="一覧から削除"
+                                                    Command="{Binding DataContext.NavigationPane.RemoveFrequentPlaceCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button Content="{Binding Name}" ToolTip="{Binding Path}"
+                                                    HorizontalContentAlignment="Left" HorizontalAlignment="Stretch"
+                                                    Command="{Binding DataContext.NavigationPane.NavigateToEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}">
+                                                <Button.ContentTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="⭐" Margin="0,0,6,0" FontSize="11" />
                                                             <TextBlock Text="{Binding}" />
                                                         </StackPanel>
                                                     </DataTemplate>
@@ -667,7 +721,7 @@
                                             </Style>
                                         </Border.Style>
                                     </Border>
-                                <Grid AllowDrop="True" DragOver="PaneGrid_DragOver" Drop="PaneGrid_Drop">
+                                <Grid AllowDrop="True" DragOver="PaneGrid_DragOver" Drop="PaneGrid_Drop" DragLeave="PaneGrid_DragLeave">
                                     <!-- 階層表示 -->
                                     <ListBox x:Name="TreeListBox" ItemsSource="{Binding VisibleNodes}"
                                              Background="Transparent"
