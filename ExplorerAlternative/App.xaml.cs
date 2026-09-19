@@ -15,7 +15,8 @@ public partial class App : Application
         base.OnStartup(e);
 
         var dialogService = new DialogService();
-        var fileSystemService = new FileSystemService();
+        var fileLockService = new FileLockService();
+        var fileSystemService = new FileSystemService(fileLockService);
         var versionControlService = new VersionControlService();
         var externalToolService = new ExternalToolService();
         var settingsService = new SettingsService();
@@ -65,7 +66,7 @@ public partial class App : Application
         var projectDetectionService = new ProjectDetectionService();
         var undoService = new UndoService();
         var fileOperationHistoryService = new FileOperationHistoryService(settingsService);
-        var fileOperationQueueService = new FileOperationQueueService();
+        var fileOperationQueueService = new FileOperationQueueService(fileLockService);
         fileOperationQueueService.ConflictResolver = dialogService.AskFileOperationConflict;
         IFolderWatcherService FolderWatcherServiceFactory() => new FolderWatcherService();
 
