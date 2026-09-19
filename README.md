@@ -61,6 +61,13 @@ dotnet publish ExplorerAlternative/ExplorerAlternative.csproj -c Release -r win-
 dotnet test ExplorerAlternative.Tests
 ```
 
+## リリース手順
+
+1. `ExplorerAlternative/ExplorerAlternative.csproj` の `<Version>` を新しいバージョン（例：`1.3.2`）に更新してコミットする（GitHubのタグ `v1.3.2` と一致させる。exeのプロパティに表示されるバージョンになる）。
+2. 上記のリリースビルド（`dotnet publish`）を実行し、生成された `ExplorerAlternative.exe` を起動して動作を確認する。
+3. `ExplorerAlternative.exe` を `ExplorerAlternative-v<バージョン>-win-x64.zip` にまとめる。
+4. `gh release create v<バージョン> <zip> --target main --title v<バージョン> --notes-file <リリースノート>` でリリースを作成する。
+
 ## プロジェクト構成
 
 ```
