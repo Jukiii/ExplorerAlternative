@@ -860,16 +860,27 @@
                 <Border Grid.Row="1" Background="{DynamicResource TerminalBackgroundBrush}"
                         Visibility="{Binding TerminalHost.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}"
                         PreviewMouseLeftButtonDown="TerminalPanel_MouseLeftButtonDown">
-                    <Grid Height="230" DataContext="{Binding TerminalHost}">
+                    <Grid Height="{Binding TerminalHost.PanelHeight}" DataContext="{Binding TerminalHost}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
+                        <!-- 仕様書17章「高さはドラッグ変更可能」：パネル上端をドラッグして高さを変える。 -->
+                        <Thumb Grid.Row="0" Height="5" Cursor="SizeNS" Background="Transparent"
+                               DragDelta="TerminalResizeThumb_DragDelta">
+                            <Thumb.Template>
+                                <ControlTemplate TargetType="Thumb">
+                                    <Border Background="Transparent" BorderThickness="0,1,0,0"
+                                            BorderBrush="{DynamicResource BorderBrush2}" />
+                                </ControlTemplate>
+                            </Thumb.Template>
+                        </Thumb>
+
                         <!-- タブストリップ。各タブはSync状態を個別に保持する（18章）。 -->
-                        <DockPanel Grid.Row="0" Margin="8,6,8,0">
+                        <DockPanel Grid.Row="1" Margin="8,6,8,0">
                             <Button DockPanel.Dock="Right" Content="＋" Width="26" ToolTip="新しいターミナル"
                                     Command="{Binding AddTerminalCommand}" Foreground="{DynamicResource TerminalForegroundBrush}" />
                             <ItemsControl ItemsSource="{Binding Terminals}">
@@ -903,7 +914,7 @@
                             </ItemsControl>
                         </DockPanel>
 
-                        <DockPanel Grid.Row="1" Margin="8,6" DataContext="{Binding ActiveTerminal}">
+                        <DockPanel Grid.Row="2" Margin="8,6" DataContext="{Binding ActiveTerminal}">
                             <ToggleButton DockPanel.Dock="Left" Padding="10,4"
                                           IsChecked="{Binding IsSyncEnabled, Mode=TwoWay}"
                                           Content="{Binding IsSyncEnabled, Converter={StaticResource SyncLabelConverter}}"
@@ -912,29 +923,32 @@
                                        Foreground="{DynamicResource TerminalForegroundBrush}" FontWeight="SemiBold" />
                         </DockPanel>
 
-                        <TextBox x:Name="TerminalOutputTextBox" Grid.Row="2" Text="{Binding ActiveTerminal.OutputText, Mode=OneWay}"
-                                 IsReadOnly="True" TextWrapping="Wrap" FontFamily="Cascadia Mono,Consolas"
-                                 Background="{DynamicResource TerminalBackgroundBrush}" Foreground="{DynamicResource TerminalForegroundBrush}"
-                                 BorderThickness="0" Margin="8,0" Padding="2"
-                                 VerticalScrollBarVisibility="Auto"
-                                 TextChanged="TerminalOutputTextBox_TextChanged" />
-
-                        <!-- 仕様書19章：ファイル・フォルダをドラッグ＆ドロップするとパスが入力される。 -->
-                        <Border Grid.Row="3" Background="#2A2A2A" CornerRadius="4" Margin="8,6,8,8" Padding="8,4"
-                                AllowDrop="True" DragOver="TerminalInput_DragOver" Drop="TerminalInput_Drop">
-                            <DockPanel DataContext="{Binding ActiveTerminal}">
-                                <TextBlock DockPanel.Dock="Left" Text="&gt;" Foreground="{DynamicResource TerminalAccentBrush}"
-                                           FontFamily="Cascadia Mono,Consolas" Margin="0,0,6,0" />
-                                <TextBox x:Name="TerminalInputTextBox" Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
-                                         FontFamily="Cascadia Mono,Consolas" Background="Transparent" BorderThickness="0"
-                                         Foreground="{DynamicResource TerminalForegroundBrush}" CaretBrush="{DynamicResource TerminalForegroundBrush}"
-                                         IsVisibleChanged="TerminalInputTextBox_IsVisibleChanged">
-                                    <TextBox.InputBindings>
-                                        <KeyBinding Key="Return" Command="{Binding SendCommand}" />
-                                    </TextBox.InputBindings>
-                                </TextBox>
-                            </DockPanel>
-                        </Border>
+                        <!-- 仕様書17章：VS Codeの統合ターミナルと同じく、出力と入力を分けず1つの
+                             ターミナル画面として扱う。プロンプト（"PS C:\...>"）はシェル自身の
+                             出力で、その末尾に直接入力する。入力の確定・履歴・Ctrl+Cの処理は
+                             コードビハインド（TerminalSurface_PreviewKeyDown）で行う。
+                             仕様書19章：ファイル・フォルダをドラッグ＆ドロップするとパスが入力される。 -->
+                        <RichTextBox x:Name="TerminalSurface" Grid.Row="3"
+                                     FontFamily="Cascadia Mono,Consolas" FontSize="12"
+                                     Background="{DynamicResource TerminalBackgroundBrush}"
+                                     Foreground="{DynamicResource TerminalForegroundBrush}"
+                                     CaretBrush="{DynamicResource TerminalForegroundBrush}"
+                                     SelectionBrush="{DynamicResource TerminalAccentBrush}"
+                                     BorderThickness="0" Margin="8,0,8,8" Padding="2"
+                                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                     AcceptsReturn="False" AcceptsTab="False" AutoWordSelection="False"
+                                     IsReadOnly="True" IsReadOnlyCaretVisible="True" IsUndoEnabled="False"
+                                     AllowDrop="True" DragOver="TerminalInput_DragOver" Drop="TerminalInput_Drop"
+                                     PreviewKeyDown="TerminalSurface_PreviewKeyDown"
+                                     PreviewTextInput="TerminalSurface_PreviewTextInput"
+                                     IsVisibleChanged="TerminalSurface_IsVisibleChanged">
+                            <RichTextBox.Resources>
+                                <!-- 段落間の余白をなくし、ターミナルらしい行間にする。 -->
+                                <Style TargetType="Paragraph">
+                                    <Setter Property="Margin" Value="0" />
+                                </Style>
+                            </RichTextBox.Resources>
+                        </RichTextBox>
                     </Grid>
                 </Border>
             </Grid>

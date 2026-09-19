@@ -33,6 +33,31 @@ public partial class MainWindow : Window
         InitializeComponent();
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         Closing += MainWindow_Closing;
+        DataContextChanged += MainWindow_DataContextChanged;
+    }
+
+    // 仕様書17章：ターミナル画面（RichTextBox）はコードビハインドが直接描画するため、
+    // アクティブなターミナルタブの切り替えに追従して張り替える必要がある。
+    private void MainWindow_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.OldValue is MainWindowViewModel oldViewModel)
+        {
+            oldViewModel.TerminalHost.PropertyChanged -= TerminalHost_PropertyChanged;
+        }
+
+        if (e.NewValue is MainWindowViewModel newViewModel)
+        {
+            newViewModel.TerminalHost.PropertyChanged += TerminalHost_PropertyChanged;
+            BindTerminalSurface(newViewModel.TerminalHost.ActiveTerminal);
+        }
+    }
+
+    private void TerminalHost_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TerminalHostViewModel.ActiveTerminal) && sender is TerminalHostViewModel host)
+        {
+            BindTerminalSurface(host.ActiveTerminal);
+        }
     }
 
     // 仕様書40章：システムトレイに常駐中は、ウィンドウを閉じてもアプリを終了せずトレイへ格納する。
@@ -52,24 +77,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        // ListBox(Extended選択モード)はSpaceキーを選択切り替えとして内部消費し、
-        // Window.InputBindingsのKeyBindingまでバブリングしないため、
-        // トンネリング段階(PreviewKeyDown)でプレビューコマンドを直接実行する。
-        if (e.Key == Key.Space && e.OriginalSource is not TextBox)
-        {
-            e.Handled = true;
-
-            if (viewModel.TogglePreviewCommand.CanExecute(null))
-            {
-                viewModel.TogglePreviewCommand.Execute(null);
-            }
-
-            return;
-        }
-
         // 仕様書9.1章「Ctrl + @」。個別コントロール（TextBox等）がキー入力を消費して
         // Window.InputBindingsまでバブリングしないケースへの保険として、トンネリング段階で
-        // 直接コマンドを実行する（Spaceキーと同じ対策）。
+        // 直接コマンドを実行する。ターミナルにフォーカスがある状態でも閉じられるよう、
+        // ターミナル用の早期returnより前に判定する。
         var isTerminalToggleGesture =
             (e.Key == Key.OemTilde && Keyboard.Modifiers == ModifierKeys.Control) ||
             (e.Key == Key.D2 && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift));
@@ -81,6 +92,30 @@ public partial class MainWindow : Window
             if (viewModel.ToggleTerminalCommand.CanExecute(null))
             {
                 viewModel.ToggleTerminalCommand.Execute(null);
+            }
+
+            return;
+        }
+
+        // ターミナル画面（仕様書17章）にフォーカスがある間は、ここでキーを横取りしない。
+        // トンネリング段階でHandledにするとTextInputイベント自体が発生しなくなり、
+        // スペース等の通常入力がターミナルへ届かなくなる（e.OriginalSourceはRichTextBox
+        // 内部の要素になることがあるため、型での除外では取りこぼす）。
+        if (TerminalSurface.IsKeyboardFocusWithin)
+        {
+            return;
+        }
+
+        // ListBox(Extended選択モード)はSpaceキーを選択切り替えとして内部消費し、
+        // Window.InputBindingsのKeyBindingまでバブリングしないため、
+        // トンネリング段階(PreviewKeyDown)でプレビューコマンドを直接実行する。
+        if (e.Key == Key.Space && e.OriginalSource is not TextBox)
+        {
+            e.Handled = true;
+
+            if (viewModel.TogglePreviewCommand.CanExecute(null))
+            {
+                viewModel.TogglePreviewCommand.Execute(null);
             }
         }
     }
@@ -922,35 +957,375 @@ public partial class MainWindow : Window
         }
     }
 
-    private void TerminalOutputTextBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        (sender as TextBox)?.ScrollToEnd();
-    }
+    // ===== 仕様書17章：VS Codeの統合ターミナルと同じ「1つのターミナル画面」構造 =====
+    // プロンプトはシェル自身の出力（"PS C:\...> "）で、その末尾にユーザーが直接入力する。
+    // RichTextBoxはIsReadOnly相当の扱いとし、入力行の編集はすべてここで制御する
+    // （WPFの編集機能に任せると、出力の追記とユーザー編集が競合して文書が壊れるため）。
+    private TerminalViewModel? _boundTerminal;
+    private Paragraph? _terminalParagraph;
+    private Run? _terminalInputRun;
+    private string _terminalInput = string.Empty;
+    private int _terminalCaret;
 
-    // ターミナルを表示した際、すぐに入力できるよう入力欄へフォーカスする。
-    private void TerminalInputTextBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    // タブ切り替え・ターミナル生成に追従して画面を張り替える。
+    private void BindTerminalSurface(TerminalViewModel? terminal)
     {
-        if (sender is not TextBox textBox || e.NewValue is not true)
+        if (ReferenceEquals(_boundTerminal, terminal))
         {
             return;
         }
 
-        textBox.Focus();
+        if (_boundTerminal is not null)
+        {
+            _boundTerminal.SegmentsAppended -= OnTerminalSegmentsAppended;
+            _boundTerminal.InsertTextRequested -= OnTerminalInsertTextRequested;
+        }
+
+        _boundTerminal = terminal;
+        _terminalInput = string.Empty;
+        _terminalCaret = 0;
+
+        _terminalParagraph = new Paragraph { Margin = new Thickness(0) };
+        TerminalSurface.Document = new FlowDocument(_terminalParagraph)
+        {
+            PagePadding = new Thickness(0),
+            FontFamily = TerminalSurface.FontFamily,
+            FontSize = TerminalSurface.FontSize
+        };
+
+        _terminalInputRun = new Run(string.Empty);
+        _terminalParagraph.Inlines.Add(_terminalInputRun);
+
+        if (terminal is null)
+        {
+            return;
+        }
+
+        AppendSegmentsToSurface(terminal.Buffer);
+        terminal.SegmentsAppended += OnTerminalSegmentsAppended;
+        terminal.InsertTextRequested += OnTerminalInsertTextRequested;
     }
 
-    // ターミナル部分をクリックしたときに入力欄へフォーカスする（すぐに入力できるように
-    // するため）。ただし出力欄（TerminalOutputTextBox）自体のクリックは、テキスト選択・
-    // コピーのための操作である場合があるため対象外とする。ここで無条件にフォーカスを
-    // 奪うと、出力欄でのドラッグ選択が毎回入力欄へのフォーカス移動によって
-    // キャンセルされてしまい、ターミナルの内容を選択・コピーできなくなる不具合があった。
+    private void OnTerminalSegmentsAppended(IReadOnlyList<TerminalSegment> segments)
+    {
+        AppendSegmentsToSurface(segments);
+    }
+
+    private void OnTerminalInsertTextRequested(string text)
+    {
+        InsertTerminalInput(text);
+    }
+
+    // 出力は常に入力行の「前」へ挿入する（入力途中でも打ちかけの文字が消えないように）。
+    private void AppendSegmentsToSurface(IReadOnlyList<TerminalSegment> segments)
+    {
+        if (_terminalParagraph is null || _terminalInputRun is null || segments.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var segment in segments)
+        {
+            foreach (var inline in CreateInlines(segment))
+            {
+                _terminalParagraph.Inlines.InsertBefore(_terminalInputRun, inline);
+            }
+        }
+
+        TrimTerminalSurface();
+        UpdateTerminalCaret();
+        TerminalSurface.ScrollToEnd();
+    }
+
+    // FlowDocumentのRunは改行文字を改行として描画しないため、LineBreakへ分解する。
+    private static IEnumerable<Inline> CreateInlines(TerminalSegment segment)
+    {
+        var lines = segment.Text.Split('\n');
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (i > 0)
+            {
+                yield return new LineBreak();
+            }
+
+            if (lines[i].Length == 0)
+            {
+                continue;
+            }
+
+            var run = new Run(lines[i]);
+
+            if (segment.Foreground is { } foreground)
+            {
+                run.Foreground = new SolidColorBrush(foreground);
+            }
+
+            if (segment.Background is { } background)
+            {
+                run.Background = new SolidColorBrush(background);
+            }
+
+            if (segment.IsBold)
+            {
+                run.FontWeight = FontWeights.Bold;
+            }
+
+            yield return run;
+        }
+    }
+
+    // 表示が重くならないよう、古い出力から間引く（スクロールバックの上限）。
+    private void TrimTerminalSurface()
+    {
+        const int maxInlines = 4000;
+        const int trimCount = 1000;
+
+        if (_terminalParagraph is null || _terminalParagraph.Inlines.Count <= maxInlines)
+        {
+            return;
+        }
+
+        for (var i = 0; i < trimCount && _terminalParagraph.Inlines.Count > 1; i++)
+        {
+            var first = _terminalParagraph.Inlines.FirstInline;
+            if (first is null || ReferenceEquals(first, _terminalInputRun))
+            {
+                break;
+            }
+
+            _terminalParagraph.Inlines.Remove(first);
+        }
+    }
+
+    private void RefreshTerminalInputRun()
+    {
+        if (_terminalInputRun is null)
+        {
+            return;
+        }
+
+        _terminalInputRun.Text = _terminalInput;
+        UpdateTerminalCaret();
+        TerminalSurface.ScrollToEnd();
+    }
+
+    private void UpdateTerminalCaret()
+    {
+        if (_terminalInputRun is null)
+        {
+            return;
+        }
+
+        var position = _terminalInputRun.ContentStart.GetPositionAtOffset(_terminalCaret) ?? _terminalInputRun.ContentEnd;
+        TerminalSurface.CaretPosition = position;
+    }
+
+    private void InsertTerminalInput(string text)
+    {
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        _terminalInput = _terminalInput.Insert(Math.Clamp(_terminalCaret, 0, _terminalInput.Length), text);
+        _terminalCaret = Math.Clamp(_terminalCaret, 0, _terminalInput.Length) + text.Length;
+        RefreshTerminalInputRun();
+    }
+
+    private void SetTerminalInput(string text)
+    {
+        _terminalInput = text;
+        _terminalCaret = text.Length;
+        RefreshTerminalInputRun();
+    }
+
+    private void TerminalSurface_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        if (_boundTerminal is null || e.Text.Length == 0)
+        {
+            return;
+        }
+
+        // 制御文字（Enter・Tab等）はPreviewKeyDown側で扱う。
+        if (!char.IsControl(e.Text[0]))
+        {
+            InsertTerminalInput(e.Text);
+            e.Handled = true;
+        }
+    }
+
+    private void TerminalSurface_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_boundTerminal is null)
+        {
+            return;
+        }
+
+        var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+
+        // Ctrl+C：選択中ならコピー、そうでなければ実行中コマンドの中断（VS Code/一般的な
+        // ターミナルと同じ挙動）。Ctrl+VとCtrl+Aは通常どおり貼り付け・全選択として扱う。
+        if (ctrl && e.Key == Key.C)
+        {
+            if (TerminalSurface.Selection.IsEmpty)
+            {
+                _boundTerminal.Interrupt();
+                SetTerminalInput(string.Empty);
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (ctrl && e.Key == Key.V)
+        {
+            if (Clipboard.ContainsText())
+            {
+                // 複数行の貼り付けは改行を空白に潰す（誤って複数コマンドが走らないように）。
+                var text = Clipboard.GetText().Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
+                InsertTerminalInput(text);
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        if (ctrl && e.Key == Key.A)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            // スペースはWPFの読み取り専用エディターがKeyDown段階で消費してしまい、
+            // TextInputイベントが発生しない（英字はWM_CHAR経由で届くため影響を受けない）。
+            // そのためここで明示的に入力へ反映する。
+            case Key.Space:
+                InsertTerminalInput(" ");
+                e.Handled = true;
+                break;
+
+            case Key.Enter:
+                var command = _terminalInput;
+                // 入力テキストはシェルがエコーバックするため、ここでは画面から消してから送る
+                // （残したままだと同じ行が二重に表示される）。
+                SetTerminalInput(string.Empty);
+                _boundTerminal.SendInput(command);
+                e.Handled = true;
+                break;
+
+            case Key.Back:
+                if (_terminalCaret > 0)
+                {
+                    _terminalInput = _terminalInput.Remove(_terminalCaret - 1, 1);
+                    _terminalCaret--;
+                    RefreshTerminalInputRun();
+                }
+
+                e.Handled = true;
+                break;
+
+            case Key.Delete:
+                if (_terminalCaret < _terminalInput.Length)
+                {
+                    _terminalInput = _terminalInput.Remove(_terminalCaret, 1);
+                    RefreshTerminalInputRun();
+                }
+
+                e.Handled = true;
+                break;
+
+            case Key.Left:
+                if (_terminalCaret > 0)
+                {
+                    _terminalCaret--;
+                    UpdateTerminalCaret();
+                }
+
+                e.Handled = true;
+                break;
+
+            case Key.Right:
+                if (_terminalCaret < _terminalInput.Length)
+                {
+                    _terminalCaret++;
+                    UpdateTerminalCaret();
+                }
+
+                e.Handled = true;
+                break;
+
+            case Key.Home:
+                _terminalCaret = 0;
+                UpdateTerminalCaret();
+                e.Handled = true;
+                break;
+
+            case Key.End:
+                _terminalCaret = _terminalInput.Length;
+                UpdateTerminalCaret();
+                e.Handled = true;
+                break;
+
+            // ↑↓：コマンド履歴。
+            case Key.Up:
+                if (_boundTerminal.MovePreviousHistory() is { } previous)
+                {
+                    SetTerminalInput(previous);
+                }
+
+                e.Handled = true;
+                break;
+
+            case Key.Down:
+                if (_boundTerminal.MoveNextHistory() is { } next)
+                {
+                    SetTerminalInput(next);
+                }
+
+                e.Handled = true;
+                break;
+
+            // 画面内容を直接編集させない（入力行以外は読み取り専用扱い）。
+            case Key.Tab:
+            case Key.PageUp:
+            case Key.PageDown:
+                e.Handled = e.Key == Key.Tab;
+                break;
+        }
+    }
+
+    // ターミナルを表示した際、すぐに入力できるようフォーカスする。
+    private void TerminalSurface_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is not true)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(new Action(() => TerminalSurface.Focus()), DispatcherPriority.Input);
+    }
+
+    // 仕様書17章「高さはドラッグ変更可能」。上へドラッグすると高くなる。
+    private void TerminalResizeThumb_DragDelta(object sender, DragDeltaEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.TerminalHost.PanelHeight -= e.VerticalChange;
+        }
+    }
+
+    // ターミナル部分をクリックしたときに入力できるようフォーカスする。ターミナル画面自身の
+    // クリックはテキスト選択の操作でもあるため、フォーカス移動を横取りしない。
     private void TerminalPanel_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (IsDescendantOf(e.OriginalSource as DependencyObject, TerminalOutputTextBox))
+        if (IsDescendantOf(e.OriginalSource as DependencyObject, TerminalSurface))
         {
             return;
         }
 
-        Dispatcher.BeginInvoke(new Action(() => TerminalInputTextBox.Focus()), DispatcherPriority.Input);
+        Dispatcher.BeginInvoke(new Action(() => TerminalSurface.Focus()), DispatcherPriority.Input);
     }
 
     // 仕様書17章：タブストリップでの切替。

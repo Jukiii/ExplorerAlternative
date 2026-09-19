@@ -12,9 +12,13 @@ public sealed class TerminalHostViewModel : ObservableObject, IDisposable
 {
     private readonly Func<IPowerShellTerminalService> _serviceFactory;
     private readonly bool _syncByDefault;
+    private const double MinPanelHeight = 80;
+    private const double MaxPanelHeight = 900;
+
     private int _counter;
     private bool _isVisible;
     private TerminalViewModel? _activeTerminal;
+    private double _panelHeight = 230;
 
     public TerminalHostViewModel(Func<IPowerShellTerminalService> serviceFactory, bool syncByDefault)
     {
@@ -62,6 +66,13 @@ public sealed class TerminalHostViewModel : ObservableObject, IDisposable
                 AddTerminal();
             }
         }
+    }
+
+    /// <summary>仕様書17章「高さはドラッグ変更可能」。パネル上端のつまみをドラッグして変更する。</summary>
+    public double PanelHeight
+    {
+        get => _panelHeight;
+        set => SetProperty(ref _panelHeight, Math.Clamp(value, MinPanelHeight, MaxPanelHeight));
     }
 
     public RelayCommand AddTerminalCommand { get; }
