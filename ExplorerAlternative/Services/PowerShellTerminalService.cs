@@ -26,13 +26,20 @@ public sealed class PowerShellTerminalService : IPowerShellTerminalService
     private readonly bool _loadProfile;
     private readonly TerminalOutputDecoder _outputDecoder = new();
     private readonly TerminalOutputDecoder _errorDecoder = new();
+    private readonly Action<Action> _invokeOnUi;
     private Process? _process;
     private CancellationTokenSource? _readCancellation;
 
-    public PowerShellTerminalService(string shellExecutable, bool loadProfile = false)
+    /// <param name="invokeOnUi">
+    /// イベント通知を実行する方法。既定ではアプリケーションのUIスレッド（Dispatcher）で
+    /// 実行する。UIスレッドの無い環境（単体テスト等）では、呼び出し元スレッドで直接
+    /// 実行する関数を渡せる。
+    /// </param>
+    public PowerShellTerminalService(string shellExecutable, bool loadProfile = false, Action<Action>? invokeOnUi = null)
     {
         _shellExecutable = shellExecutable;
         _loadProfile = loadProfile;
+        _invokeOnUi = invokeOnUi ?? InvokeOnApplicationDispatcher;
     }
 
     public event EventHandler<string>? OutputReceived;
@@ -85,6 +92,11 @@ public sealed class PowerShellTerminalService : IPowerShellTerminalService
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
+            // 起動に失敗したProcessを残すと、以降のIsRunning（HasExitedの参照）が
+            // 「プロセスが関連付けられていません」で例外になり、コマンド送信時にクラッシュする。
+            _process?.Dispose();
+            _process = null;
+
             RaiseError($"PowerShellの起動に失敗しました。({ex.Message})");
         }
     }
@@ -250,15 +262,11 @@ public sealed class PowerShellTerminalService : IPowerShellTerminalService
         }
     }
 
-    private void RaiseOutput(string text)
-    {
-        Application.Current?.Dispatcher.Invoke(() => OutputReceived?.Invoke(this, text));
-    }
+    private static void InvokeOnApplicationDispatcher(Action action) => Application.Current?.Dispatcher.Invoke(action);
 
-    private void RaiseError(string message)
-    {
-        Application.Current?.Dispatcher.Invoke(() => ErrorOccurred?.Invoke(this, message));
-    }
+    private void RaiseOutput(string text) => _invokeOnUi(() => OutputReceived?.Invoke(this, text));
+
+    private void RaiseError(string message) => _invokeOnUi(() => ErrorOccurred?.Invoke(this, message));
 
     private static class NativeMethods
     {
