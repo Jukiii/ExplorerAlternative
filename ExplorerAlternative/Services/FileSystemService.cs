@@ -11,6 +11,24 @@ namespace ExplorerAlternative.Services;
 /// </summary>
 public sealed class FileSystemService : IFileSystemService
 {
+    private readonly IFileLockService _fileLockService;
+
+    public FileSystemService(IFileLockService? fileLockService = null)
+    {
+        _fileLockService = fileLockService ?? new FileLockService();
+    }
+
+    /// <summary>
+    /// 操作失敗時の例外を作る。仕様書52章に従い、可能なら対象を使用しているプロセスの
+    /// 情報（プロセス名・PID）をメッセージへ追記する。調査は失敗時にのみ行うため、
+    /// 通常の操作の速度には影響しない。
+    /// </summary>
+    private AppOperationException CreateFailure(string message, Exception inner, params string[] lockCandidatePaths)
+    {
+        var lockInfo = _fileLockService.Describe(lockCandidatePaths);
+        return new AppOperationException(lockInfo is null ? message : $"{message}{Environment.NewLine}{Environment.NewLine}{lockInfo}", inner);
+    }
+
     public IReadOnlyList<FileSystemEntry> GetDrives()
     {
         var result = new List<FileSystemEntry>();
@@ -150,7 +168,7 @@ public sealed class FileSystemService : IFileSystemService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            throw new AppOperationException($"「{Path.GetFileName(fullPath)}」の名前を変更できませんでした。", ex);
+            throw CreateFailure($"「{Path.GetFileName(fullPath)}」の名前を変更できませんでした。", ex, fullPath);
         }
     }
 
@@ -171,7 +189,7 @@ public sealed class FileSystemService : IFileSystemService
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                throw new AppOperationException($"「{Path.GetFileName(path)}」を削除できませんでした。", ex);
+                throw CreateFailure($"「{Path.GetFileName(path)}」を削除できませんでした。", ex, path);
             }
         }
     }
@@ -190,7 +208,7 @@ public sealed class FileSystemService : IFileSystemService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new AppOperationException($"「{Path.GetFileName(sourceFullPath)}」をコピーできませんでした。", ex);
+            throw CreateFailure($"「{Path.GetFileName(sourceFullPath)}」をコピーできませんでした。", ex, sourceFullPath, destinationFullPath);
         }
     }
 
@@ -214,7 +232,7 @@ public sealed class FileSystemService : IFileSystemService
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                throw new AppOperationException($"「{Path.GetFileName(source)}」をコピーできませんでした。", ex);
+                throw CreateFailure($"「{Path.GetFileName(source)}」をコピーできませんでした。", ex, source);
             }
         }
     }
@@ -239,7 +257,7 @@ public sealed class FileSystemService : IFileSystemService
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                throw new AppOperationException($"「{Path.GetFileName(source)}」を移動できませんでした。", ex);
+                throw CreateFailure($"「{Path.GetFileName(source)}」を移動できませんでした。", ex, source);
             }
         }
     }
@@ -273,7 +291,7 @@ public sealed class FileSystemService : IFileSystemService
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                throw new AppOperationException($"「{Path.GetFileName(source)}」を複製できませんでした。", ex);
+                throw CreateFailure($"「{Path.GetFileName(source)}」を複製できませんでした。", ex, source);
             }
         }
 
@@ -317,7 +335,7 @@ public sealed class FileSystemService : IFileSystemService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new AppOperationException($"「{Path.GetFileName(sourcePath)}」をコピーできませんでした。", ex);
+            throw CreateFailure($"「{Path.GetFileName(sourcePath)}」をコピーできませんでした。", ex, sourcePath);
         }
     }
 
@@ -348,7 +366,12 @@ public sealed class FileSystemService : IFileSystemService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new AppOperationException($"「{Path.GetFileName(sourcePath)}」を上書きコピーできませんでした。", ex);
+            // 上書き先（削除される側）が使用中で失敗するケースが典型のため、コピー先の項目も調べる。
+            throw CreateFailure(
+                $"「{Path.GetFileName(sourcePath)}」を上書きコピーできませんでした。",
+                ex,
+                sourcePath,
+                Path.Combine(destinationDirectory, Path.GetFileName(sourcePath)));
         }
     }
 

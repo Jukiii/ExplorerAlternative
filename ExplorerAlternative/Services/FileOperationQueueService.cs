@@ -25,9 +25,12 @@ public sealed class FileOperationQueueService : IFileOperationQueueService
 
     private readonly BlockingCollection<FileOperationQueueItem> _pendingQueue = new();
     private readonly ConcurrentDictionary<Guid, RunState> _runStates = new();
+    private readonly IFileLockService _fileLockService;
 
-    public FileOperationQueueService()
+    public FileOperationQueueService(IFileLockService? fileLockService = null)
     {
+        _fileLockService = fileLockService ?? new FileLockService();
+
         var worker = new Thread(ProcessQueue) { IsBackground = true, Name = "FileOperationQueue" };
         worker.Start();
     }
@@ -104,6 +107,9 @@ public sealed class FileOperationQueueService : IFileOperationQueueService
     {
         RunOnUi(() => item.Status = FileOperationQueueItemStatus.Running);
 
+        // 失敗時に、どの項目の処理中だったかを使用中プロセスの調査（仕様書52章）に使う。
+        string? currentSource = null;
+
         try
         {
             for (var i = 0; i < item.SourcePaths.Count; i++)
@@ -112,6 +118,7 @@ public sealed class FileOperationQueueService : IFileOperationQueueService
                 state.Cts.Token.ThrowIfCancellationRequested();
 
                 var source = item.SourcePaths[i];
+                currentSource = source;
                 ProcessSingleSource(item, state, source);
 
                 var processed = i + 1;
@@ -130,9 +137,16 @@ public sealed class FileOperationQueueService : IFileOperationQueueService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // 元の項目と、上書き先になり得るコピー先の同名項目の両方を調べる。
+            var lockCandidates = currentSource is null
+                ? Array.Empty<string>()
+                : new[] { currentSource, Path.Combine(item.DestinationFolder, Path.GetFileName(currentSource)) };
+            var lockInfo = _fileLockService.Describe(lockCandidates);
+            var message = lockInfo is null ? ex.Message : $"{ex.Message}{Environment.NewLine}{Environment.NewLine}{lockInfo}";
+
             RunOnUi(() =>
             {
-                item.ErrorMessage = ex.Message;
+                item.ErrorMessage = message;
                 item.Status = FileOperationQueueItemStatus.Failed;
             });
         }
