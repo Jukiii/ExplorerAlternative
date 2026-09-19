@@ -55,12 +55,6 @@ dotnet run --project ExplorerAlternative/ExplorerAlternative.csproj
 dotnet publish ExplorerAlternative/ExplorerAlternative.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-テストの実行:
-
-```bash
-dotnet test ExplorerAlternative.Tests
-```
-
 ## プロジェクト構成
 
 ```
@@ -69,7 +63,6 @@ ExplorerAlternative/       アプリ本体（WPF, MVVM）
   ViewModels/               ViewModel
   Services/                 ファイルシステム・Git/SVN・ターミナル等のロジック
   Themes/                    ライト/ダークテーマのリソースディクショナリ
-ExplorerAlternative.Tests/ 単体テスト
 docs/仕様.md                正式な仕様書（最新・詳細）
 CLAUDE.md                   開発初期の縮小版仕様書
 ```
