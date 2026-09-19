@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using ExplorerAlternative.Services.Abstractions;
 
@@ -18,6 +19,9 @@ namespace ExplorerAlternative.Services;
 /// </summary>
 public sealed class PowerShellTerminalService : IPowerShellTerminalService
 {
+    /// <summary>コンソールのアタッチはプロセス全体に影響するため、全ターミナルで直列化する。</summary>
+    private static readonly object ConsoleAttachLock = new();
+
     private readonly string _shellExecutable;
     private readonly bool _loadProfile;
     private readonly TerminalOutputDecoder _outputDecoder = new();
@@ -158,14 +162,64 @@ public sealed class PowerShellTerminalService : IPowerShellTerminalService
     }
 
     /// <summary>
-    /// Ctrl+C相当の中断。CreateNoWindowかつ標準入出力をリダイレクトした子プロセスは
-    /// コンソールを共有しないため、GenerateConsoleCtrlEventによる本来のCtrl+Cシグナルは
-    /// 送れない。ここではETX(0x03)を標準入力へ書き込むことで、標準入力を読んでいる
-    /// 対話プロンプト等の中断を試みる（PowerShellのパイプライン実行中の中断はできない）。
+    /// Ctrl+Cによる実行中コマンドの中断（仕様書17章）。
+    ///
+    /// 本アプリはコンソールを持たないGUIプロセスだが、<c>CreateNoWindow</c>で起動した
+    /// 子シェルは（ウィンドウが無いだけで）コンソールを持っている。そこで一時的に子の
+    /// コンソールへアタッチし、そのコンソールに対してCtrl+Cイベントを発生させることで、
+    /// 本来のCtrl+Cシグナルを送る。イベントはコンソールに紐づく全プロセス（アタッチ中の
+    /// 自分自身を含む）へ配送されるため、送信前に自プロセスのCtrl+C処理を無効化して
+    /// アプリ自体が終了しないようにする。
+    ///
+    /// アタッチはプロセス全体の状態を変えるため、複数ターミナルから同時に実行されないよう
+    /// ロックで直列化し、UIスレッドを止めないようバックグラウンドで実行する。
     /// </summary>
     public void Interrupt()
     {
-        SendRaw("\u0003");
+        if (!IsRunning)
+        {
+            return;
+        }
+
+        var processId = (uint)_process!.Id;
+
+        Task.Run(() =>
+        {
+            lock (ConsoleAttachLock)
+            {
+                var attached = false;
+
+                try
+                {
+                    // 送信するCtrl+Cで自分自身が終了しないよう、アタッチ前に無効化しておく。
+                    NativeMethods.SetConsoleCtrlHandler(IntPtr.Zero, true);
+                    NativeMethods.FreeConsole();
+
+                    attached = NativeMethods.AttachConsole(processId);
+                    if (!attached)
+                    {
+                        // コンソールへアタッチできない場合は、標準入力を読んでいる対話
+                        // プロンプト向けにETX(0x03)を送るだけのフォールバックとする。
+                        SendRaw("\u0003");
+                        return;
+                    }
+
+                    NativeMethods.GenerateConsoleCtrlEvent(NativeMethods.CtrlCEvent, 0);
+
+                    // イベントが配送されるまでの猶予（アタッチしたまま少し待つ）。
+                    Thread.Sleep(200);
+                }
+                finally
+                {
+                    if (attached)
+                    {
+                        NativeMethods.FreeConsole();
+                    }
+
+                    NativeMethods.SetConsoleCtrlHandler(IntPtr.Zero, false);
+                }
+            }
+        });
     }
 
     public void ChangeDirectory(string path)
@@ -204,5 +258,26 @@ public sealed class PowerShellTerminalService : IPowerShellTerminalService
     private void RaiseError(string message)
     {
         Application.Current?.Dispatcher.Invoke(() => ErrorOccurred?.Invoke(this, message));
+    }
+
+    private static class NativeMethods
+    {
+        internal const uint CtrlCEvent = 0;
+
+        /// <summary>指定プロセスのコンソールへアタッチする。</summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        internal static extern bool AttachConsole(uint dwProcessId);
+
+        /// <summary>現在アタッチしているコンソールから切り離す。</summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        internal static extern bool FreeConsole();
+
+        /// <summary>handlerRoutineにNULL・addにtrueを渡すと、自プロセスのCtrl+C処理を無効化する。</summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        internal static extern bool SetConsoleCtrlHandler(IntPtr handlerRoutine, bool add);
+
+        /// <summary>dwProcessGroupIdに0を渡すと、アタッチ中のコンソールの全プロセスへ送る。</summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        internal static extern bool GenerateConsoleCtrlEvent(uint dwCtrlEvent, uint dwProcessGroupId);
     }
 }
