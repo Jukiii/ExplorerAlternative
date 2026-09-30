@@ -10,8 +10,10 @@ namespace ExplorerAlternative.ViewModels;
 /// PowerShellターミナルのタブ1枚分（仕様書17章）。
 ///
 /// VS Codeの統合ターミナルと同じ構造にするため、出力欄と入力欄を分けず「1つの
-/// ターミナル画面」として扱う。入力中のテキストを保持するのはView側（RichTextBox）で、
-/// ここではシェルプロセス・スクロールバック（色付き断片）・コマンド履歴を担当する。
+/// ターミナル画面」として扱う。ここではシェルプロセス・スクロールバック（色付き断片）・
+/// コマンド履歴・入力行の編集状態（<see cref="Input"/>）を担当し、画面（RichTextBox）への
+/// 描画とキー入力の受け取りはView側（<c>TerminalSurfaceController</c>）が担当する。
+/// 入力行の状態をViewModelが持つため、タブを切り替えても打ちかけの入力は保持される。
 /// </summary>
 public sealed class TerminalViewModel : ObservableObject, IDisposable
 {
@@ -49,8 +51,11 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
     /// <summary>シェルから新しい出力が届いたときに発火する（View側が画面へ追記する）。</summary>
     public event Action<IReadOnlyList<TerminalSegment>>? SegmentsAppended;
 
-    /// <summary>ドラッグ&amp;ドロップ等で入力欄へ文字列を挿入してほしいときに発火する（仕様書19章）。</summary>
-    public event Action<string>? InsertTextRequested;
+    /// <summary>入力行の内容またはカーソル位置が変わったときに発火する（View側が入力行を再描画する）。</summary>
+    public event Action? InputChanged;
+
+    /// <summary>プロンプトの後ろに打ちかけているコマンド（編集中の1行）。</summary>
+    public TerminalInputBuffer Input { get; } = new();
 
     /// <summary>タブ切り替え時の再描画用スクロールバック。</summary>
     public IReadOnlyList<TerminalSegment> Buffer => _buffer;
@@ -110,28 +115,93 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
     /// <summary>Ctrl+C相当の中断要求。</summary>
     public void Interrupt() => _terminalService.Interrupt();
 
-    /// <summary>↑キー：1つ前のコマンド履歴。これ以上ない場合はnull。</summary>
-    public string? MovePreviousHistory()
+    // ===== 入力行の編集（キー操作に対応する。仕様書17章） =====
+
+    /// <summary>カーソル位置へ文字列を挿入する（文字入力・貼り付け・ドラッグ&amp;ドロップ）。</summary>
+    public void InsertInput(string text)
+    {
+        if (Input.Insert(text))
+        {
+            InputChanged?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// クリップボードの文字列を挿入する。複数行の貼り付けは改行を空白に潰す
+    /// （誤って複数のコマンドが実行されないように）。
+    /// </summary>
+    public void PasteText(string text) => InsertInput(NormalizePastedText(text));
+
+    public static string NormalizePastedText(string text) =>
+        text.Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
+
+    public void Backspace() => RaiseIfChanged(Input.Backspace());
+
+    public void DeleteForward() => RaiseIfChanged(Input.DeleteForward());
+
+    public void MoveCaretLeft() => RaiseIfChanged(Input.MoveLeft());
+
+    public void MoveCaretRight() => RaiseIfChanged(Input.MoveRight());
+
+    public void MoveCaretToStart() => RaiseIfChanged(Input.MoveToStart());
+
+    public void MoveCaretToEnd() => RaiseIfChanged(Input.MoveToEnd());
+
+    /// <summary>
+    /// Enter：入力行を確定して実行する。入力テキストはシェルがエコーバックするため、
+    /// 画面の入力行は先に空にしてから送る（残したままだと同じ行が二重に表示される）。
+    /// </summary>
+    public void SubmitInput()
+    {
+        var command = Input.Take();
+        InputChanged?.Invoke();
+        SendInput(command);
+    }
+
+    /// <summary>Ctrl+C（選択なし）：実行中のコマンドを中断し、打ちかけの入力も捨てる。</summary>
+    public void InterruptAndClearInput()
+    {
+        Interrupt();
+        Input.Set(string.Empty);
+        InputChanged?.Invoke();
+    }
+
+    /// <summary>↑キー：1つ前のコマンド履歴を入力行へ呼び出す。これ以上ない場合は何もしない。</summary>
+    public void RecallPreviousCommand()
     {
         if (_history.Count == 0 || _historyIndex <= 0)
         {
-            return null;
+            return;
         }
 
         _historyIndex--;
-        return _history[_historyIndex];
+        SetInput(_history[_historyIndex]);
     }
 
-    /// <summary>↓キー：1つ後のコマンド履歴。末尾を超えた場合は空文字（入力クリア）。</summary>
-    public string? MoveNextHistory()
+    /// <summary>↓キー：1つ後のコマンド履歴を呼び出す。末尾を超えた場合は入力行を空にする。</summary>
+    public void RecallNextCommand()
     {
         if (_history.Count == 0 || _historyIndex >= _history.Count)
         {
-            return null;
+            return;
         }
 
         _historyIndex++;
-        return _historyIndex >= _history.Count ? string.Empty : _history[_historyIndex];
+        SetInput(_historyIndex >= _history.Count ? string.Empty : _history[_historyIndex]);
+    }
+
+    private void SetInput(string text)
+    {
+        Input.Set(text);
+        InputChanged?.Invoke();
+    }
+
+    private void RaiseIfChanged(bool changed)
+    {
+        if (changed)
+        {
+            InputChanged?.Invoke();
+        }
     }
 
     /// <summary>外部（SSH接続・Git操作・「ここでターミナルを開く」など）から生成したコマンドを実行する。</summary>
@@ -156,7 +226,7 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
     public void InsertPathIntoInput(string path)
     {
         var quoted = path.Contains(' ') ? $"\"{path}\"" : path;
-        InsertTextRequested?.Invoke(quoted);
+        InsertInput(quoted);
     }
 
     private void AppendOutput(string text)

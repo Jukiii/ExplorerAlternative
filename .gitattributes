@@ -1,0 +1,10 @@
+# 改行コードの扱い：リポジトリ内はLFに正規化し、作業ツリーの改行は各環境の設定
+# （Windowsでは core.autocrlf）に任せる。環境ごとの設定差で改行が混在するのを防ぐ。
+* text=auto
+
+# バイナリ（改行変換の対象にしない）
+*.png binary
+*.ico binary
+*.zip binary
+*.exe binary
+*.dll binary

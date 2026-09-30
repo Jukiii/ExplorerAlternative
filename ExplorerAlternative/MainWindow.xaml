@@ -925,9 +925,9 @@
 
                         <!-- 仕様書17章：VS Codeの統合ターミナルと同じく、出力と入力を分けず1つの
                              ターミナル画面として扱う。プロンプト（"PS C:\...>"）はシェル自身の
-                             出力で、その末尾に直接入力する。入力の確定・履歴・Ctrl+Cの処理は
-                             コードビハインド（TerminalSurface_PreviewKeyDown）で行う。
-                             仕様書19章：ファイル・フォルダをドラッグ＆ドロップするとパスが入力される。 -->
+                             出力で、その末尾に直接入力する。描画・キー入力・ドラッグ＆ドロップ
+                             （仕様書19章：パスの入力）のイベントは、TerminalSurfaceController
+                             （MainWindowのコンストラクターで生成）が購読して処理する。 -->
                         <RichTextBox x:Name="TerminalSurface" Grid.Row="3"
                                      FontFamily="Cascadia Mono,Consolas" FontSize="12"
                                      Background="{DynamicResource TerminalBackgroundBrush}"
@@ -938,10 +938,7 @@
                                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                      AcceptsReturn="False" AcceptsTab="False" AutoWordSelection="False"
                                      IsReadOnly="True" IsReadOnlyCaretVisible="True" IsUndoEnabled="False"
-                                     AllowDrop="True" DragOver="TerminalInput_DragOver" Drop="TerminalInput_Drop"
-                                     PreviewKeyDown="TerminalSurface_PreviewKeyDown"
-                                     PreviewTextInput="TerminalSurface_PreviewTextInput"
-                                     IsVisibleChanged="TerminalSurface_IsVisibleChanged">
+                                     AllowDrop="True">
                             <RichTextBox.Resources>
                                 <!-- 段落間の余白をなくし、ターミナルらしい行間にする。 -->
                                 <Style TargetType="Paragraph">
