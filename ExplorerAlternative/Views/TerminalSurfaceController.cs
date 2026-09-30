@@ -82,7 +82,19 @@ public sealed class TerminalSurfaceController
         UpdateCaret();
         terminal.SegmentsAppended += OnSegmentsAppended;
         terminal.InputChanged += OnInputChanged;
+
+        // 「＋」で新しいタブを作った直後や、タブを切り替えた直後に、そのまま入力できるようにする
+        // （VS Codeと同じ）。ボタンやタブのクリックで奪われたフォーカスを画面へ戻す。
+        // 非表示の間（起動時の初期バインド等）は、表示時の処理（OnIsVisibleChanged）に任せる。
+        if (_surface.IsVisible)
+        {
+            FocusSoon();
+        }
     }
+
+    // クリック処理の完了後にフォーカスを移す（同じ処理内で移しても、ボタン側に奪い返されるため）。
+    private void FocusSoon() =>
+        _surface.Dispatcher.BeginInvoke(new Action(() => _surface.Focus()), DispatcherPriority.Input);
 
     private void OnSegmentsAppended(IReadOnlyList<TerminalSegment> segments) => AppendSegments(segments);
 
@@ -311,7 +323,7 @@ public sealed class TerminalSurfaceController
             return;
         }
 
-        _surface.Dispatcher.BeginInvoke(new Action(() => _surface.Focus()), DispatcherPriority.Input);
+        FocusSoon();
     }
 
     // 仕様書19章：ファイル・フォルダをターミナル画面へドラッグ＆ドロップするとパスが入力される。
