@@ -382,8 +382,33 @@ public partial class MainWindow : Window
         return false;
     }
 
+    // 仕様書19章「TerminalからExplorerへのドラッグ」：ターミナルで選んだ文字列（パス）のドロップ。
+    // ファイルのドロップ（FileDrop）ではない場合だけ、文字列として扱う。
+    private static string? GetDroppedText(IDataObject data)
+    {
+        if (data.GetDataPresent(DataFormats.FileDrop))
+        {
+            return null;
+        }
+
+        if (data.GetDataPresent(DataFormats.UnicodeText))
+        {
+            return data.GetData(DataFormats.UnicodeText) as string;
+        }
+
+        return data.GetDataPresent(DataFormats.Text) ? data.GetData(DataFormats.Text) as string : null;
+    }
+
     private void PaneGrid_DragOver(object sender, DragEventArgs e)
     {
+        if (sender is FrameworkElement { DataContext: PaneViewModel textPane } && GetDroppedText(e.Data) is { } droppedText)
+        {
+            e.Effects = textPane.CanNavigateToDroppedPath(droppedText) ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Handled = true;
+            ClearDragHoverState();
+            return;
+        }
+
         if (sender is not FrameworkElement element || element.DataContext is not PaneViewModel pane ||
             !e.Data.GetDataPresent(DataFormats.FileDrop))
         {
@@ -411,6 +436,13 @@ public partial class MainWindow : Window
     private void PaneGrid_Drop(object sender, DragEventArgs e)
     {
         ClearDragHoverState();
+
+        if (sender is FrameworkElement { DataContext: PaneViewModel textPane } && GetDroppedText(e.Data) is { } droppedText)
+        {
+            textPane.NavigateToDroppedPath(droppedText);
+            e.Handled = true;
+            return;
+        }
 
         if (sender is not FrameworkElement element || element.DataContext is not PaneViewModel destinationPane ||
             !e.Data.GetDataPresent(DataFormats.FileDrop))

@@ -116,6 +116,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         CopyCommand = new RelayCommand(_ => CopySelectionToClipboard(isCut: false), _ => SelectedNodes.Count > 0);
         CutCommand = new RelayCommand(_ => CopySelectionToClipboard(isCut: true), _ => SelectedNodes.Count > 0);
         PasteCommand = new RelayCommand(_ => PasteFromClipboard());
+        OpenSshTerminalCommand = new RelayCommand(_ => OpenSshTerminal());
         QuickCopyCommand = new RelayCommand(_ => QuickTransfer(isMove: false), _ => SelectedNodes.Count > 0);
         QuickMoveCommand = new RelayCommand(_ => QuickTransfer(isMove: true), _ => SelectedNodes.Count > 0);
         DuplicateSelectionCommand = new RelayCommand(_ => DuplicateSelection(), _ => SelectedNodes.Count > 0);
@@ -230,6 +231,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     public RelayCommand CutCommand { get; }
 
     public RelayCommand PasteCommand { get; }
+
+    /// <summary>仕様書19章「SSHターミナルを開く」：登録済みの接続先を選んで、統合ターミナルでSSH接続する。</summary>
+    public RelayCommand OpenSshTerminalCommand { get; }
+
+    /// <summary>「SSHターミナルを開く」で接続先が選ばれたときに発火する。接続の実行は呼び出し側（MainWindowViewModel）が行う。</summary>
+    public event Action<SshConnectionProfile>? SshTerminalRequested;
 
     /// <summary>仕様書60章「クイックコピー」：最近のコピー先から選んで、選択項目をコピーする。</summary>
     public RelayCommand QuickCopyCommand { get; }
@@ -1343,6 +1350,86 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         dataObject.SetData(DropEffectFormat, new MemoryStream(BitConverter.GetBytes((int)effect)));
 
         Clipboard.SetDataObject(dataObject, true);
+    }
+
+    // 仕様書19章：登録済みのSSH接続先を一覧から選んで、接続を依頼する。
+    private void OpenSshTerminal()
+    {
+        var profiles = _settingsService.Current.SshProfiles;
+        if (profiles.Count == 0)
+        {
+            _dialogService.ShowInfo("SSHの接続先が登録されていません。「☰ メニュー」→「SSH接続の管理...」から登録してください。");
+            return;
+        }
+
+        // 同じ表示になる接続先があっても、区別して選べるようにする。
+        var labels = new List<string>();
+        foreach (var profile in profiles)
+        {
+            var label = string.IsNullOrWhiteSpace(profile.UserName)
+                ? $"{profile.DisplayName}（{profile.Host}）"
+                : $"{profile.DisplayName}（{profile.UserName}@{profile.Host}）";
+
+            var unique = label;
+            for (var i = 2; labels.Contains(unique); i++)
+            {
+                unique = $"{label} #{i}";
+            }
+
+            labels.Add(unique);
+        }
+
+        var choice = _dialogService.SelectFromList("SSHターミナルを開く", "接続先を選んでください。", labels);
+        if (choice is null)
+        {
+            return;
+        }
+
+        var index = labels.IndexOf(choice);
+        if (index >= 0)
+        {
+            SshTerminalRequested?.Invoke(profiles[index]);
+        }
+    }
+
+    // 仕様書19章「TerminalからExplorerへのドラッグ」：ターミナルで選んだ文字列（パス）をペインへドロップしたとき、
+    // それが実在するファイル・フォルダを指していれば、そこへ移動する（ファイルなら、その場所を開いて選択する）。
+    public bool CanNavigateToDroppedPath(string? text) =>
+        DroppedPathResolver.TryResolve(text, CurrentPath, out _, out _);
+
+    public bool NavigateToDroppedPath(string? text)
+    {
+        if (!DroppedPathResolver.TryResolve(text, CurrentPath, out var path, out var isDirectory))
+        {
+            _dialogService.ShowInfo("ドロップした文字列は、存在するファイル・フォルダのパスではありません。");
+            return false;
+        }
+
+        if (isDirectory)
+        {
+            NavigateTo(path);
+            return true;
+        }
+
+        var parent = Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(parent))
+        {
+            return false;
+        }
+
+        if (!string.Equals(parent, CurrentPath, StringComparison.OrdinalIgnoreCase))
+        {
+            NavigateTo(parent);
+        }
+
+        // ファイルは、その場所を開いたうえで、選択状態にする。
+        var node = RootNodes.FirstOrDefault(n => string.Equals(n.FullPath, path, StringComparison.OrdinalIgnoreCase));
+        if (node is not null)
+        {
+            node.IsSelected = true;
+        }
+
+        return true;
     }
 
     private const string QuickBrowseLabel = "フォルダを参照...";

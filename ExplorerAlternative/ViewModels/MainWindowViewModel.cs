@@ -450,6 +450,7 @@ public sealed class MainWindowViewModel : ObservableObject
             initialViewMode);
 
         pane.RunTerminalCommandRequested += RunTerminalCommand;
+        pane.SshTerminalRequested += ConnectSshTerminal;
         pane.OpenInNewTabRequested += OpenPathInNewTab;
         pane.ProjectDetected += project => NavigationPane.RecordRecentProject(project.Name, project.RootPath);
 
@@ -461,6 +462,21 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         return pane;
+    }
+
+    // 仕様書19章「SSHターミナルを開く」：選ばれた接続先へ、統合ターミナル上でSSH接続する
+    // （「SSH接続の管理」ダイアログの「接続」と同じ。保存済みパスワードがあれば、自動入力する）。
+    private void ConnectSshTerminal(SshConnectionProfile profile)
+    {
+        try
+        {
+            var command = _sshService.BuildConnectCommand(profile);
+            TerminalHost.SendRawCommand(command, _sshCredentialStore.TryGetPassword(profile.Id));
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
     }
 
     // 仕様書13章・20章：Git/SVN操作コマンドを統合ターミナル（9章）上で実行する。
