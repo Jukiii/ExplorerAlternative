@@ -921,6 +921,8 @@ public sealed class MainWindowViewModel : ObservableObject
             new() { Name = "下に分割", Execute = () => SplitVerticalCommand.Execute(null), CanExecute = () => SplitVerticalCommand.CanExecute(null) },
             new() { Name = "ペインを閉じる", Execute = () => ClosePaneCommand.Execute(null), CanExecute = () => ClosePaneCommand.CanExecute(null) },
             new() { Name = "ペインを入れ替え", Execute = () => ActiveTab?.SwapPanesCommand.Execute(null), CanExecute = () => ActiveTab?.SwapPanesCommand.CanExecute(null) == true },
+            new() { Name = "クイックコピー（最近のコピー先から選んでコピー）", Execute = () => ActiveTab?.ActivePane.QuickCopyCommand.Execute(null), CanExecute = () => ActiveTab?.ActivePane.QuickCopyCommand.CanExecute(null) == true },
+            new() { Name = "クイック移動（最近の移動先から選んで移動）", Execute = () => ActiveTab?.ActivePane.QuickMoveCommand.Execute(null), CanExecute = () => ActiveTab?.ActivePane.QuickMoveCommand.CanExecute(null) == true },
             new() { Name = "隠しファイルの表示切替", Execute = () => ActiveTab?.ActivePane.ToggleShowHiddenFilesCommand.Execute(null) },
             new() { Name = "最新の情報に更新 (F5)", Execute = () => ActiveTab?.ActivePane.RefreshCommand.Execute(null) },
             new() { Name = "ターミナルの表示/非表示 (Ctrl+@)", Execute = ToggleTerminal },

@@ -57,6 +57,13 @@ public sealed class DialogService : IDialogService
         return dialog.ShowDialog() == true ? dialog.InputText : null;
     }
 
+    public string? ShowOpenFolderDialog(string title)
+    {
+        var dialog = new OpenFolderDialog { Title = title };
+
+        return dialog.ShowDialog(Application.Current?.MainWindow) == true ? dialog.FolderName : null;
+    }
+
     public string? SelectFromList(string title, string message, IReadOnlyList<string> items)
     {
         var dialog = new SelectionDialog(title, message, items)
