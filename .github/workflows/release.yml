@@ -1,8 +1,9 @@
 name: Release
 
-# タグ（v1.3.3 など）をプッシュすると、テスト → 発行 → 起動確認 → zip化 → GitHub Release の作成までを自動で行う。
-# 手動実行（workflow_dispatch）では、既定でリリースは作らず（dry_run）、zipをArtifactとして残すだけにする
-# （ワークフロー自体の確認用）。
+# タグ（v1.3.3 など）をプッシュすると、テスト → 発行 → 起動確認 → zip化 → インストーラーの作成と確認 →
+# GitHub Release の作成までを自動で行う。
+# 手動実行（workflow_dispatch）では、既定でリリースは作らず（dry_run）、zipとインストーラーを
+# Artifactとして残すだけにする（ワークフロー自体の確認用）。
 on:
   push:
     tags:
@@ -10,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "リリースを作成せず、zipをArtifactに残すだけにする"
+        description: "リリースを作成せず、zipとインストーラーをArtifactに残すだけにする"
         type: boolean
         default: true
 
@@ -87,10 +88,63 @@ jobs:
           "ZIP_NAME=$name" >> $env:GITHUB_ENV
           Get-Item $name | Select-Object Name, Length
 
+      # インストーラー（Inno Setup。installer/ExplorerAlternative.iss）。作ったあと、実際に（現在のユーザー向けに、
+      # 画面なしで）インストール → 起動 → アンインストールして、入ること・動くこと・消えることを確認する。
+      - name: インストーラーの作成
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" installer/ExplorerAlternative.iss
+          if ($LASTEXITCODE -ne 0) { throw "インストーラーを作れませんでした（終了コード: $LASTEXITCODE）。" }
+
+          $setup = "installer/output/ExplorerAlternative-v${{ steps.version.outputs.version }}-Setup.exe"
+          if (-not (Test-Path $setup)) { throw "インストーラーが見つかりません: $setup" }
+          "SETUP_PATH=$setup" >> $env:GITHUB_ENV
+          "SETUP_NAME=$(Split-Path $setup -Leaf)" >> $env:GITHUB_ENV
+          Get-Item $setup | Select-Object Name, Length
+
+      - name: インストーラーの確認（インストール・起動・アンインストール）
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'ea-install-test'
+          $setup = (Resolve-Path $env:SETUP_PATH).Path
+
+          $install = Start-Process -FilePath $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',"/DIR=$dir" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "インストールに失敗しました（終了コード: $($install.ExitCode)）。" }
+
+          $exe = Join-Path $dir 'ExplorerAlternative.exe'
+          $uninstaller = Join-Path $dir 'unins000.exe'
+          if (-not (Test-Path $exe)) { throw "インストール先にexeがありません: $exe" }
+          if (-not (Test-Path $uninstaller)) { throw "アンインストーラーがありません: $uninstaller" }
+
+          # 起動して、数秒後も終了していないことを確認する。終了するのは、自分が起動したプロセスだけ。
+          $process = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            $process.Refresh()
+            if ($process.HasExited) { throw "インストールしたアプリが、起動後に終了しました（終了コード: $($process.ExitCode)）。" }
+            Write-Host "インストールしたアプリの起動を確認しました（PID: $($process.Id)）。"
+          }
+          finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force; $process.WaitForExit() }
+          }
+
+          $uninstall = Start-Process -FilePath $uninstaller -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "アンインストールに失敗しました（終了コード: $($uninstall.ExitCode)）。" }
+
+          # アンインストーラーは、自分自身を少し遅れて削除するため、消えるのを少し待つ。
+          $deadline = (Get-Date).AddSeconds(30)
+          while ((Test-Path $exe) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (Test-Path $exe) { throw "アンインストール後も、exeが残っています: $exe" }
+          Write-Host 'インストール・起動・アンインストールを確認しました。'
+
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ZIP_NAME }}
-          path: ${{ env.ZIP_NAME }}
+          name: ExplorerAlternative-v${{ steps.version.outputs.version }}
+          path: |
+            ${{ env.ZIP_NAME }}
+            ${{ env.SETUP_PATH }}
 
       # タグのプッシュのときだけ、リリースを作成する。リリースノートは docs/release-notes/v<バージョン>.md が
       # あればそれを使い、無ければGitHubの自動生成にする。
@@ -102,7 +156,7 @@ jobs:
         run: |
           $notes = "docs/release-notes/$env:GITHUB_REF_NAME.md"
           if (Test-Path $notes) {
-            gh release create $env:GITHUB_REF_NAME $env:ZIP_NAME --title $env:GITHUB_REF_NAME --notes-file $notes --verify-tag
+            gh release create $env:GITHUB_REF_NAME $env:ZIP_NAME $env:SETUP_PATH --title $env:GITHUB_REF_NAME --notes-file $notes --verify-tag
           } else {
-            gh release create $env:GITHUB_REF_NAME $env:ZIP_NAME --title $env:GITHUB_REF_NAME --generate-notes --verify-tag
+            gh release create $env:GITHUB_REF_NAME $env:ZIP_NAME $env:SETUP_PATH --title $env:GITHUB_REF_NAME --generate-notes --verify-tag
           }
