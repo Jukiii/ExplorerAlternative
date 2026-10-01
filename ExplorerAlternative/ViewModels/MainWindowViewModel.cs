@@ -882,10 +882,37 @@ public sealed class MainWindowViewModel : ObservableObject
         profilesViewModel.RequestConnect += (command, password) => TerminalHost.SendRawCommand(command, password);
         profilesViewModel.RequestSftpBrowser += (profile, password) =>
         {
-            var sftpViewModel = new SftpBrowserViewModel(profile, _sftpService, password, _dialogService);
+            var sftpViewModel = new SftpBrowserViewModel(profile, _sftpService, password, _dialogService, CreatePreviewForLocalFile);
             _dialogService.ShowSftpBrowser(sftpViewModel);
         };
         _dialogService.ShowSshProfiles(profilesViewModel);
+    }
+
+    // 仕様書44章：リモートのファイルをダウンロードした一時ファイルを、通常のプレビューで表示するための作成処理。
+    private PreviewViewModel? CreatePreviewForLocalFile(string localPath)
+    {
+        var folder = Path.GetDirectoryName(localPath);
+        if (folder is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var entry = _fileSystemService.GetChildren(folder)
+                .FirstOrDefault(e => string.Equals(e.FullPath, localPath, StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
+            {
+                return null;
+            }
+
+            var node = new FileSystemNodeViewModel(entry, 0, _fileSystemService, _dialogService, _settingsService);
+            return PreviewViewModel.Create(node, _fileSystemService, _versionControlService, _settingsService, _folderScanService, _pdfRenderService);
+        }
+        catch (AppOperationException)
+        {
+            return null;
+        }
     }
 
     // 仕様書12章：現在フォルダ以下を検索する。
