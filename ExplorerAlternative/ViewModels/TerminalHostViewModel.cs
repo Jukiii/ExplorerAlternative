@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
 using ExplorerAlternative.Services.Abstractions;
 
@@ -73,6 +74,54 @@ public sealed class TerminalHostViewModel : ObservableObject, IDisposable
     {
         get => _panelHeight;
         set => SetProperty(ref _panelHeight, Math.Clamp(value, MinPanelHeight, MaxPanelHeight));
+    }
+
+    /// <summary>仕様書43章：ワークスペースへ保存する、ターミナルパネルの状態。</summary>
+    public TerminalWorkspaceState CaptureState() => new()
+    {
+        IsVisible = IsVisible,
+        PanelHeight = PanelHeight,
+        ActiveIndex = ActiveTerminal is null ? 0 : Math.Max(0, Terminals.IndexOf(ActiveTerminal)),
+        Tabs = Terminals.Select(t => new TerminalTabState { SyncEnabled = t.IsSyncEnabled }).ToList()
+    };
+
+    /// <summary>
+    /// 仕様書43章：保存した状態を復元する。実行中のターミナルは閉じない（実行中の作業を失わないため）。
+    /// 保存時にパネルを表示していた場合は、タブが足りなければ追加し、Syncの設定とアクティブなタブを
+    /// 保存時に合わせる。非表示だった場合は、パネルを隠すだけで、タブは作らない（シェルを無駄に起動しない）。
+    /// 状態が無い（古い保存データ）場合は、何もしない。
+    /// </summary>
+    public void RestoreState(TerminalWorkspaceState? state)
+    {
+        if (state is null)
+        {
+            return;
+        }
+
+        if (!double.IsNaN(state.PanelHeight))
+        {
+            PanelHeight = state.PanelHeight;
+        }
+
+        if (!state.IsVisible)
+        {
+            IsVisible = false;
+            return;
+        }
+
+        var wanted = Math.Max(1, state.Tabs.Count);
+        while (Terminals.Count < wanted)
+        {
+            AddTerminal();
+        }
+
+        for (var i = 0; i < Math.Min(Terminals.Count, state.Tabs.Count); i++)
+        {
+            Terminals[i].IsSyncEnabled = state.Tabs[i].SyncEnabled;
+        }
+
+        ActiveTerminal = Terminals[Math.Clamp(state.ActiveIndex, 0, Terminals.Count - 1)];
+        IsVisible = true;
     }
 
     public RelayCommand AddTerminalCommand { get; }

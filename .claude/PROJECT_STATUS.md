@@ -43,7 +43,7 @@
 | Phase 6 | SSH | COMPLETED | SFTPブラウザは独立ウィンドウ（統合は Issue） |
 | Phase 7 | 高度な操作 | COMPLETED | クイックコピー/移動（60章）・Redoは未実装（Issue） |
 | Phase 8 | Windows連携・カスタマイズ | COMPLETED | 「常にこのアプリ」は未実装（Issue） |
-| Phase 9 | プロジェクト・ワークスペース | COMPLETED | 保存する状態の拡張は Issue |
+| Phase 9 | プロジェクト・ワークスペース | COMPLETED | 最大化・ターミナル・展開状態・ペインの比率も保存。SSH接続状態・Quick Look固定状態は、保存しない方針（決定ログ0002） |
 | Phase 10 | 最終調整 | IN_PROGRESS | Releaseビルド・配布は完了。インストーラー・Windows 11での統合確認・リリース自動化が未着手（Issue） |
 
 未実装・既知の制限の一覧と進捗は、GitHub Issue を参照してください。
