@@ -987,6 +987,20 @@
                     <StackPanel>
                         <TextBlock Text="Git / SVN 情報" FontWeight="SemiBold" Margin="0,14,0,10" />
 
+                        <!-- 仕様書20章「両方存在する場合は両方を認識する」：GitとSVNの両方がある場所では、
+                             どちらも存在することを伝え、表示・操作する方を切り替えられるようにする。 -->
+                        <Border Margin="0,0,0,10" Padding="8" CornerRadius="4"
+                                Background="{DynamicResource PanelBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                Visibility="{Binding HasOtherVcs, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel>
+                                <TextBlock Text="この場所には、GitとSVNの両方の管理情報があります。現在は、下の種別を表示・操作しています。"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap" />
+                                <Button Content="{Binding OtherVcsSwitchLabel}" Command="{Binding SwitchVcsCommand}"
+                                        Margin="0,6,0,0" Padding="8,3" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock Text="このフォルダはGit/SVN管理下ではありません。" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">

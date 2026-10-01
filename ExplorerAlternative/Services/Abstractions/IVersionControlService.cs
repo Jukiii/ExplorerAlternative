@@ -9,7 +9,12 @@ public interface IVersionControlService
     /// その祖先フォルダに管理情報が存在する場合に情報を返す。どちらにも該当しない場合は
     /// <see cref="VersionControlInfo.None"/> を返す。
     /// </summary>
-    VersionControlInfo Detect(string path);
+    /// <summary>
+    /// 現在のフォルダまたは祖先の管理情報を判定する。GitとSVNの両方がある場合は、<paramref name="preferred"/>
+    /// （GitまたはSvn）の方を主として返し、もう一方は<see cref="VersionControlInfo.OtherKind"/>に入れる。
+    /// 指定が無い（None）場合は、これまでどおりGitを主とする。
+    /// </summary>
+    VersionControlInfo Detect(string path, VersionControlKind preferred = VersionControlKind.None);
 
     /// <summary>仕様書21章「Explorer上：M Modified / A Added / D Deleted / U Untracked / R Renamed」。
     /// フルパス→ステータス文字（M/A/D/U/R）の辞書を返す。管理外の場合は空の辞書。</summary>

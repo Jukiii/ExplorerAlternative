@@ -53,6 +53,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     private ProjectInfo? _currentProject;
     private string? _solutionRootPath;
     private string? _lastCommitLogRoot;
+    private VersionControlKind _preferredVcs = VersionControlKind.None;
     private int _loadGeneration;
     private string _sortColumn = "Name";
     private bool _sortAscending = true;
@@ -117,6 +118,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         CutCommand = new RelayCommand(_ => CopySelectionToClipboard(isCut: true), _ => SelectedNodes.Count > 0);
         PasteCommand = new RelayCommand(_ => PasteFromClipboard());
         OpenSshTerminalCommand = new RelayCommand(_ => OpenSshTerminal());
+        SwitchVcsCommand = new RelayCommand(_ => SwitchVcs(), _ => HasOtherVcs);
         QuickCopyCommand = new RelayCommand(_ => QuickTransfer(isMove: false), _ => SelectedNodes.Count > 0);
         QuickMoveCommand = new RelayCommand(_ => QuickTransfer(isMove: true), _ => SelectedNodes.Count > 0);
         DuplicateSelectionCommand = new RelayCommand(_ => DuplicateSelection(), _ => SelectedNodes.Count > 0);
@@ -400,8 +402,30 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     public VersionControlInfo VcsInfo
     {
         get => _vcsInfo;
-        private set => SetProperty(ref _vcsInfo, value);
+        private set
+        {
+            if (SetProperty(ref _vcsInfo, value))
+            {
+                OnPropertyChanged(nameof(HasOtherVcs));
+                OnPropertyChanged(nameof(OtherVcsSwitchLabel));
+                SwitchVcsCommand?.RaiseCanExecuteChanged();
+            }
+        }
     }
+
+    /// <summary>GitとSVNの両方がある場所か（仕様書20章）。両方ある場合は、右ペインで表示する方を切り替えられる。</summary>
+    public bool HasOtherVcs => VcsInfo.HasOther;
+
+    /// <summary>切り替えボタンの表示（例：「SVNに切り替え」）。</summary>
+    public string OtherVcsSwitchLabel => VcsInfo.OtherKind switch
+    {
+        VersionControlKind.Svn => "SVNに切り替え",
+        VersionControlKind.Git => "Gitに切り替え",
+        _ => string.Empty
+    };
+
+    /// <summary>GitとSVNの両方がある場所で、表示・操作の対象を、もう一方に切り替える。</summary>
+    public RelayCommand SwitchVcsCommand { get; }
 
     /// <summary>仕様書21章「Log」：直近のコミット履歴（新しい順）。</summary>
     public ObservableCollection<CommitLogEntry> CommitLog { get; } = new();
@@ -519,7 +543,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             // git/svnプロセスを起動するステータス取得・コミットログ取得、および複数階層を
             // walkするプロジェクト検出は重く、フォルダ移動のたびにUIスレッドを固まらせて
             // いたため、以下でLoadVcsAndProjectInfoAsyncへ逃がして非同期に取得する。
-            VcsInfo = isComputerRoot ? VersionControlInfo.None : _versionControlService.Detect(path);
+            VcsInfo = isComputerRoot ? VersionControlInfo.None : _versionControlService.Detect(path, _preferredVcs);
             _folderWatcherService.SetPath(isComputerRoot ? null : path);
             _vcsStatusByPath = new Dictionary<string, string>();
 
@@ -602,7 +626,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     /// </summary>
     private void LoadVcsAndProjectInfoAsync(string path, VersionControlInfo vcsInfo, int generation)
     {
-        var needsCommitLog = vcsInfo.Kind != VersionControlKind.None && vcsInfo.RootPath != _lastCommitLogRoot;
+        var needsCommitLog = vcsInfo.Kind != VersionControlKind.None && CommitLogKey(vcsInfo) != _lastCommitLogRoot;
 
         Task.Run(() =>
         {
@@ -628,7 +652,7 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 if (commitLogEntries is not null)
                 {
                     CommitLog.Clear();
-                    _lastCommitLogRoot = vcsInfo.RootPath;
+                    _lastCommitLogRoot = CommitLogKey(vcsInfo);
                     foreach (var entry in commitLogEntries)
                     {
                         CommitLog.Add(entry);
@@ -647,6 +671,21 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
                 }
             }));
         });
+    }
+
+    // コミット履歴を取り直すかの判定用。ルートのフォルダが同じでも、GitとSVNでは履歴が別なので、種別も含める。
+    private static string CommitLogKey(VersionControlInfo info) => $"{info.Kind}|{info.RootPath}";
+
+    // 仕様書20章：GitとSVNの両方がある場所で、表示する方を切り替える（選択は、このペインの中で保持する）。
+    private void SwitchVcs()
+    {
+        if (!VcsInfo.HasOther)
+        {
+            return;
+        }
+
+        _preferredVcs = VcsInfo.OtherKind;
+        LoadPath(CurrentPath);
     }
 
     private void RefreshVisibleVcsStatusDisplay()
