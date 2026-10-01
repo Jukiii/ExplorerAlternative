@@ -13,6 +13,45 @@
 
 ---
 
+# 作業ルール（NOLITOと共通）
+
+この章は `Jukiii/NOLITO` の `CLAUDE.md` と共通の運用ルール。自律開発の進め方の詳細は `.claude/CLAUDE.md`、進捗は `.claude/PROJECT_STATUS.md` を参照。
+
+## 作業ルール
+
+1. 既存ファイルと仕様書を確認する。
+2. 変更前に実装方針・変更ファイル・テスト方法を提示する。
+3. フェーズ（または Issue）単位で実装し、無関係な変更をしない。仕様書にない機能を勝手に追加しない。
+4. 秘密情報をコードやGitHubへ含めない。
+5. 仕様・アクセシビリティ・高DPI対応を確認する。
+6. 実装後にテスト結果、未対応事項、変更ファイルを報告する。
+7. 外部サービスや有料APIは規約・費用・セキュリティを確認してから導入する。
+8. GitHubではブランチをすべて残す（マージ後も削除しない）。
+
+## ブランチ・PR
+
+- `main` へ直接コミットしない。`phase-NN-<name>`（フェーズ単位）または `fix-` / `feat-` / `chore-` / `docs-<name>` ブランチで作業し、PRで取り込む（テンプレート: `.github/`）。`main` はブランチ保護（PR必須・CIの `check` 成功必須・管理者にも適用・強制プッシュ禁止）。
+- マージ方式は通常マージ（`--no-ff` 相当）。マージ後もブランチは削除しない。
+- コミットメッセージは `feat:` / `fix:` / `test:` / `refactor:` / `docs:` / `chore:` で始める（本文は日本語）。
+- 仕様変更時は変更理由・影響範囲・テスト内容を `docs/decisions/` に記録する。未確定事項は実装前にIssue化する。
+
+## Issue の題名と閉じ方
+
+- 題名の頭の【…】には、**運営者の作業が要るかどうか**を書く: **【要対応】**= 運営者の作業が要る（待っている）、**【対応不要】**= 運営者の作業は要らない（Claude が進める）、**【保留】**= 時期待ち（いまは、どちらも動かない）。状態が変わったら、題名も直す。
+- 運営者からの依頼（`.github/ISSUE_TEMPLATE/request.md`）は **【依頼】**（運営者が書いた直後 = 未対応）で始まる。Claude が対応したら **【依頼（対応済み）】**、待ちなら **【依頼（保留）】** に変えて、結果（変更・PR・テスト・未対応）をコメントする。**「依頼」の Issue は、運営者がクローズする。Claude は閉じない。**
+- 「依頼」以外の Issue は、内容が済んだら Claude が閉じてよい（運営者の指示があれば従う）。**Issue・PR は削除せず、クローズする。**
+- **Issue のコメント・Issue の作成・PR の説明には、`@Jukiii-claude` へのメンションを付ける。運営者（`@Jukiii`）へのメンションは付けない。** Claude は、運営者のアカウント `Jukiii` で `gh` を使う（`gh auth status` で Active account が `Jukiii` か確認し、違えば `gh auth switch --user Jukiii`）。GitHub は自分の操作の通知を出さないため、`Jukiii` で操作するとき、`Jukiii-claude` に通知が届くようメンションの宛先を `Jukiii-claude` にしている（NOLITOの運営者の決め。2026-10-01。`Jukiii-claude` のアカウントはGitHub上で非表示になっており、解除されたら運用を運営者に確認する。勝手に戻さない）。
+- 題名は、文字（【…】など）で始めること（Git Bash では、引数の先頭の `/` がパスに変換される）。
+
+## コマンド
+
+- `dotnet build ExplorerAlternative.slnx` … ビルド（警告0・エラー0）。
+- `dotnet test ExplorerAlternative.slnx` … 単体テスト（ターミナルの結合テストは実際のPowerShellを起動する）。PR前に必ず通す。
+- `dotnet list ExplorerAlternative.slnx package --vulnerable --include-transitive` … 依存の脆弱性チェック（CIでも実行）。
+- リリース手順は `README.md` を参照（`csproj` の `<Version>` をタグと一致させる）。
+
+---
+
 # 1. この仕様書の目的
 
 本仕様書に従って、Windows Explorerの代替となるデスクトップアプリケーションを実装する。
