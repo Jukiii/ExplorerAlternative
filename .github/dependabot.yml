@@ -1,0 +1,29 @@
+# 依存の自動更新（NOLITOと共通の方針）。NuGetパッケージ・GitHub Actions の両方を対象にする。
+# 開いた PR は、通常の PR と同じく CI（build・test・audit）を通ってから、確認してマージする。
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    # マイナー・パッチは 1 つの PR にまとめ、通知・確認の手間を減らす。メジャーは、まとめず個別に出す
+    # （破壊的変更の可能性があるため、1 件ずつ確認したい）
+    groups:
+      nuget-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
