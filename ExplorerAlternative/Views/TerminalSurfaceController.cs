@@ -329,8 +329,10 @@ public sealed class TerminalSurfaceController
                 e.Handled = true;
                 break;
 
-            // 画面内容を直接編集させない（入力行以外は読み取り専用扱い）。
+            // Tab / Shift+Tab：補完（候補が複数なら、押すたびに次・前の候補）。
+            // 候補は別のPowerShellに問い合わせるため、結果が届くまで、画面は止めない。
             case Key.Tab:
+                _ = _terminal.CompleteTabAsync(backwards: Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
                 e.Handled = true;
                 break;
         }

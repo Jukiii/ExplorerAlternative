@@ -1,4 +1,6 @@
+using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
 using ExplorerAlternative.Rendering;
@@ -27,6 +29,14 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
     private readonly List<TerminalSegment> _buffer = new();
     private readonly List<string> _history = new();
     private readonly StringBuilder _currentLine = new();
+    private readonly ITabCompletionService? _tabCompletionService;
+
+    // 直近のプロンプト（"PS C:\dir> "）から読み取った、このターミナルの現在のフォルダ（Tab補完の基準）。
+    private static readonly Regex PromptPattern = new(@"^PS (?<dir>.+)> ?$", RegexOptions.Compiled);
+    private readonly StringBuilder _lastLine = new();
+    private string? _currentDirectory;
+    private TabCompletionCycle? _completionCycle;
+    private int _completionGeneration;
 
     private int _bufferChars;
     private int _historyIndex;
@@ -34,11 +44,20 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
     private bool _isActive;
     private string? _pendingPassword;
 
-    public TerminalViewModel(IPowerShellTerminalService terminalService, bool syncByDefault, string name)
+    /// <param name="tabCompletionService">Tab補完の候補を求めるサービス。省略すると、Tabを押しても何も起きない。</param>
+    /// <param name="initialDirectory">起動直後の現在のフォルダ（最初のプロンプトが出るまでの、Tab補完の基準）。</param>
+    public TerminalViewModel(
+        IPowerShellTerminalService terminalService,
+        bool syncByDefault,
+        string name,
+        ITabCompletionService? tabCompletionService = null,
+        string? initialDirectory = null)
     {
         _terminalService = terminalService;
         _isSyncEnabled = syncByDefault;
         Name = name;
+        _tabCompletionService = tabCompletionService;
+        _currentDirectory = initialDirectory;
 
         _terminalService.OutputReceived += (_, text) => AppendOutput(text);
         _terminalService.ErrorOccurred += (_, message) => AppendOutput($"{Environment.NewLine}[エラー] {message}{Environment.NewLine}");
@@ -83,11 +102,15 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>このターミナルの現在のフォルダ（直近のプロンプトから読み取った値。不明なら<c>null</c>）。</summary>
+    public string? CurrentDirectory => _currentDirectory;
+
     public void SyncCurrentDirectory(string path)
     {
         if (IsSyncEnabled && _terminalService.IsRunning)
         {
             _terminalService.ChangeDirectory(path);
+            _currentDirectory = path;
         }
     }
 
@@ -190,6 +213,109 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
         SetInput(_historyIndex >= _history.Count ? string.Empty : _history[_historyIndex]);
     }
 
+    // ===== Tab補完（仕様書17章） =====
+
+    /// <summary>
+    /// Tab（<paramref name="backwards"/>がtrueならShift+Tab）：カーソル位置の単語を補完する。
+    /// 候補が複数ある場合は、PowerShellと同じく、押すたびに次の候補（Shift+Tabなら前の候補）へ入れ替える。
+    /// 候補を求めている間に入力が変わった場合は、その結果を捨てる。
+    /// </summary>
+    public async Task CompleteTabAsync(bool backwards = false)
+    {
+        if (_tabCompletionService is null)
+        {
+            return;
+        }
+
+        // 直前のTabで入れた候補のまま（入力もカーソルも動かしていない）なら、次の候補へ進める。
+        if (_completionCycle is { } cycle && Input.Text == cycle.AppliedText && Input.Caret == cycle.AppliedCaret)
+        {
+            cycle.MoveNext(backwards);
+            ApplyCompletion(cycle);
+            return;
+        }
+
+        _completionCycle = null;
+        var generation = ++_completionGeneration;
+        var text = Input.Text;
+        var caret = Input.Caret;
+
+        TabCompletionResult? result;
+
+        try
+        {
+            result = await _tabCompletionService.CompleteAsync(text, caret, _currentDirectory, CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            AppendOutput($"{Environment.NewLine}[エラー] Tab補完に失敗しました。({ex.Message}){Environment.NewLine}");
+            return;
+        }
+
+        if (result is null || result.Matches.Count == 0)
+        {
+            return;
+        }
+
+        // 待っている間に、別のTabや入力があった場合は、古い結果で上書きしない。
+        if (generation != _completionGeneration || Input.Text != text || Input.Caret != caret)
+        {
+            return;
+        }
+
+        var newCycle = new TabCompletionCycle(text, result, backwards);
+        _completionCycle = newCycle;
+        ApplyCompletion(newCycle);
+    }
+
+    private void ApplyCompletion(TabCompletionCycle cycle)
+    {
+        cycle.Apply();
+        Input.Set(cycle.AppliedText, cycle.AppliedCaret);
+        InputChanged?.Invoke();
+    }
+
+    /// <summary>Tab補完の、いま入れている候補の位置（押すたびに次へ進む）。</summary>
+    private sealed class TabCompletionCycle
+    {
+        private readonly string _originalText;
+        private readonly int _index;
+        private readonly int _length;
+        private readonly IReadOnlyList<string> _matches;
+        private int _current;
+
+        public TabCompletionCycle(string originalText, TabCompletionResult result, bool startFromLast)
+        {
+            _originalText = originalText;
+            _index = Math.Clamp(result.ReplacementIndex, 0, originalText.Length);
+            _length = Math.Clamp(result.ReplacementLength, 0, originalText.Length - _index);
+            _matches = result.Matches;
+            _current = startFromLast ? _matches.Count - 1 : 0;
+            Apply();
+        }
+
+        public string AppliedText { get; private set; } = string.Empty;
+
+        public int AppliedCaret { get; private set; }
+
+        public void MoveNext(bool backwards)
+        {
+            _current = (_current + (backwards ? -1 : 1) + _matches.Count) % _matches.Count;
+            Apply();
+        }
+
+        public void Apply()
+        {
+            var match = _matches[_current];
+            AppliedText = string.Concat(_originalText.AsSpan(0, _index), match, _originalText.AsSpan(_index + _length));
+            AppliedCaret = _index + match.Length;
+        }
+    }
+
     private void SetInput(string text)
     {
         Input.Set(text);
@@ -251,6 +377,7 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
         }
 
         TrimBuffer();
+        TrackPromptDirectory(segments);
         DetectPasswordPrompt(segments);
 
         // 画面側へは、行リセットの印を含めて元の順序のまま渡す（画面の現在の行も消すため）。
@@ -297,6 +424,39 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
         {
             _bufferChars -= _buffer[0].Text.Length;
             _buffer.RemoveAt(0);
+        }
+    }
+
+    // 出力の最後の行が"PS C:\dir> "というプロンプトなら、そのフォルダを現在のフォルダとして覚える
+    // （Tab補完の基準。cdで移動したあとの場所も追えるようにする）。フォルダとして存在しない場合
+    // （レジストリ等のPowerShellドライブ）は、無視する。
+    private void TrackPromptDirectory(IReadOnlyList<TerminalSegment> segments)
+    {
+        foreach (var segment in segments)
+        {
+            if (segment.IsLineReset)
+            {
+                _lastLine.Clear();
+                continue;
+            }
+
+            foreach (var c in segment.Text)
+            {
+                if (c == '\n')
+                {
+                    _lastLine.Clear();
+                }
+                else if (c != '\r')
+                {
+                    _lastLine.Append(c);
+                }
+            }
+        }
+
+        var match = PromptPattern.Match(_lastLine.ToString());
+        if (match.Success && Directory.Exists(match.Groups["dir"].Value))
+        {
+            _currentDirectory = match.Groups["dir"].Value;
         }
     }
 

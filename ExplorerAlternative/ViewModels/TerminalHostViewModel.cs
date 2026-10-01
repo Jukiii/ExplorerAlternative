@@ -12,6 +12,7 @@ namespace ExplorerAlternative.ViewModels;
 public sealed class TerminalHostViewModel : ObservableObject, IDisposable
 {
     private readonly Func<IPowerShellTerminalService> _serviceFactory;
+    private readonly ITabCompletionService? _tabCompletionService;
     private readonly bool _syncByDefault;
     private const double MinPanelHeight = 80;
     private const double MaxPanelHeight = 900;
@@ -21,10 +22,12 @@ public sealed class TerminalHostViewModel : ObservableObject, IDisposable
     private TerminalViewModel? _activeTerminal;
     private double _panelHeight = 230;
 
-    public TerminalHostViewModel(Func<IPowerShellTerminalService> serviceFactory, bool syncByDefault)
+    /// <param name="tabCompletionService">全タブで共有するTab補完のサービス（破棄はこのクラスが行う）。省略すると補完は使えない。</param>
+    public TerminalHostViewModel(Func<IPowerShellTerminalService> serviceFactory, bool syncByDefault, ITabCompletionService? tabCompletionService = null)
     {
         _serviceFactory = serviceFactory;
         _syncByDefault = syncByDefault;
+        _tabCompletionService = tabCompletionService;
 
         AddTerminalCommand = new RelayCommand(_ => AddTerminal());
         CloseTerminalCommand = new RelayCommand(p => CloseTerminal(p as TerminalViewModel));
@@ -150,7 +153,8 @@ public sealed class TerminalHostViewModel : ObservableObject, IDisposable
     private void AddTerminal()
     {
         _counter++;
-        var terminal = new TerminalViewModel(_serviceFactory(), _syncByDefault, $"PowerShell {_counter}");
+        var terminal = new TerminalViewModel(
+            _serviceFactory(), _syncByDefault, $"PowerShell {_counter}", _tabCompletionService, Environment.CurrentDirectory);
         terminal.Start();
         Terminals.Add(terminal);
         ActiveTerminal = terminal;
@@ -191,5 +195,7 @@ public sealed class TerminalHostViewModel : ObservableObject, IDisposable
         {
             terminal.Dispose();
         }
+
+        _tabCompletionService?.Dispose();
     }
 }

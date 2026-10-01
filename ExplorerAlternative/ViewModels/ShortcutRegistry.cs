@@ -42,6 +42,7 @@ public static class ShortcutRegistry
         new("タブ・ウィンドウ", "新しいウィンドウを開く", "Ctrl + N"),
 
         new("ターミナル", "ターミナル表示/非表示", "Ctrl + @（USキー配列ではCtrl + Shift + 2でも可）"),
+        new("ターミナル", "コマンド・パスの補完（候補が複数なら、押すたびに次・前の候補）", "Tab / Shift + Tab"),
 
         new("検索・その他", "検索", "Ctrl + F"),
         new("検索・その他", "コマンドパレット", "Ctrl + Shift + P"),
