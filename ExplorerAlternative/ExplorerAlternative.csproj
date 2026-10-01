@@ -13,7 +13,7 @@
     <!-- リリースのバージョン。GitHubのタグ（v1.3.1等）と一致させ、リリース時に更新する。
          exeのファイルバージョン・製品バージョンとして埋め込まれ、配布物がどのリリースかを
          exeのプロパティから判別できるようにする（製品バージョンにはコミットIDも付く）。 -->
-    <Version>1.4.0</Version>
+    <Version>1.5.0</Version>
     <Product>ExplorerAlternative</Product>
   </PropertyGroup>
 
