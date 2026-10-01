@@ -28,6 +28,8 @@
             <!-- 仕様書19章：ターミナル連携。 -->
             <MenuItem Header="ここでPowerShellを開く" Command="{Binding OpenPowerShellHereCommand}" />
             <MenuItem Header="ここでターミナルを開く" Command="{Binding OpenTerminalHereCommand}" />
+            <!-- 仕様書19章：登録済みの接続先を選んで、統合ターミナルでSSH接続する。 -->
+            <MenuItem Header="SSHターミナルを開く..." Command="{Binding OpenSshTerminalCommand}" />
             <MenuItem Header="新しいフォルダ" Command="{Binding NewFolderCommand}" />
             <MenuItem Header="新しいファイル" Command="{Binding NewFileCommand}" />
             <Separator />
