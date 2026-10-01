@@ -63,6 +63,17 @@ public partial class PreviewWindow : Window
                 e.Handled = true;
                 break;
 
+            // 仕様書13章「PDFページ移動」：PDFのときだけ、PageUp/PageDownでページを移動する。
+            case Key.PageUp when viewModel.Kind == PreviewKind.Pdf:
+                viewModel.PreviousPageCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            case Key.PageDown when viewModel.Kind == PreviewKind.Pdf:
+                viewModel.NextPageCommand.Execute(null);
+                e.Handled = true;
+                break;
+
             case Key.Escape:
                 viewModel.RequestClose?.Invoke();
                 e.Handled = true;

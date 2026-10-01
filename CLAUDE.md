@@ -68,7 +68,7 @@ Phase 1では、将来的な拡張を考慮した構造を作りつつ、仕様�
 
 - C#
 - WPF
-- .NET 10（`docs/仕様.md` 1章に準拠。既存プロジェクトも `net10.0-windows` を使用）
+- .NET 10（`docs/仕様.md` 1章に準拠。既存プロジェクトは、PDF描画（Windows標準のWinRT API）のため `net10.0-windows10.0.19041.0` を使用）
 - Windows
 
 ## 2.2 ターミナル

@@ -37,7 +37,7 @@
 | --- | --- | --- | --- |
 | Phase 1 | Explorer基盤 | COMPLETED | |
 | Phase 2 | タブ・分割 | COMPLETED | ペインのドラッグリサイズは実装済み（境界のドラッグ・ダブルクリックで半分ずつ・ワークスペースに保存） |
-| Phase 3 | プレビュー | COMPLETED | PDFのページ表示などは未実装（Issue） |
+| Phase 3 | プレビュー | COMPLETED | PDFはWindows標準描画でページ表示・移動に対応 |
 | Phase 4 | ターミナル | COMPLETED | VS Codeと同じ単一画面構造・ANSIカラー・Ctrl+C。全画面TUIは非対応（ConPTYは断念） |
 | Phase 5 | Version Control | COMPLETED | `.git`と`.svn`の併存も認識（右ペインのボタンで表示・操作する方を切り替え） |
 | Phase 6 | SSH | COMPLETED | SFTPブラウザは独立ウィンドウ（統合は Issue） |

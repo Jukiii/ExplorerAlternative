@@ -30,6 +30,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IDiffService _diffService;
     private readonly ISshCredentialStore _sshCredentialStore;
     private readonly IFolderScanService _folderScanService;
+    private readonly IPdfRenderService _pdfRenderService;
     private readonly IFolderCompareService _folderCompareService;
     private readonly IExplorerIntegrationService _explorerIntegrationService;
     private readonly ITrayIconService _trayIconService;
@@ -64,6 +65,7 @@ public sealed class MainWindowViewModel : ObservableObject
         IDiffService diffService,
         ISshCredentialStore sshCredentialStore,
         IFolderScanService folderScanService,
+        IPdfRenderService pdfRenderService,
         IFolderCompareService folderCompareService,
         IExplorerIntegrationService explorerIntegrationService,
         ITrayIconService trayIconService,
@@ -90,6 +92,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _diffService = diffService;
         _sshCredentialStore = sshCredentialStore;
         _folderScanService = folderScanService;
+        _pdfRenderService = pdfRenderService;
         _folderCompareService = folderCompareService;
         _explorerIntegrationService = explorerIntegrationService;
         _trayIconService = trayIconService;
@@ -604,7 +607,7 @@ public sealed class MainWindowViewModel : ObservableObject
         var wasPinned = _currentPreview?.IsPinned ?? false;
         _currentPreview?.CancelPendingWork();
 
-        var preview = PreviewViewModel.Create(_previewNodes[_previewIndex], _fileSystemService, _versionControlService, _settingsService, _folderScanService);
+        var preview = PreviewViewModel.Create(_previewNodes[_previewIndex], _fileSystemService, _versionControlService, _settingsService, _folderScanService, _pdfRenderService);
         preview.IsPinned = wasPinned;
         preview.RequestPrevious = () => MovePreview(-1);
         preview.RequestNext = () => MovePreview(1);
