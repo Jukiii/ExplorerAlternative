@@ -11,12 +11,24 @@ internal sealed class FakeSettingsService : ISettingsService
 {
     public AppSettings Current { get; } = new();
 
+    /// <summary>Saveが呼ばれた回数（設定が保存されたことの確認用）。</summary>
+    public int SaveCount { get; private set; }
+
     public void Load()
     {
     }
 
+    /// <summary>設定すると、Saveがこの例外を投げる（保存に失敗する状況の再現用）。</summary>
+    public Exception? SaveException { get; set; }
+
     public void Save()
     {
+        SaveCount++;
+
+        if (SaveException is not null)
+        {
+            throw SaveException;
+        }
     }
 }
 
@@ -110,11 +122,15 @@ internal sealed class PaneTestHost : IDisposable
         VersionControlControl = StubProxy.Of(VersionControl);
         VersionControlControl.On("Detect", _ => VersionControlInfo.None);
 
+        ExternalTools = StubProxy.Create<IExternalToolService>();
+        ExternalToolsControl = StubProxy.Of(ExternalTools);
+        SystemOpened = new List<string>();
+
         Pane = new PaneViewModel(
             FileSystem,
             Dialog,
             VersionControl,
-            StubProxy.Create<IExternalToolService>(),
+            ExternalTools,
             Settings,
             StubProxy.Create<IPatchService>(),
             StubProxy.Create<IVersionControlOperationsService>(),
@@ -125,7 +141,11 @@ internal sealed class PaneTestHost : IDisposable
             Queue,
             () => StubProxy.Create<IFolderWatcherService>(),
             Root,
-            ViewMode.Detail);
+            ViewMode.Detail)
+        {
+            // 実際にWindowsの既定のアプリを起動せず、開こうとしたファイルを記録する。
+            SystemOpenFile = SystemOpened.Add
+        };
     }
 
     public string Root { get; }
@@ -141,6 +161,14 @@ internal sealed class PaneTestHost : IDisposable
     public IVersionControlService VersionControl { get; }
 
     public StubProxy VersionControlControl { get; }
+
+    /// <summary>外部ツール（アプリ）起動の偽物。起動の依頼は<see cref="ExternalToolsControl"/>で確認する（Runの引数）。</summary>
+    public IExternalToolService ExternalTools { get; }
+
+    public StubProxy ExternalToolsControl { get; }
+
+    /// <summary>Windowsの既定のアプリで開こうとしたファイル（実際には起動しない）。</summary>
+    public List<string> SystemOpened { get; }
 
     public FakeFileOperationQueueService Queue { get; }
 
@@ -166,13 +194,8 @@ internal sealed class PaneTestHost : IDisposable
     /// <summary>一覧に表示されている項目を、名前で選択状態にする（既存の選択は置き換える）。</summary>
     public void Select(params string[] names)
     {
-        Pane.SelectedNodes.Clear();
-
-        foreach (var name in names)
-        {
-            var node = Pane.VisibleNodes.Single(n => n.Name == name);
-            Pane.SelectedNodes.Add(node);
-        }
+        // 画面の選択操作と同じ経路（SelectedNodes と PrimarySelectedNode の両方が更新される）を使う。
+        Pane.UpdateSelection(names.Select(name => Pane.VisibleNodes.Single(n => n.Name == name)).ToList());
     }
 
     public void Dispose()

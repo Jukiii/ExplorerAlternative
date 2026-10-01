@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Input;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
+using ExplorerAlternative.Services;
 using ExplorerAlternative.Services.Abstractions;
 
 namespace ExplorerAlternative.ViewModels;
@@ -77,8 +78,15 @@ public sealed class SettingsViewModel : ObservableObject
             ExternalTools.Add(tool);
         }
 
+        foreach (var association in settingsService.Current.AppAssociations)
+        {
+            AppAssociations.Add(new AppAssociation { Extension = association.Extension, ExecutablePath = association.ExecutablePath });
+        }
+
         AddExtensionCommand = new RelayCommand(_ => AddExtension(), _ => !string.IsNullOrWhiteSpace(NewExtension));
         RemoveExtensionCommand = new RelayCommand(p => TextFileExtensions.Remove((string)p!));
+        AddAppAssociationCommand = new RelayCommand(_ => AddAppAssociation());
+        RemoveAppAssociationCommand = new RelayCommand(p => AppAssociationResolver.Remove(AppAssociations, ((AppAssociation)p!).Extension));
         AddExternalToolCommand = new RelayCommand(_ => AddExternalTool());
         RemoveExternalToolCommand = new RelayCommand(p => ExternalTools.Remove((ExternalToolDefinition)p!));
         SetThemeCommand = new RelayCommand(p => SelectedTheme = (AppTheme)p!);
@@ -287,6 +295,13 @@ public sealed class SettingsViewModel : ObservableObject
 
     public ObservableCollection<ExternalToolDefinition> ExternalTools { get; } = new();
 
+    /// <summary>仕様書34章「常にこのアプリで開く」：拡張子ごとの、開くアプリの関連付け（このアプリの中だけで有効）。</summary>
+    public ObservableCollection<AppAssociation> AppAssociations { get; } = new();
+
+    public RelayCommand AddAppAssociationCommand { get; }
+
+    public RelayCommand RemoveAppAssociationCommand { get; }
+
     public string NewExtension
     {
         get => _newExtension;
@@ -316,6 +331,33 @@ public sealed class SettingsViewModel : ObservableObject
         NewExtension = string.Empty;
     }
 
+    // 仕様書34章：拡張子と、開くアプリを選んで、関連付けを追加（同じ拡張子があれば置き換える）。
+    private void AddAppAssociation()
+    {
+        var input = _dialogService.PromptText("関連付けの追加", "拡張子を入力してください（例：.md）。");
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return;
+        }
+
+        var extension = AppAssociationResolver.NormalizeExtension(input);
+        if (extension is null)
+        {
+            _dialogService.ShowError($"「{input}」は、拡張子として扱えません。（例：.md）");
+            return;
+        }
+
+        var exePath = _dialogService.ShowOpenFileDialog($"{extension} を開くアプリを選択", "実行ファイル (*.exe)|*.exe|すべてのファイル (*.*)|*.*");
+        if (string.IsNullOrEmpty(exePath))
+        {
+            return;
+        }
+
+        // 同じ拡張子は、一覧の表示も更新されるよう、いったん削除して追加し直す。
+        AppAssociationResolver.Remove(AppAssociations, extension);
+        AppAssociationResolver.Set(AppAssociations, extension, exePath);
+    }
+
     private void AddExternalTool()
     {
         var name = _dialogService.PromptText("外部ツールの追加", "ツール名を入力してください。");
@@ -342,6 +384,7 @@ public sealed class SettingsViewModel : ObservableObject
     {
         _settingsService.Current.TextFileExtensions = TextFileExtensions.ToList();
         _settingsService.Current.ExternalTools = ExternalTools.ToList();
+        _settingsService.Current.AppAssociations = AppAssociations.ToList();
         _settingsService.Save();
     }
 }
