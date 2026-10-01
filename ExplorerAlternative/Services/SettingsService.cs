@@ -23,13 +23,19 @@ public sealed class SettingsService : ISettingsService
 
     private readonly string _settingsFilePath;
 
-    public SettingsService()
+    /// <param name="settingsFilePath">保存先。省略すると%AppData%\ExplorerAlternative\settings.json（テストでは、利用者の設定を触らないよう、一時フォルダを指定する）。</param>
+    public SettingsService(string? settingsFilePath = null)
     {
-        var directory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "ExplorerAlternative");
-        Directory.CreateDirectory(directory);
-        _settingsFilePath = Path.Combine(directory, "settings.json");
+        if (settingsFilePath is null)
+        {
+            var directory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "ExplorerAlternative");
+            settingsFilePath = Path.Combine(directory, "settings.json");
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsFilePath)!);
+        _settingsFilePath = settingsFilePath;
         Current = CreateDefault();
     }
 
