@@ -9,6 +9,9 @@ public sealed class AppSettings
 
     public List<ExternalToolDefinition> ExternalTools { get; set; } = new();
 
+    /// <summary>仕様書34章「常にこのアプリで開く」：このアプリの中だけで有効な、拡張子ごとの「開くアプリ」。Windowsの関連付けは変更しない。</summary>
+    public List<AppAssociation> AppAssociations { get; set; } = new();
+
     public List<FavoriteEntry> Favorites { get; set; } = new();
 
     public List<TagDefinition> TagDefinitions { get; set; } = new();

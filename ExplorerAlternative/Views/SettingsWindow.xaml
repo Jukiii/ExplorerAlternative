@@ -120,6 +120,36 @@
                 </Grid>
             </TabItem>
 
+            <TabItem Header="関連付け">
+                <Grid Background="{DynamicResource WindowBackgroundBrush}">
+                    <DockPanel Margin="12">
+                        <TextBlock DockPanel.Dock="Top" Text="ファイルを開くアプリ（このアプリの中だけで有効）" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <!-- 仕様書34章：「常にこのアプリで開く」で登録した関連付け。Windowsのファイル関連付け（システム設定）は変更しない。 -->
+                        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"
+                                   Text="ファイルの右クリック「アプリで開く」→「常にこのアプリで開く...」で登録できます。ここでは、追加・削除ができます。Windowsのファイル関連付けは変更しません。" />
+                        <Button DockPanel.Dock="Top" Content="関連付けを追加..." HorizontalAlignment="Left" Margin="0,0,0,8"
+                                Command="{Binding AddAppAssociationCommand}" />
+                        <ListBox ItemsSource="{Binding AppAssociations}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel>
+                                        <Button Content="削除" DockPanel.Dock="Right"
+                                                Command="{Binding DataContext.RemoveAppAssociationCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}" />
+                                        <TextBlock Margin="4,0" VerticalAlignment="Center">
+                                            <Run Text="{Binding Extension, Mode=OneWay}" FontWeight="Bold" />
+                                            <Run Text=" → " />
+                                            <Run Text="{Binding ExecutablePath, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </Grid>
+            </TabItem>
+
             <TabItem Header="外部ツール">
                 <Grid Background="{DynamicResource WindowBackgroundBrush}">
                     <DockPanel Margin="12">

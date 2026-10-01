@@ -103,8 +103,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         ToggleExpandCommand = new RelayCommand(p => ((FileSystemNodeViewModel)p!).IsExpanded ^= true);
         OpenCommand = new RelayCommand(_ => OpenSelection(), _ => PrimarySelectedNode is not null);
         OpenInNewTabCommand = new RelayCommand(_ => OpenInNewTab(), _ => PrimarySelectedNode is { IsDirectory: true });
-        OpenWithDefaultAppCommand = new RelayCommand(_ => OpenSelection(), _ => PrimarySelectedNode is { IsDirectory: false });
+        OpenWithDefaultAppCommand = new RelayCommand(_ => OpenWithSystemDefaultSelection(), _ => PrimarySelectedNode is { IsDirectory: false });
         OpenWithBrowseCommand = new RelayCommand(_ => OpenWithBrowse(), _ => PrimarySelectedNode is { IsDirectory: false });
+        OpenWithAlwaysCommand = new RelayCommand(_ => OpenWithAlways(), _ => PrimarySelectedNode is { IsDirectory: false });
         OpenInWindowsExplorerCommand = new RelayCommand(_ => OpenInWindowsExplorer(), _ => PrimarySelectedNode is not null);
         OpenPowerShellHereCommand = new RelayCommand(_ => OpenPowerShellHere());
         OpenTerminalHereCommand = new RelayCommand(_ => OpenTerminalHere());
@@ -206,6 +207,9 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
     /// <summary>仕様書34章「アプリで開く」：任意のEXEを選択して開く（今回だけ指定）。</summary>
     public RelayCommand OpenWithBrowseCommand { get; }
+
+    /// <summary>仕様書34章「常にこのアプリで開く」：アプリを選び、同じ拡張子のファイルを、今後もそのアプリで開くよう関連付ける。</summary>
+    public RelayCommand OpenWithAlwaysCommand { get; }
 
     /// <summary>仕様書35章「Windows Explorerで開く」。</summary>
     public RelayCommand OpenInWindowsExplorerCommand { get; }
@@ -1082,17 +1086,126 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // 仕様書34章：「常にこのアプリで開く」で関連付けたアプリがあれば、それで開く。
+        if (TryOpenWithAssociation(target))
+        {
+            return;
+        }
+
+        OpenWithSystemDefault(target);
+    }
+
+    // 「既定のアプリで開く」：関連付けに関係なく、Windowsの既定のアプリで開く。
+    private void OpenWithSystemDefaultSelection()
+    {
+        var target = PrimarySelectedNode;
+        if (target is null || target.IsDirectory)
+        {
+            return;
+        }
+
+        OpenWithSystemDefault(target);
+    }
+
+    /// <summary>
+    /// Windowsの既定のアプリでファイルを開く処理。実際のプロセス起動を伴うため、単体テストでは
+    /// 差し替えて、起動せずに呼び出しだけを確認する。
+    /// </summary>
+    internal Action<string> SystemOpenFile { get; set; } = StartWithShell;
+
+    private static void StartWithShell(string path) =>
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = path,
+            UseShellExecute = true
+        });
+
+    private void OpenWithSystemDefault(FileSystemNodeViewModel target)
+    {
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = target.FullPath,
-                UseShellExecute = true
-            });
+            SystemOpenFile(target.FullPath);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             _dialogService.ShowError($"「{target.Name}」を開けませんでした。({ex.Message})");
+        }
+    }
+
+    // 仕様書34章：関連付けたアプリでファイルを開く。関連付けが無い場合はfalse（呼び出し側が既定のアプリで開く）。
+    // 関連付けたアプリが見つからない（削除・移動された）場合は、その旨を伝えてfalseを返し、既定のアプリで開く。
+    private bool TryOpenWithAssociation(FileSystemNodeViewModel target)
+    {
+        var association = AppAssociationResolver.Find(_settingsService.Current.AppAssociations, target.FullPath);
+        if (association is null)
+        {
+            return false;
+        }
+
+        if (!File.Exists(association.ExecutablePath))
+        {
+            _dialogService.ShowInfo(
+                $"「{association.Extension}」に関連付けられたアプリが見つからないため、既定のアプリで開きます。\n" +
+                $"（{association.ExecutablePath}）\n関連付けは、設定の「関連付け」で変更・解除できます。");
+            return false;
+        }
+
+        try
+        {
+            _externalToolService.Run(
+                new ExternalToolDefinition { Name = Path.GetFileName(association.ExecutablePath), ExecutablePath = association.ExecutablePath },
+                target.FullPath);
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+
+        return true;
+    }
+
+    // 仕様書34章「常にこのアプリで開く」：アプリを選んで関連付け、そのアプリで今すぐ開く。
+    // Windowsのファイル関連付け（システム設定）は変更しない。このアプリの中だけで有効。
+    private void OpenWithAlways()
+    {
+        var target = PrimarySelectedNode;
+        if (target is null || target.IsDirectory)
+        {
+            return;
+        }
+
+        if (AppAssociationResolver.NormalizeExtension(Path.GetExtension(target.FullPath)) is null)
+        {
+            _dialogService.ShowInfo($"「{target.Name}」には拡張子がないため、関連付けできません。");
+            return;
+        }
+
+        var exePath = _dialogService.ShowOpenFileDialog(
+            "常に開くアプリを選択",
+            "実行ファイル (*.exe)|*.exe|すべてのファイル (*.*)|*.*");
+        if (string.IsNullOrEmpty(exePath))
+        {
+            return;
+        }
+
+        var extension = AppAssociationResolver.Set(_settingsService.Current.AppAssociations, target.FullPath, exePath);
+        if (extension is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _settingsService.Save();
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+
+        if (!TryOpenWithAssociation(target))
+        {
+            OpenWithSystemDefault(target);
         }
     }
 
