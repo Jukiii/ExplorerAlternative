@@ -4,6 +4,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:ExplorerAlternative.ViewModels"
         xmlns:models="clr-namespace:ExplorerAlternative.Models"
+        xmlns:views="clr-namespace:ExplorerAlternative.Views"
         xmlns:conv="clr-namespace:ExplorerAlternative.Converters"
         Title="Explorer Alternative"
         Icon="Assets/app.ico"
@@ -687,7 +688,7 @@
                     Visibility="{Binding NavigationPane.IsCollapsed, Converter={StaticResource BoolToVisibilityConverter}}"
                     Command="{Binding NavigationPane.ToggleCollapsedCommand}" />
 
-            <!-- メインペイン（19章：分割ペイン対応。Panesが2件のときはUniformGridで横/縦に並べる）。
+            <!-- メインペイン（19章：分割ペイン対応。Panesが2件のときはSplitPanelで横/縦に並べ、境界のドラッグで大きさを変えられる）。
                  ターミナル（9章）はこの列の下側に配置し、ナビゲーション/Git・SVNペイン（左右）は
                  この列と独立して画面下端まで伸びるようにする。 -->
             <Grid Grid.Column="2">
@@ -700,7 +701,10 @@
                 <ItemsControl ItemsSource="{Binding ActiveTab.Panes}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <UniformGrid Rows="{Binding ActiveTab.GridRows}" Columns="{Binding ActiveTab.GridColumns}" />
+                            <!-- 仕様書19章：境界をドラッグして、2つのペインの大きさの比率を変えられる。 -->
+                            <views:SplitPanel Orientation="{Binding ActiveTab.SplitOrientation}"
+                                              Ratio="{Binding ActiveTab.SplitRatio, Mode=TwoWay}"
+                                              SplitterBrush="{DynamicResource BorderBrush2}" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
