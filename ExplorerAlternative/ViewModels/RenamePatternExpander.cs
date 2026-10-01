@@ -34,14 +34,18 @@ public static class RenamePatternExpander
     // {n} = 連番（1始まり）。{n:00}のように0を並べるとその桁数までゼロ埋めする。
     private static readonly Regex SequenceTokenRegex = new(@"\{n(:(0+))?\}", RegexOptions.Compiled);
 
-    // {date} = 今日の日付（yyyy-MM-dd）。{date:yyyyMMdd}のように書式を指定できる。
-    private static readonly Regex DateTokenRegex = new(@"\{date(:([^}]+))?\}", RegexOptions.Compiled);
+    // {date} = 今日の日付（yyyy-MM-dd）、{created} = そのファイルの作成日時、{modified} = 更新日時。
+    // いずれも{date:yyyyMMdd}のように書式を指定できる（書式を省略するとyyyy-MM-dd）。
+    private static readonly Regex DateTokenRegex = new(@"\{(date|created|modified)(:([^}]+))?\}", RegexOptions.Compiled);
 
     /// <summary>
     /// {n} = 連番（1始まり、{n:000}でゼロ埋め）、{name} = 拡張子を除いた元の名前、
-    /// {ext} = 拡張子（ドットなし）、{date} = 日付。
+    /// {ext} = 拡張子（ドットなし）、{date} = 今日の日付、{created} = ファイルの作成日時、
+    /// {modified} = ファイルの更新日時（仕様書27章）。
     /// </summary>
-    public static string Expand(string pattern, string originalName, int index)
+    /// <param name="created">そのファイルの作成日時。取得できない場合はnull（{created}はそのまま残す）。</param>
+    /// <param name="modified">そのファイルの更新日時。取得できない場合はnull（{modified}はそのまま残す）。</param>
+    public static string Expand(string pattern, string originalName, int index, DateTime? created = null, DateTime? modified = null)
     {
         var name = Path.GetFileNameWithoutExtension(originalName);
         var ext = Path.GetExtension(originalName).TrimStart('.');
@@ -54,10 +58,23 @@ public static class RenamePatternExpander
 
         result = DateTokenRegex.Replace(result, match =>
         {
-            var format = match.Groups[2].Success ? match.Groups[2].Value : "yyyy-MM-dd";
+            var source = match.Groups[1].Value switch
+            {
+                "created" => created,
+                "modified" => modified,
+                _ => DateTime.Now
+            };
+
+            // 日時が取得できないファイルは、トークンをそのまま残す（プレビューで気づける）。
+            if (source is null)
+            {
+                return match.Value;
+            }
+
+            var format = match.Groups[3].Success ? match.Groups[3].Value : "yyyy-MM-dd";
             try
             {
-                return DateTime.Now.ToString(format, CultureInfo.InvariantCulture);
+                return source.Value.ToString(format, CultureInfo.InvariantCulture);
             }
             catch (FormatException)
             {
