@@ -10,6 +10,25 @@ namespace ExplorerAlternative.Services;
 /// パスフレーズ付き秘密鍵には対応しない（パスフレーズはどこにも保存しない方針のため）。</summary>
 public sealed class SftpService : ISftpService
 {
+    /// <summary>
+    /// リモートのパスの、最後の名前を、ローカルに保存するファイル名として返す。リモート側（サーバー）が
+    /// 返す名前に、Windowsのパス区切り（\）や、使えない文字・「..」が含まれていると、保存先のフォルダの
+    /// 外へ書き込まれてしまうため、そのような名前は受け付けず、例外にする。
+    /// </summary>
+    internal static string GetSafeLocalFileName(string remoteFullPath)
+    {
+        var name = remoteFullPath[(remoteFullPath.LastIndexOf('/') + 1)..];
+
+        if (string.IsNullOrWhiteSpace(name)
+            || name is "." or ".."
+            || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new AppOperationException($"「{remoteFullPath}」は、ローカルに保存できないファイル名のため、ダウンロードできません。");
+        }
+
+        return name;
+    }
+
     public ISftpSession Connect(SshConnectionProfile profile, string? password)
     {
         var authMethods = new List<AuthenticationMethod>();
@@ -108,8 +127,7 @@ public sealed class SftpService : ISftpService
         {
             try
             {
-                var fileName = remoteFullPath[(remoteFullPath.LastIndexOf('/') + 1)..];
-                var localPath = Path.Combine(localDirectory, fileName);
+                var localPath = Path.Combine(localDirectory, GetSafeLocalFileName(remoteFullPath));
                 using var stream = File.Create(localPath);
                 _client.DownloadFile(remoteFullPath, stream);
             }
