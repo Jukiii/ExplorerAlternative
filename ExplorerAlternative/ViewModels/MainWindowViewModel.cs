@@ -1040,6 +1040,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 Header = t.Header,
                 ActivePaneIndex = t.ActivePaneIndex,
                 SplitOrientation = t.SplitOrientation,
+                SplitRatio = t.SplitRatio,
                 IsPinned = t.IsPinned,
                 Panes = t.Panes.Select(p => new PaneState
                 {
@@ -1115,6 +1116,9 @@ public sealed class MainWindowViewModel : ObservableObject
             {
                 tab.AddPane(CreatePane(paneStates[i].CurrentPath, paneStates[i].ViewMode));
             }
+
+            // 分割した状態の比率を復元する（AddPaneは半分ずつに戻すため、追加のあとで設定する）。
+            tab.SplitRatio = tabState.SplitRatio;
 
             tab.SetActivePane(tab.Panes[Math.Clamp(tabState.ActivePaneIndex, 0, tab.Panes.Count - 1)]);
             Tabs.Add(tab);

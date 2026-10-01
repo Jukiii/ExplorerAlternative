@@ -15,6 +15,9 @@ public sealed class TabState
 
     public Orientation SplitOrientation { get; set; } = Orientation.Horizontal;
 
+    /// <summary>分割ペインで、最初のペインが占める割合（0.1〜0.9。仕様書19章「ペインサイズ変更」）。古い保存データには無いため、既定は半分ずつ。</summary>
+    public double SplitRatio { get; set; } = 0.5;
+
     /// <summary>仕様書10章「タブ固定」。</summary>
     public bool IsPinned { get; set; }
 }

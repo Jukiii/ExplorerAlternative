@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows.Controls;
+using ExplorerAlternative.Models;
 using ExplorerAlternative.Mvvm;
 
 namespace ExplorerAlternative.ViewModels;
@@ -18,6 +19,7 @@ public sealed class TabViewModel : ObservableObject
     private string _header;
     private int _activePaneIndex;
     private Orientation _splitOrientation = Orientation.Horizontal;
+    private double _splitRatio = SplitLayout.DefaultRatio;
     private bool _isPinned;
 
     public TabViewModel(PaneViewModel initialPane, string header)
@@ -65,13 +67,17 @@ public sealed class TabViewModel : ObservableObject
     public Orientation SplitOrientation
     {
         get => _splitOrientation;
-        set
-        {
-            if (SetProperty(ref _splitOrientation, value))
-            {
-                RaiseGridLayoutChanged();
-            }
-        }
+        set => SetProperty(ref _splitOrientation, value);
+    }
+
+    /// <summary>
+    /// 分割ペインで、最初のペインが占める割合（0.1〜0.9。仕様書19章「ペインサイズ変更」）。
+    /// 境界のドラッグで変わり、ワークスペースに保存される。
+    /// </summary>
+    public double SplitRatio
+    {
+        get => _splitRatio;
+        set => SetProperty(ref _splitRatio, SplitLayout.ClampRatio(value));
     }
 
     public int ActivePaneIndex
@@ -96,15 +102,15 @@ public sealed class TabViewModel : ObservableObject
     /// <summary>ペインが1件のみのときはアクティブ枠を表示する意味がないため隠す。</summary>
     public bool ShowPaneBorders => Panes.Count > 1;
 
-    /// <summary>UniformGridのColumns算出用（横分割時のみ2列、それ以外は1列）。</summary>
-    public int GridColumns => SplitOrientation == Orientation.Horizontal && Panes.Count > 1 ? 2 : 1;
-
-    /// <summary>UniformGridのRows算出用（縦分割時のみ2行、それ以外は1行）。</summary>
-    public int GridRows => SplitOrientation == Orientation.Vertical && Panes.Count > 1 ? 2 : 1;
-
     public void AddPane(PaneViewModel pane)
     {
         Panes.Add(pane);
+
+        // 新しく分割したときは、半分ずつから始める（ワークスペースの復元では、このあとで保存済みの比率を設定する）。
+        if (Panes.Count == 2)
+        {
+            SplitRatio = SplitLayout.DefaultRatio;
+        }
 
         void Handler(string path) => OnPanePathChanged(pane, path);
         _pathHandlers[pane] = Handler;
@@ -121,7 +127,6 @@ public sealed class TabViewModel : ObservableObject
         OnPropertyChanged(nameof(CanClosePane));
         OnPropertyChanged(nameof(ShowPaneBorders));
         UpdateActiveFlags();
-        RaiseGridLayoutChanged();
         SwapPanesCommand?.RaiseCanExecuteChanged();
     }
 
@@ -158,7 +163,6 @@ public sealed class TabViewModel : ObservableObject
         OnPropertyChanged(nameof(CanSplit));
         OnPropertyChanged(nameof(CanClosePane));
         OnPropertyChanged(nameof(ShowPaneBorders));
-        RaiseGridLayoutChanged();
         SwapPanesCommand.RaiseCanExecuteChanged();
     }
 
@@ -172,6 +176,10 @@ public sealed class TabViewModel : ObservableObject
 
         var activePane = ActivePane;
         Panes.Move(0, 1);
+
+        // 入れ替えたペインの大きさも、ペインについていく（左60%のペインを右へ移したら、右60%になる）。
+        SplitRatio = 1 - SplitRatio;
+
         SetActivePane(activePane);
     }
 
@@ -206,11 +214,5 @@ public sealed class TabViewModel : ObservableObject
         {
             Panes[i].IsActive = i == ActivePaneIndex;
         }
-    }
-
-    private void RaiseGridLayoutChanged()
-    {
-        OnPropertyChanged(nameof(GridColumns));
-        OnPropertyChanged(nameof(GridRows));
     }
 }

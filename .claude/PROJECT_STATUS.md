@@ -36,7 +36,7 @@
 | Phase | 内容 | Status | 備考 |
 | --- | --- | --- | --- |
 | Phase 1 | Explorer基盤 | COMPLETED | |
-| Phase 2 | タブ・分割 | COMPLETED | ペインのドラッグリサイズは未実装（Issue） |
+| Phase 2 | タブ・分割 | COMPLETED | ペインのドラッグリサイズは実装済み（境界のドラッグ・ダブルクリックで半分ずつ・ワークスペースに保存） |
 | Phase 3 | プレビュー | COMPLETED | PDFのページ表示などは未実装（Issue） |
 | Phase 4 | ターミナル | COMPLETED | VS Codeと同じ単一画面構造・ANSIカラー・Ctrl+C。全画面TUIは非対応（ConPTYは断念） |
 | Phase 5 | Version Control | COMPLETED | `.git`と`.svn`の併存は未対応（Issue） |
