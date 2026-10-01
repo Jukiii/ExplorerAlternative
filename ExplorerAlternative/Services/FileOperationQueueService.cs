@@ -244,7 +244,9 @@ public sealed class FileOperationQueueService : IFileOperationQueueService
             return FileOperationConflictResolution.Skip;
         }
 
-        return Application.Current?.Dispatcher.Invoke(() => resolver(name)) ?? FileOperationConflictResolution.Skip;
+        // 画面のある通常の実行ではUIスレッドへ委譲する。画面（Application）が無い場合（テスト等）は、そのまま呼ぶ。
+        var dispatcher = Application.Current?.Dispatcher;
+        return dispatcher is null ? resolver(name) : dispatcher.Invoke(() => resolver(name));
     }
 
     private static void DeleteExisting(string path)
