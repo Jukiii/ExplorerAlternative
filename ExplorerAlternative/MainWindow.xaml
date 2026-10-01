@@ -33,6 +33,9 @@
             <MenuItem Header="コピー" Command="{Binding CopyCommand}" />
             <MenuItem Header="移動 (切り取り)" Command="{Binding CutCommand}" />
             <MenuItem Header="貼り付け" Command="{Binding PasteCommand}" />
+            <!-- 仕様書60章：コピー先・移動先の履歴から選んで実行する。 -->
+            <MenuItem Header="クイックコピー..." Command="{Binding QuickCopyCommand}" />
+            <MenuItem Header="クイック移動..." Command="{Binding QuickMoveCommand}" />
             <Separator />
             <MenuItem Header="名前の変更" Command="{Binding RenameCommand}" />
             <MenuItem Header="一括名前変更..." Command="{Binding BulkRenameCommand}" />

@@ -116,6 +116,8 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         CopyCommand = new RelayCommand(_ => CopySelectionToClipboard(isCut: false), _ => SelectedNodes.Count > 0);
         CutCommand = new RelayCommand(_ => CopySelectionToClipboard(isCut: true), _ => SelectedNodes.Count > 0);
         PasteCommand = new RelayCommand(_ => PasteFromClipboard());
+        QuickCopyCommand = new RelayCommand(_ => QuickTransfer(isMove: false), _ => SelectedNodes.Count > 0);
+        QuickMoveCommand = new RelayCommand(_ => QuickTransfer(isMove: true), _ => SelectedNodes.Count > 0);
         DuplicateSelectionCommand = new RelayCommand(_ => DuplicateSelection(), _ => SelectedNodes.Count > 0);
         BeginAddressEditCommand = new RelayCommand(_ => BeginAddressEdit());
         CommitAddressEditCommand = new RelayCommand(_ => CommitAddressEdit());
@@ -228,6 +230,12 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
     public RelayCommand CutCommand { get; }
 
     public RelayCommand PasteCommand { get; }
+
+    /// <summary>仕様書60章「クイックコピー」：最近のコピー先から選んで、選択項目をコピーする。</summary>
+    public RelayCommand QuickCopyCommand { get; }
+
+    /// <summary>仕様書60章「クイック移動」：最近の移動先から選んで、選択項目を移動する。</summary>
+    public RelayCommand QuickMoveCommand { get; }
 
     /// <summary>Ctrl+D：選択したファイル・フォルダを同じ場所に複製する。</summary>
     public RelayCommand DuplicateSelectionCommand { get; }
@@ -1296,6 +1304,59 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
         dataObject.SetData(DropEffectFormat, new MemoryStream(BitConverter.GetBytes((int)effect)));
 
         Clipboard.SetDataObject(dataObject, true);
+    }
+
+    private const string QuickBrowseLabel = "フォルダを参照...";
+
+    // 仕様書60章：最近のコピー先・移動先（ファイル操作履歴から求める）を一覧で示し、選んだ宛先へ
+    // 選択項目をコピー/移動する。実際の処理は、ドラッグ&ドロップと同じ経路（確認・キュー・
+    // Undo/Redo・履歴記録）を使うので、動作は他の移動・コピーと変わらない。
+    private void QuickTransfer(bool isMove)
+    {
+        var sources = SelectedNodes.Select(n => n.FullPath).ToList();
+        if (sources.Count == 0)
+        {
+            return;
+        }
+
+        var verb = isMove ? "移動" : "コピー";
+        var recent = QuickDestinations.GetRecent(_fileOperationHistoryService.GetAll(), isMove, excludeFolder: CurrentPath);
+        var items = recent.Append(QuickBrowseLabel).ToList();
+
+        var choice = _dialogService.SelectFromList(
+            $"クイック{verb}",
+            recent.Count > 0
+                ? $"{verb}先を選んでください（最近の{verb}先）。"
+                : $"最近の{verb}先はまだありません。「{QuickBrowseLabel}」で選んでください。",
+            items);
+
+        if (choice is null)
+        {
+            return;
+        }
+
+        var destination = choice == QuickBrowseLabel
+            ? _dialogService.ShowOpenFolderDialog($"{verb}先のフォルダを選択")
+            : choice;
+
+        if (string.IsNullOrWhiteSpace(destination))
+        {
+            return;
+        }
+
+        if (!Directory.Exists(destination))
+        {
+            _dialogService.ShowError($"フォルダ「{destination}」が見つかりません。");
+            return;
+        }
+
+        if (sources.All(source => IsNoOpOrInvalidDrop(source, destination)))
+        {
+            _dialogService.ShowInfo($"選んだ項目は、すでにそのフォルダにあるか、そのフォルダ自身（の中）なので、{verb}できません。");
+            return;
+        }
+
+        DropFiles(sources, destination, isMove);
     }
 
     private void PasteFromClipboard()
