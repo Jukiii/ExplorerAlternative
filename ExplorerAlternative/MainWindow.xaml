@@ -146,6 +146,9 @@
         <KeyBinding Key="D" Modifiers="Control" Command="{Binding DataContext.ActiveTab.ActivePane.DuplicateSelectionCommand, ElementName=RootWindow}" />
         <!-- 仕様書62章：Ctrl+Zでファイル操作を元に戻す（アプリ全体で1つの履歴を共有）。 -->
         <KeyBinding Key="Z" Modifiers="Control" Command="{Binding DataContext.UndoCommand, ElementName=RootWindow}" />
+        <!-- 仕様書30章：Ctrl+Y（またはCtrl+Shift+Z）で、元に戻した操作をやり直す。 -->
+        <KeyBinding Key="Y" Modifiers="Control" Command="{Binding DataContext.RedoCommand, ElementName=RootWindow}" />
+        <KeyBinding Key="Z" Modifiers="Control+Shift" Command="{Binding DataContext.RedoCommand, ElementName=RootWindow}" />
         <!-- 仕様書46章：コマンドパレット。 -->
         <KeyBinding Key="P" Modifiers="Control+Shift" Command="{Binding DataContext.OpenCommandPaletteCommand, ElementName=RootWindow}" />
         <KeyBinding Key="F5" Command="{Binding DataContext.ActiveTab.ActivePane.RefreshCommand, ElementName=RootWindow}" />
@@ -180,6 +183,8 @@
                     <MenuItem Header="☰ メニュー" Padding="8,6">
                         <!-- 仕様書62章：直近のファイル操作を元に戻す。ラベルに対象操作の説明を表示する。 -->
                         <MenuItem Header="{Binding UndoMenuLabel}" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z" />
+                        <!-- 仕様書30章：元に戻した操作をやり直す。 -->
+                        <MenuItem Header="{Binding RedoMenuLabel}" Command="{Binding RedoCommand}" InputGestureText="Ctrl+Y" />
                         <!-- 仕様書30章：操作履歴を一覧表示し、任意の地点までまとめて元に戻す。 -->
                         <MenuItem Header="操作履歴..." Command="{Binding OpenUndoHistoryCommand}" />
                         <!-- 仕様書31章：永続化されたファイル操作履歴（Undo対象外の削除・失敗した操作も含む）。 -->

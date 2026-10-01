@@ -106,13 +106,16 @@ public sealed class MainWindowViewModel : ObservableObject
         TerminalHost = new TerminalHostViewModel(terminalServiceFactory, settingsService.Current.Terminal.SyncByDefault);
 
         UndoCommand = new RelayCommand(_ => Undo(), _ => _undoService.CanUndo);
+        RedoCommand = new RelayCommand(_ => Redo(), _ => _undoService.CanRedo);
         OpenUndoHistoryCommand = new RelayCommand(_ => OpenUndoHistory());
         OpenFileOperationHistoryCommand = new RelayCommand(_ => OpenFileOperationHistory());
         OpenFileOperationQueueCommand = new RelayCommand(_ => OpenFileOperationQueue());
         _undoService.Changed += () =>
         {
             UndoCommand.RaiseCanExecuteChanged();
+            RedoCommand.RaiseCanExecuteChanged();
             OnPropertyChanged(nameof(UndoMenuLabel));
+            OnPropertyChanged(nameof(RedoMenuLabel));
         };
         AddTabCommand = new RelayCommand(_ => AddTab(GetDefaultInitialPath()));
         CloseTabCommand = new RelayCommand(p => CloseTab((TabViewModel)p!), _ => Tabs.Count > 1);
@@ -155,6 +158,9 @@ public sealed class MainWindowViewModel : ObservableObject
     /// ショートカット作成）を元に戻す。削除（ごみ箱送り）は対象外。</summary>
     public RelayCommand UndoCommand { get; }
 
+    /// <summary>仕様書30章「Redo」：最後に元に戻した操作をやり直す（Ctrl+Y / Ctrl+Shift+Z）。</summary>
+    public RelayCommand RedoCommand { get; }
+
     /// <summary>仕様書30章「GUI Undo履歴」：操作履歴一覧ダイアログを開く。</summary>
     public RelayCommand OpenUndoHistoryCommand { get; }
 
@@ -168,6 +174,11 @@ public sealed class MainWindowViewModel : ObservableObject
     public string UndoMenuLabel => _undoService.NextUndoDescription is { } description
         ? $"元に戻す: {description}"
         : "元に戻す";
+
+    /// <summary>メニュー表示用：次にやり直される操作の説明を含むラベル。</summary>
+    public string RedoMenuLabel => _undoService.NextRedoDescription is { } description
+        ? $"やり直し: {description}"
+        : "やり直し";
 
     public RelayCommand AddTabCommand { get; }
 
@@ -358,6 +369,18 @@ public sealed class MainWindowViewModel : ObservableObject
         try
         {
             _undoService.Undo();
+        }
+        catch (AppOperationException ex)
+        {
+            _dialogService.ShowError(ex.Message);
+        }
+    }
+
+    private void Redo()
+    {
+        try
+        {
+            _undoService.Redo();
         }
         catch (AppOperationException ex)
         {
