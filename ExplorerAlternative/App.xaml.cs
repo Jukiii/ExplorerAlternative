@@ -56,6 +56,7 @@ public partial class App : Application
         var sshCredentialStore = new WindowsCredentialSshStore();
         var sftpService = new SftpService();
         var folderScanService = new FolderScanService();
+        var pdfRenderService = new WindowsPdfRenderService();
         var folderCompareService = new FolderCompareService();
         var versionControlOperationsService = new VersionControlOperationsService();
         var diffService = new DiffService();
@@ -103,6 +104,7 @@ public partial class App : Application
             diffService,
             sshCredentialStore,
             folderScanService,
+            pdfRenderService,
             folderCompareService,
             explorerIntegrationService,
             trayIconService,

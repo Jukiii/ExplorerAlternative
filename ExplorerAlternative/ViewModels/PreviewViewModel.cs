@@ -38,6 +38,16 @@ public sealed class PreviewViewModel : ObservableObject
     private CancellationTokenSource? _folderSizeCts;
     private CodeSymbol? _selectedSymbol;
 
+    // 仕様書13章「PDF」：ページの表示と移動。
+    private const int PdfRenderWidth = 1000;
+    private CancellationTokenSource? _pdfCts;
+    private IPdfDocument? _pdfDocument;
+    private int _pdfRenderGeneration;
+    private int _pdfPageNumber;
+    private int _pdfPageCount;
+    private BitmapSource? _pdfPageImage;
+    private string _pdfStatusMessage = string.Empty;
+
     private PreviewViewModel(
         string title, string fullPath, PreviewKind kind, string textContent, FlowDocument? markdownDocument,
         string folderSummary, bool truncated, BitmapImage? imageSource,
@@ -64,6 +74,8 @@ public sealed class PreviewViewModel : ObservableObject
         PreviousCommand = new RelayCommand(_ => RequestPrevious?.Invoke());
         NextCommand = new RelayCommand(_ => RequestNext?.Invoke());
         OpenExternallyCommand = new RelayCommand(_ => OpenExternally());
+        PreviousPageCommand = new RelayCommand(_ => _ = ShowPdfPageAsync(PdfPageNumber - 1), _ => PdfPageNumber > 1);
+        NextPageCommand = new RelayCommand(_ => _ = ShowPdfPageAsync(PdfPageNumber + 1), _ => PdfPageNumber > 0 && PdfPageNumber < PdfPageCount);
     }
 
     /// <summary>仕様書16章「コードシンボル表示」：対応言語のソースコードのみ非空。</summary>
@@ -156,8 +168,150 @@ public sealed class PreviewViewModel : ObservableObject
         private set => SetProperty(ref _folderSizeDisplay, value);
     }
 
-    /// <summary>仕様書13章「PDF」：フルレンダリング非対応のため、既定のアプリで開くボタンを提供する。</summary>
+    /// <summary>仕様書13章「PDF」：PDFを既定のアプリで開くボタン（ページを表示できない場合の代わりにも使う）。</summary>
     public RelayCommand OpenExternallyCommand { get; }
+
+    // ===== 仕様書13章「PDF」：ページの表示と移動 =====
+
+    /// <summary>表示中のページの画像。まだ読み込めていない・読み込めなかった場合はnull。</summary>
+    public BitmapSource? PdfPageImage
+    {
+        get => _pdfPageImage;
+        private set => SetProperty(ref _pdfPageImage, value);
+    }
+
+    /// <summary>表示中のページ番号（1始まり）。PDFを読み込めていない間は0。</summary>
+    public int PdfPageNumber
+    {
+        get => _pdfPageNumber;
+        private set
+        {
+            if (SetProperty(ref _pdfPageNumber, value))
+            {
+                OnPropertyChanged(nameof(PdfPageLabel));
+                PreviousPageCommand.RaiseCanExecuteChanged();
+                NextPageCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>総ページ数。PDFを読み込めていない間は0。</summary>
+    public int PdfPageCount
+    {
+        get => _pdfPageCount;
+        private set
+        {
+            if (SetProperty(ref _pdfPageCount, value))
+            {
+                OnPropertyChanged(nameof(HasPdfPages));
+                OnPropertyChanged(nameof(PdfPageLabel));
+                PreviousPageCommand.RaiseCanExecuteChanged();
+                NextPageCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>「3 / 12」のような、ページ位置の表示。</summary>
+    public string PdfPageLabel => PdfPageCount > 0 ? $"{PdfPageNumber} / {PdfPageCount}" : string.Empty;
+
+    public bool HasPdfPages => PdfPageCount > 0;
+
+    /// <summary>「読み込み中...」や、読み込めなかった理由（空なら、表示すべきメッセージはない）。</summary>
+    public string PdfStatusMessage
+    {
+        get => _pdfStatusMessage;
+        private set => SetProperty(ref _pdfStatusMessage, value);
+    }
+
+    /// <summary>前のページ（PageUp）。</summary>
+    public RelayCommand PreviousPageCommand { get; }
+
+    /// <summary>次のページ（PageDown）。</summary>
+    public RelayCommand NextPageCommand { get; }
+
+    /// <summary>PDFの読み込み（最初のページの表示まで）の完了を待つためのもの（テスト用）。</summary>
+    internal Task PdfLoadTask { get; private set; } = Task.CompletedTask;
+
+    private void StartPdfRendering(string path, IPdfRenderService pdfRenderService)
+    {
+        _pdfCts = new CancellationTokenSource();
+        PdfStatusMessage = "PDFを読み込み中...";
+        PdfLoadTask = LoadPdfAsync(path, pdfRenderService, _pdfCts.Token);
+    }
+
+    // PDFを開き、最初のページを表示する。開けない場合は、理由を表示して、ファイル情報と
+    // 「既定のアプリで開く」ボタンにフォールバックする（27章：エラーで落とさない）。
+    private async Task LoadPdfAsync(string path, IPdfRenderService pdfRenderService, CancellationToken token)
+    {
+        try
+        {
+            var result = await pdfRenderService.OpenAsync(path, token);
+
+            if (token.IsCancellationRequested)
+            {
+                result.Document?.Dispose();
+                return;
+            }
+
+            if (result.Document is null)
+            {
+                PdfStatusMessage = result.FailureReason ?? "PDFを読み込めませんでした。";
+                return;
+            }
+
+            _pdfDocument = result.Document;
+            PdfPageCount = result.Document.PageCount;
+            await ShowPdfPageAsync(1);
+        }
+        catch (OperationCanceledException)
+        {
+            // プレビューが切り替わった・閉じられたことによる中断は、エラーではない。
+        }
+        catch (Exception ex)
+        {
+            PdfStatusMessage = $"PDFの表示中にエラーが発生しました。({ex.Message})";
+        }
+    }
+
+    /// <summary>指定のページ（1始まり。範囲外は、最初・最後のページに丸める）を表示する。</summary>
+    internal async Task ShowPdfPageAsync(int pageNumber)
+    {
+        var document = _pdfDocument;
+        if (document is null || PdfPageCount == 0)
+        {
+            return;
+        }
+
+        pageNumber = Math.Clamp(pageNumber, 1, PdfPageCount);
+        var generation = Interlocked.Increment(ref _pdfRenderGeneration);
+        var token = _pdfCts?.Token ?? CancellationToken.None;
+
+        // ページ位置は、描画の完了を待たずに、すぐ更新する（連打しても、表示が追いつくようにする）。
+        PdfPageNumber = pageNumber;
+
+        try
+        {
+            var image = await document.RenderPageAsync(pageNumber - 1, PdfRenderWidth, token);
+
+            // 描画している間に、別のページが要求された・プレビューが閉じられた場合は、古い結果を捨てる。
+            if (generation == Volatile.Read(ref _pdfRenderGeneration) && !token.IsCancellationRequested)
+            {
+                PdfPageImage = image;
+                PdfStatusMessage = string.Empty;
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // プレビューが切り替わった・閉じられた（ドキュメントが閉じられた）ことによる中断は、エラーではない。
+        }
+        catch (Exception ex)
+        {
+            if (generation == Volatile.Read(ref _pdfRenderGeneration))
+            {
+                PdfStatusMessage = $"{pageNumber}ページ目を表示できませんでした。({ex.Message})";
+            }
+        }
+    }
 
     private void OpenExternally()
     {
@@ -180,6 +334,11 @@ public sealed class PreviewViewModel : ObservableObject
     public void CancelPendingWork()
     {
         _folderSizeCts?.Cancel();
+
+        // PDFの読み込み・描画を中断し、開いているPDFを閉じる（ファイルを開いたままにしない）。
+        _pdfCts?.Cancel();
+        _pdfDocument?.Dispose();
+        _pdfDocument = null;
     }
 
     private static readonly string[] OfficeExtensions = { "docx", "xlsx", "pptx" };
@@ -189,11 +348,12 @@ public sealed class PreviewViewModel : ObservableObject
         IFileSystemService fileSystemService,
         IVersionControlService versionControlService,
         ISettingsService settingsService,
-        IFolderScanService folderScanService)
+        IFolderScanService folderScanService,
+        IPdfRenderService pdfRenderService)
     {
         return node.IsDirectory
             ? CreateForFolder(node, fileSystemService, versionControlService, settingsService, folderScanService)
-            : CreateForFile(node, fileSystemService, settingsService.Current.TextFileExtensions);
+            : CreateForFile(node, fileSystemService, settingsService.Current.TextFileExtensions, pdfRenderService);
     }
 
     private static PreviewViewModel CreateForFolder(
@@ -285,7 +445,11 @@ public sealed class PreviewViewModel : ObservableObject
         return unitIndex == 0 ? $"{size:0} {units[unitIndex]}" : $"{size:0.#} {units[unitIndex]}";
     }
 
-    private static PreviewViewModel CreateForFile(FileSystemNodeViewModel node, IFileSystemService fileSystemService, IReadOnlyList<string> customTextExtensions)
+    private static PreviewViewModel CreateForFile(
+        FileSystemNodeViewModel node,
+        IFileSystemService fileSystemService,
+        IReadOnlyList<string> customTextExtensions,
+        IPdfRenderService pdfRenderService)
     {
         var extension = Path.GetExtension(node.Name).TrimStart('.').ToLowerInvariant();
         var isMarkdown = extension is "md" or "markdown";
@@ -297,7 +461,7 @@ public sealed class PreviewViewModel : ObservableObject
 
         if (extension == "pdf")
         {
-            return CreateForPdf(node);
+            return CreateForPdf(node, pdfRenderService);
         }
 
         if (OfficeExtensions.Contains(extension))
@@ -342,17 +506,28 @@ public sealed class PreviewViewModel : ObservableObject
         }
     }
 
-    // 仕様書13章「PDF」：完全なレンダリングは行わず、ファイル情報表示＋既定アプリで開くボタンのみ
-    // 提供する（外部NuGet依存を追加しない方針のため）。
-    private static PreviewViewModel CreateForPdf(FileSystemNodeViewModel node)
+    // 仕様書13章「PDF」：Windows標準のPDF描画で、ページを画像として表示し、ページ移動できるようにする
+    // （外部のライブラリは追加しない）。読み込みは非同期で、その間と、読み込めなかった場合は、
+    // ファイル情報と「既定のアプリで開く」ボタンを表示する。
+    private static PreviewViewModel CreateForPdf(FileSystemNodeViewModel node, IPdfRenderService pdfRenderService)
     {
-        var info = new FileInfo(node.FullPath);
-        var summary = $"サイズ: {FormatSize(info.Length)}\n更新日時: {info.LastWriteTime:yyyy/MM/dd HH:mm}\n\n" +
-            "このアプリはPDFのページ内容そのものは表示しません。「既定のアプリで開く」から確認してください。";
+        string summary;
+        try
+        {
+            var info = new FileInfo(node.FullPath);
+            summary = $"サイズ: {FormatSize(info.Length)}\n更新日時: {info.LastWriteTime:yyyy/MM/dd HH:mm}";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            summary = "ファイルの情報を取得できませんでした。";
+        }
 
-        return new PreviewViewModel(
+        var preview = new PreviewViewModel(
             node.Name, node.FullPath, PreviewKind.Pdf, summary, null, string.Empty, false, null,
             string.Empty, string.Empty, string.Empty, Array.Empty<string>());
+
+        preview.StartPdfRendering(node.FullPath, pdfRenderService);
+        return preview;
     }
 
     // 仕様書13章「Office」：docx/xlsx/pptxはOOXML(ZIP+XML)であることを利用し、本文テキストのみを
