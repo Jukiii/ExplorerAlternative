@@ -70,14 +70,23 @@ dotnet test ExplorerAlternative.Tests
 3. 上記2つをPRで `main` に取り込む（CIの `check` が成功すること）。
 4. `main` の最新から、タグを作ってプッシュする：`git tag v1.3.3 && git push origin v1.3.3`
 
-タグをプッシュすると、次が自動で実行され、成功すると GitHub Release が作られる（zipが添付される）。
+タグをプッシュすると、次が自動で実行され、成功すると GitHub Release が作られる（zipとインストーラーが添付される）。
 
 - タグと `csproj` の `<Version>` が一致しているかの確認
 - テスト、発行（自己完結型・単一ファイル）
 - exeのバージョンの確認と、起動確認
-- `ExplorerAlternative-v<バージョン>-win-x64.zip` の作成、Releaseの作成
+- `ExplorerAlternative-v<バージョン>-win-x64.zip` の作成
+- インストーラー `ExplorerAlternative-v<バージョン>-Setup.exe`（Inno Setup。`installer/ExplorerAlternative.iss`）の作成と、画面なしでのインストール → 起動 → アンインストールの確認
+- Releaseの作成
 
-手動で動作だけ確認したいときは、GitHubの「Actions」→「Release」→「Run workflow」を実行する（既定では、リリースは作らず、zipをArtifactに残すだけ）。
+手動で動作だけ確認したいときは、GitHubの「Actions」→「Release」→「Run workflow」を実行する（既定では、リリースは作らず、zipとインストーラーをArtifactに残すだけ）。
+
+### インストーラー
+
+- 既定は、管理者権限が要らない、現在のユーザー向けのインストール（`%LocalAppData%\Programs\ExplorerAlternative`）。起動時の確認で「すべてのユーザー」向けも選べる。
+- スタートメニューに登録され、「設定」→「アプリ」からアンインストールできる（デスクトップのショートカットは、インストール時に選ぶ）。
+- アンインストールしても、設定・お気に入り・ワークスペース（`%AppData%\ExplorerAlternative\settings.json`）は削除しない。アプリの設定画面で登録したフォルダの右クリックメニューは、アンインストール時に削除する。
+- コード署名はしていないため、実行時にSmartScreenの警告が出ることがある。
 
 ## プロジェクト構成
 
