@@ -239,13 +239,56 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
 
         foreach (var segment in segments)
         {
+            if (segment.IsLineReset)
+            {
+                // 行の上書き（プログレスバー等）。スクロールバックには印を残さず、現在の行を消す。
+                RemoveCurrentLineFromBuffer();
+                continue;
+            }
+
             _buffer.Add(segment);
             _bufferChars += segment.Text.Length;
         }
 
         TrimBuffer();
         DetectPasswordPrompt(segments);
+
+        // 画面側へは、行リセットの印を含めて元の順序のまま渡す（画面の現在の行も消すため）。
         SegmentsAppended?.Invoke(segments);
+    }
+
+    // スクロールバックの末尾にある、まだ改行で終わっていない行（現在の行）を取り除く。
+    private void RemoveCurrentLineFromBuffer()
+    {
+        while (_buffer.Count > 0)
+        {
+            var last = _buffer[^1];
+            var lastLineFeed = last.Text.LastIndexOf('\n');
+
+            if (lastLineFeed < 0)
+            {
+                // 改行を含まない断片は、まるごと現在の行。
+                _bufferChars -= last.Text.Length;
+                _buffer.RemoveAt(_buffer.Count - 1);
+                continue;
+            }
+
+            // 改行より後ろだけを取り除き、改行までは残す。
+            var keepLength = lastLineFeed + 1;
+            if (keepLength < last.Text.Length)
+            {
+                _bufferChars -= last.Text.Length - keepLength;
+                _buffer[^1] = new TerminalSegment
+                {
+                    Text = last.Text[..keepLength],
+                    Foreground = last.Foreground,
+                    Background = last.Background,
+                    IsBold = last.IsBold
+                };
+            }
+
+            break;
+        }
     }
 
     private void TrimBuffer()
@@ -267,6 +310,12 @@ public sealed class TerminalViewModel : ObservableObject, IDisposable
 
         foreach (var segment in segments)
         {
+            if (segment.IsLineReset)
+            {
+                _currentLine.Clear();
+                continue;
+            }
+
             foreach (var c in segment.Text)
             {
                 if (c == '\n')

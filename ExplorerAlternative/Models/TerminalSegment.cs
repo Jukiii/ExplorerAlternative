@@ -15,4 +15,13 @@ public sealed class TerminalSegment
     public Color? Background { get; init; }
 
     public bool IsBold { get; init; }
+
+    /// <summary>
+    /// 「現在の行を消して、行頭から書き直す」ことを表す印（テキストは空）。単独のCR（プログレスバー等の
+    /// 行の上書き）や、行全体の消去・行頭へ戻る制御シーケンスで発生する。スクロールバックには残さず、
+    /// 受け取った側が現在の行を消す。
+    /// </summary>
+    public bool IsLineReset { get; init; }
+
+    public static TerminalSegment LineReset() => new() { Text = string.Empty, IsLineReset = true };
 }

@@ -10,9 +10,12 @@ namespace ExplorerAlternative.Rendering;
 /// 色の状態とエスケープシーケンスの途中状態をチャンクをまたいで保持する
 /// （標準出力は任意の位置で分割されて届くため）。
 ///
-/// SGR以外のCSI（カーソル移動・消去等）とOSC（ウィンドウタイトル等）は読み飛ばす。
-/// 単独のCR（プログレスバーの行上書き）は落とすため、CRで上書きする表示は
-/// 行が積み上がる形になる（既知の制限）。
+/// 行の上書き（プログレスバー等）：単独のCR（直後が改行でないCR）と、行全体の消去（ESC[2K）・
+/// 行頭への移動（ESC[G / ESC[1G）は、「現在の行を消して書き直す」印（<see cref="TerminalSegment.IsLineReset"/>）
+/// として出力する。CRLFのCRは、これまでどおり改行だけとして扱う。端末のカーソル位置は管理せず、
+/// 常に行末に書き続けるモデルなので、CRのあとの文字列が元の行より短い場合も、元の行の残りは
+/// 残らない（実際の端末では残る）。
+/// それ以外のCSI（カーソルの上下移動・画面消去等）とOSC（ウィンドウタイトル等）は読み飛ばす。
 /// </summary>
 public sealed class AnsiTextParser
 {
@@ -47,6 +50,10 @@ public sealed class AnsiTextParser
     private bool _isBold;
     private bool _isReverse;
 
+    // CRを受け取ったが、次の1文字がまだ分からない状態（CRLFかCR単独かの判定待ち）。
+    // 標準出力は任意の位置で分割されて届くため、CRとLFが別のチャンクになることがある。
+    private bool _pendingCarriageReturn;
+
     /// <summary>受け取った生テキストを解釈し、色付きの断片へ変換する。
     /// エスケープシーケンスが途中で切れている場合は次回の呼び出しまで持ち越す。</summary>
     public IReadOnlyList<TerminalSegment> Parse(string chunk)
@@ -55,6 +62,18 @@ public sealed class AnsiTextParser
 
         foreach (var c in chunk)
         {
+            if (_pendingCarriageReturn)
+            {
+                _pendingCarriageReturn = false;
+
+                // CRの次が改行ならCRLF（改行だけとして扱う）。それ以外なら、行の上書きの印にする。
+                if (c != '\n')
+                {
+                    FlushPendingText(segments);
+                    segments.Add(TerminalSegment.LineReset());
+                }
+            }
+
             if (_pendingEscape.Length > 0)
             {
                 _pendingEscape.Append(c);
@@ -66,7 +85,7 @@ public sealed class AnsiTextParser
 
                     // 色が変わる直前までのテキストを、変更前の色で確定させる。
                     FlushPendingText(segments);
-                    ApplySequence(sequence);
+                    ApplySequence(sequence, segments);
                 }
 
                 continue;
@@ -80,7 +99,8 @@ public sealed class AnsiTextParser
 
             if (c == '\r')
             {
-                // CRLFの\rは落とす（\nだけを改行として扱う）。単独のCRも同様に落とす。
+                // 次の1文字でCRLFかCR単独かを判定する（CRより前のテキストは、その判定まで保留しておく）。
+                _pendingCarriageReturn = true;
                 continue;
             }
 
@@ -131,11 +151,26 @@ public sealed class AnsiTextParser
         };
     }
 
-    private void ApplySequence(string sequence)
+    private void ApplySequence(string sequence, List<TerminalSegment> segments)
     {
-        // SGR（ESC[...m）以外は表示色に影響しないため読み飛ばす。
-        if (sequence.Length < 3 || sequence[1] != '[' || sequence[^1] != 'm')
+        if (sequence.Length < 3 || sequence[1] != '[')
         {
+            return;
+        }
+
+        if (sequence[^1] != 'm')
+        {
+            // SGR以外は表示色に影響しない。ただし、行全体の消去（ESC[2K）と行頭への移動
+            // （ESC[G / ESC[1G）は、CRと同じく「現在の行を消して書き直す」ものとして扱う。
+            // 行末までの消去（ESC[K）は、常に行末に書くモデルなので何もしなくてよい。
+            var final = sequence[^1];
+            var parameter = sequence[2..^1];
+
+            if ((final == 'K' && parameter == "2") || (final == 'G' && (parameter.Length == 0 || parameter == "1")))
+            {
+                segments.Add(TerminalSegment.LineReset());
+            }
+
             return;
         }
 
