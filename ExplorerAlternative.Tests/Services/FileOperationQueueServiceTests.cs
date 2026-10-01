@@ -53,6 +53,8 @@ public sealed class FileOperationQueueServiceTests : IDisposable
         }
     }
 
+    private static async Task<bool> Finished(Task task, TimeSpan within) => await Task.WhenAny(task, Task.Delay(within)) == task;
+
     // ===== 基本 =====
 
     [Fact]
@@ -372,7 +374,7 @@ public sealed class FileOperationQueueServiceTests : IDisposable
     }
 
     [Fact]
-    public void Pause_HoldsTheItemBetweenSources_UntilResumed()
+    public async Task Pause_HoldsTheItemBetweenSources_UntilResumed()
     {
         var dest = Dir_("d");
         var first = File_("s/1.txt");
@@ -397,19 +399,19 @@ public sealed class FileOperationQueueServiceTests : IDisposable
         releaseFirst.Set();
 
         // 一時停止中は、2つ目に進まない。
-        Assert.False(done.Task.Wait(TimeSpan.FromMilliseconds(600)));
+        Assert.False(await Finished(done.Task, TimeSpan.FromMilliseconds(600)));
         Assert.Equal(FileOperationQueueItemStatus.Paused, item.Status);
         Assert.False(File.Exists(Path.Combine(dest, "2.txt")));
 
         _sut.Resume(item);
 
-        Assert.True(done.Task.Wait(Timeout));
+        Assert.True(await Finished(done.Task, Timeout));
         Assert.Equal(FileOperationQueueItemStatus.Completed, item.Status);
         Assert.True(File.Exists(Path.Combine(dest, "2.txt")));
     }
 
     [Fact]
-    public void Cancel_WhilePaused_EndsAsCancelled()
+    public async Task Cancel_WhilePaused_EndsAsCancelled()
     {
         var dest = Dir_("d");
         var first = File_("s/1.txt");
@@ -432,7 +434,7 @@ public sealed class FileOperationQueueServiceTests : IDisposable
         release.Set();
         _sut.Cancel(item);
 
-        Assert.True(done.Task.Wait(Timeout));
+        Assert.True(await Finished(done.Task, Timeout));
         Assert.Equal(FileOperationQueueItemStatus.Cancelled, item.Status);
         Assert.False(File.Exists(Path.Combine(dest, "2.txt")));
     }
