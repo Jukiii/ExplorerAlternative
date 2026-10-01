@@ -120,6 +120,12 @@ public sealed class TerminalSurfaceController
 
         foreach (var segment in segments)
         {
+            if (segment.IsLineReset)
+            {
+                RemoveCurrentLine();
+                continue;
+            }
+
             foreach (var inline in CreateInlines(segment))
             {
                 _paragraph.Inlines.InsertBefore(_inputRun, inline);
@@ -129,6 +135,21 @@ public sealed class TerminalSurfaceController
         TrimScrollback();
         UpdateCaret();
         _surface.ScrollToEnd();
+    }
+
+    // 行の上書き（プログレスバー等）：入力行の直前から、直前の改行（LineBreak）までの
+    // 現在の行の出力を消す。入力中の文字（入力行のRun）は触らない。
+    private void RemoveCurrentLine()
+    {
+        if (_paragraph is null || _inputRun is null)
+        {
+            return;
+        }
+
+        while (_inputRun.PreviousInline is { } previous && previous is not LineBreak)
+        {
+            _paragraph.Inlines.Remove(previous);
+        }
     }
 
     // FlowDocumentのRunは改行文字を改行として描画しないため、LineBreakへ分解する。

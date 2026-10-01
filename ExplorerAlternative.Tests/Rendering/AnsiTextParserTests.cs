@@ -212,13 +212,115 @@ public sealed class AnsiTextParserTests
         Assert.Equal("line1\nline2\n", JoinText(segments));
     }
 
-    // 既知の制限（仕様書17章）：単独のCR（プログレスバーの行上書き）は落とすだけで、上書きはされない。
+    // ===== 行の上書き（プログレスバー等。仕様書17章） =====
+
+    private static string Describe(IEnumerable<TerminalSegment> segments) =>
+        string.Join("|", segments.Select(s => s.IsLineReset ? "<RESET>" : s.Text.Replace("\n", "\\n")));
+
     [Fact]
-    public void Parse_LoneCarriageReturn_IsDropped()
+    public void Parse_LoneCarriageReturn_EmitsLineResetBetweenTexts()
     {
         var segments = new AnsiTextParser().Parse("50%\r51%");
 
-        Assert.Equal("50%51%", JoinText(segments));
+        Assert.Equal("50%|<RESET>|51%", Describe(segments));
+    }
+
+    [Fact]
+    public void Parse_CrLf_IsPlainNewline_NotAReset()
+    {
+        var segments = new AnsiTextParser().Parse("a\r\nb\r\n");
+
+        Assert.DoesNotContain(segments, s => s.IsLineReset);
+        Assert.Equal("a\nb\n", JoinText(segments));
+    }
+
+    // CRとLFが別のチャンクで届いても、CRLFとして扱う（リセットしない）。
+    [Fact]
+    public void Parse_CrAndLfInSeparateChunks_IsStillCrLf()
+    {
+        var parser = new AnsiTextParser();
+
+        var first = parser.Parse("line\r");
+        var second = parser.Parse("\nnext");
+
+        Assert.DoesNotContain(first.Concat(second), s => s.IsLineReset);
+        Assert.Equal("line\nnext", JoinText(first) + JoinText(second));
+    }
+
+    // CRが末尾で、次のチャンクが文字で始まる場合は、行の上書き。
+    [Fact]
+    public void Parse_CrAtChunkEnd_ThenText_IsLineReset()
+    {
+        var parser = new AnsiTextParser();
+
+        var first = parser.Parse("10%\r");
+        var second = parser.Parse("20%");
+
+        Assert.Equal("10%", Describe(first));
+        Assert.Equal("<RESET>|20%", Describe(second));
+    }
+
+    [Fact]
+    public void Parse_ProgressBarSequence_ProducesOneResetPerUpdate()
+    {
+        var segments = new AnsiTextParser().Parse("0%\r50%\r100%\ndone\n");
+
+        Assert.Equal("0%|<RESET>|50%|<RESET>|100%\\ndone\\n", Describe(segments));
+    }
+
+    [Fact]
+    public void Parse_DoubleCr_ThenText_StillResets()
+    {
+        var segments = new AnsiTextParser().Parse("a\r\rb");
+
+        Assert.Contains(segments, s => s.IsLineReset);
+        Assert.Equal("ab", JoinText(segments));
+    }
+
+    [Fact]
+    public void Parse_CrFollowedByColorSequence_ResetsBeforeApplyingColor()
+    {
+        var segments = new AnsiTextParser().Parse($"old\r{Esc}[32mnew");
+
+        Assert.Equal("old|<RESET>|new", Describe(segments));
+        Assert.Equal(Color.FromRgb(0x13, 0xA1, 0x0E), segments.Last().Foreground);
+    }
+
+    [Fact]
+    public void Parse_EraseWholeLine_IsLineReset()
+    {
+        var segments = new AnsiTextParser().Parse($"abc{Esc}[2Kdef");
+
+        Assert.Equal("abc|<RESET>|def", Describe(segments));
+    }
+
+    [Theory]
+    [InlineData("[G")]
+    [InlineData("[1G")]
+    public void Parse_CursorToColumnOne_IsLineReset(string sequence)
+    {
+        var segments = new AnsiTextParser().Parse($"abc{Esc}{sequence}def");
+
+        Assert.Equal("abc|<RESET>|def", Describe(segments));
+    }
+
+    // 行末までの消去は、常に行末に書き続けるモデルでは何もしなくてよい。
+    [Fact]
+    public void Parse_EraseToEndOfLine_IsIgnored()
+    {
+        var segments = new AnsiTextParser().Parse($"abc{Esc}[Kdef");
+
+        Assert.DoesNotContain(segments, s => s.IsLineReset);
+        Assert.Equal("abcdef", JoinText(segments));
+    }
+
+    [Fact]
+    public void Parse_OtherCursorMovements_AreStillIgnored()
+    {
+        var segments = new AnsiTextParser().Parse($"a{Esc}[5Ab{Esc}[10Cc{Esc}[3;7Hd");
+
+        Assert.DoesNotContain(segments, s => s.IsLineReset);
+        Assert.Equal("abcd", JoinText(segments));
     }
 
     [Fact]

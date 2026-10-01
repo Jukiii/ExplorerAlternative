@@ -1,53 +1,13 @@
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Services.Abstractions;
 using ExplorerAlternative.ViewModels;
+using ExplorerAlternative.Tests.TestDoubles;
 
 namespace ExplorerAlternative.Tests.ViewModels;
 
 // 仕様書17章：ターミナル1枚分のViewModel（入力行・コマンド履歴・スクロールバック・パスワード自動入力）。
 public sealed class TerminalViewModelTests
 {
-    private sealed class FakeTerminalService : IPowerShellTerminalService
-    {
-        public event EventHandler<string>? OutputReceived;
-
-        public event EventHandler<string>? ErrorOccurred;
-
-        public bool IsRunning { get; set; }
-
-        public int StartCount { get; private set; }
-
-        public int InterruptCount { get; private set; }
-
-        public List<string> Commands { get; } = new();
-
-        public List<string> DirectoryChanges { get; } = new();
-
-        public void Start()
-        {
-            StartCount++;
-            IsRunning = true;
-        }
-
-        public void SendCommand(string command) => Commands.Add(command);
-
-        public void SendRaw(string text)
-        {
-        }
-
-        public void Interrupt() => InterruptCount++;
-
-        public void ChangeDirectory(string path) => DirectoryChanges.Add(path);
-
-        public void Dispose()
-        {
-        }
-
-        public void RaiseOutput(string text) => OutputReceived?.Invoke(this, text);
-
-        public void RaiseError(string message) => ErrorOccurred?.Invoke(this, message);
-    }
-
     private static (TerminalViewModel Terminal, FakeTerminalService Service) Create(bool syncByDefault = true)
     {
         var service = new FakeTerminalService();
@@ -339,7 +299,8 @@ public sealed class TerminalViewModelTests
         var raised = 0;
         terminal.SegmentsAppended += _ => raised++;
 
-        service.RaiseOutput("\u001b[2K");
+        // カーソルの上移動は無視される（行全体の消去 ESC[2K は、行リセットとして扱うため別のテスト）。
+        service.RaiseOutput("\u001b[5A");
 
         Assert.Empty(terminal.Buffer);
         Assert.Equal(0, raised);
@@ -370,6 +331,83 @@ public sealed class TerminalViewModelTests
 
         var total = terminal.Buffer.Sum(s => s.Text.Length);
         Assert.InRange(total, 1, 200_000);
+    }
+
+    // ===== 行の上書き（プログレスバー等。仕様書17章） =====
+
+    private static string BufferText(TerminalViewModel terminal) =>
+        string.Concat(terminal.Buffer.Select(s => s.Text));
+
+    [Fact]
+    public void ProgressBar_OverwritesCurrentLineInBuffer()
+    {
+        var (terminal, service) = Create();
+
+        service.RaiseOutput("start\n");
+        service.RaiseOutput("progress 10%\r");
+        service.RaiseOutput("progress 50%\r");
+        service.RaiseOutput("progress 100%\n");
+        service.RaiseOutput("done\n");
+
+        Assert.Equal("start\nprogress 100%\ndone\n", BufferText(terminal));
+    }
+
+    [Fact]
+    public void ProgressBar_DoesNotTouchEarlierLines()
+    {
+        var (terminal, service) = Create();
+
+        service.RaiseOutput("line1\nline2\nspinner |");
+        service.RaiseOutput("\rspinner /");
+
+        Assert.Equal("line1\nline2\nspinner /", BufferText(terminal));
+    }
+
+    [Fact]
+    public void LineReset_AtVeryStart_LeavesBufferEmptyAndDoesNotCrash()
+    {
+        var (terminal, service) = Create();
+
+        service.RaiseOutput("\rhello");
+
+        Assert.Equal("hello", BufferText(terminal));
+    }
+
+    [Fact]
+    public void LineReset_ReachesTheViewWithOriginalOrder()
+    {
+        var (terminal, service) = Create();
+        var received = new List<TerminalSegment>();
+        terminal.SegmentsAppended += segments => received.AddRange(segments);
+
+        service.RaiseOutput("a\rb");
+
+        Assert.Equal(new[] { false, true, false }, received.Select(s => s.IsLineReset).ToArray());
+    }
+
+    [Fact]
+    public void LineReset_KeepsSegmentColorOfTheTextBeforeTheLineFeed()
+    {
+        var (terminal, service) = Create();
+
+        service.RaiseOutput("\u001b[31mred line\nprogress\u001b[0m");
+        service.RaiseOutput("\rnext");
+
+        // 改行までは赤のまま残り、その後ろの現在の行だけが置き換わる。
+        Assert.Equal("red line\nnext", BufferText(terminal));
+        Assert.NotNull(terminal.Buffer[0].Foreground);
+    }
+
+    [Fact]
+    public void PasswordPrompt_IsStillDetected_AfterALineReset()
+    {
+        var (terminal, service) = Create();
+
+        terminal.SendRawCommand("ssh user@host", "s3cret");
+        service.RaiseOutput("connecting...\r");
+        service.RaiseOutput("user@host's password: ");
+
+        Assert.Equal(new[] { "ssh user@host", "s3cret" }, service.Commands);
     }
 
     // ===== 同期 =====
