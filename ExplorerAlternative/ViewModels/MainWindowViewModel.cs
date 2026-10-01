@@ -1026,13 +1026,21 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        // 最大化中は、最大化する前の大きさ・位置（RestoreBounds）を保存する（最大化後に戻したときのため）。
+        var isMaximized = window.WindowState == WindowState.Maximized;
+        var bounds = window.WindowState == WindowState.Normal
+            ? new Rect(window.Left, window.Top, window.Width, window.Height)
+            : window.RestoreBounds;
+
         var state = new WorkspaceState
         {
             Name = name,
-            WindowWidth = window.Width,
-            WindowHeight = window.Height,
-            WindowLeft = window.Left,
-            WindowTop = window.Top,
+            WindowWidth = bounds.Width,
+            WindowHeight = bounds.Height,
+            WindowLeft = bounds.Left,
+            WindowTop = bounds.Top,
+            IsWindowMaximized = isMaximized,
+            Terminal = TerminalHost.CaptureState(),
             ActiveTabIndex = ActiveTab is null ? 0 : Tabs.IndexOf(ActiveTab),
             NavigationPaneCollapsed = NavigationPane.IsCollapsed,
             Tabs = Tabs.Select(t => new TabState
@@ -1045,7 +1053,8 @@ public sealed class MainWindowViewModel : ObservableObject
                 Panes = t.Panes.Select(p => new PaneState
                 {
                     CurrentPath = p.CurrentPath,
-                    ViewMode = p.CurrentViewMode
+                    ViewMode = p.CurrentViewMode,
+                    ExpandedPaths = p.GetExpandedFolderPaths().ToList()
                 }).ToList()
             }).ToList()
         };
@@ -1083,11 +1092,19 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        // 大きさ・位置は、通常の状態に戻してから設定し、最大化していた場合は、そのあと最大化する。
+        window.WindowState = WindowState.Normal;
         window.Width = state.WindowWidth;
         window.Height = state.WindowHeight;
         window.Left = state.WindowLeft;
         window.Top = state.WindowTop;
+        if (state.IsWindowMaximized)
+        {
+            window.WindowState = WindowState.Maximized;
+        }
+
         NavigationPane.IsCollapsed = state.NavigationPaneCollapsed;
+        TerminalHost.RestoreState(state.Terminal);
 
         foreach (var oldTab in Tabs)
         {
@@ -1106,6 +1123,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 : new List<PaneState> { new() { CurrentPath = GetDefaultInitialPath() } };
 
             var firstPane = CreatePane(paneStates[0].CurrentPath, paneStates[0].ViewMode);
+            firstPane.RestoreExpandedFolders(paneStates[0].ExpandedPaths);
             var tab = new TabViewModel(firstPane, tabState.Header)
             {
                 SplitOrientation = tabState.SplitOrientation,
@@ -1114,7 +1132,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
             for (var i = 1; i < paneStates.Count; i++)
             {
-                tab.AddPane(CreatePane(paneStates[i].CurrentPath, paneStates[i].ViewMode));
+                var restoredPane = CreatePane(paneStates[i].CurrentPath, paneStates[i].ViewMode);
+                restoredPane.RestoreExpandedFolders(paneStates[i].ExpandedPaths);
+                tab.AddPane(restoredPane);
             }
 
             // 分割した状態の比率を復元する（AddPaneは半分ずつに戻すため、追加のあとで設定する）。

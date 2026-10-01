@@ -796,6 +796,45 @@ public sealed class PaneViewModel : ObservableObject, IDisposable
 
     private readonly record struct NodeState(bool IsExpanded, bool IsSelected);
 
+    /// <summary>仕様書43章：ワークスペースへ保存する、階層表示で展開しているフォルダのフルパス。</summary>
+    public IReadOnlyList<string> GetExpandedFolderPaths()
+    {
+        var state = new Dictionary<string, NodeState>(StringComparer.OrdinalIgnoreCase);
+        CollectNodeState(RootNodes, state);
+
+        return state.Where(pair => pair.Value.IsExpanded).Select(pair => pair.Key).ToList();
+    }
+
+    /// <summary>
+    /// 仕様書43章：保存しておいた展開状態を復元する。現在のフォルダの下に無いパス（消えたフォルダなど）は無視する。
+    /// 展開済みフォルダ1件ごとに表示リストを再構築すると遅くなるため、復元後に1回だけ再構築する。
+    /// </summary>
+    public void RestoreExpandedFolders(IEnumerable<string> expandedPaths)
+    {
+        var state = new Dictionary<string, NodeState>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in expandedPaths.Where(p => !string.IsNullOrWhiteSpace(p)))
+        {
+            state[path] = new NodeState(IsExpanded: true, IsSelected: false);
+        }
+
+        if (state.Count == 0)
+        {
+            return;
+        }
+
+        _suppressNodeToggleRebuild = true;
+        try
+        {
+            ApplyNodeState(RootNodes, state);
+        }
+        finally
+        {
+            _suppressNodeToggleRebuild = false;
+        }
+
+        RebuildVisibleNodes();
+    }
+
     /// <summary>再読み込み前の選択・展開状態をフルパスで記録する（展開済みの子孫も再帰的に対象）。</summary>
     private static void CollectNodeState(IEnumerable<FileSystemNodeViewModel> nodes, Dictionary<string, NodeState> result)
     {
