@@ -1,0 +1,108 @@
+name: Release
+
+# タグ（v1.3.3 など）をプッシュすると、テスト → 発行 → 起動確認 → zip化 → GitHub Release の作成までを自動で行う。
+# 手動実行（workflow_dispatch）では、既定でリリースは作らず（dry_run）、zipをArtifactとして残すだけにする
+# （ワークフロー自体の確認用）。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "リリースを作成せず、zipをArtifactに残すだけにする"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # タグのバージョンと、csprojの<Version>が一致していることを確認する
+      # （exeのファイルバージョンが、配布するリリースと食い違わないようにする）。
+      - name: バージョンの確認
+        id: version
+        shell: pwsh
+        run: |
+          $csproj = [xml](Get-Content ExplorerAlternative/ExplorerAlternative.csproj -Raw)
+          $projectVersion = ($csproj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          if (-not $projectVersion) { throw 'csprojに<Version>がありません。' }
+
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $tagVersion = $env:GITHUB_REF_NAME.TrimStart('v')
+            if ($tagVersion -ne $projectVersion) {
+              throw "タグ($env:GITHUB_REF_NAME)とcsprojのVersion($projectVersion)が一致しません。"
+            }
+          }
+
+          "version=$projectVersion" >> $env:GITHUB_OUTPUT
+          Write-Host "バージョン: $projectVersion"
+
+      - name: テスト
+        run: dotnet test ExplorerAlternative.slnx --configuration Release
+
+      - name: 発行（自己完結型・単一ファイル）
+        run: >
+          dotnet publish ExplorerAlternative/ExplorerAlternative.csproj
+          --configuration Release --runtime win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          --output publish
+
+      # 起動して、数秒後も終了していないことを確認する。終了するのは、自分が起動したプロセスだけ。
+      - name: 起動確認
+        shell: pwsh
+        run: |
+          $exe = Join-Path (Get-Location) 'publish/ExplorerAlternative.exe'
+          $version = (Get-Item $exe).VersionInfo.FileVersion
+          Write-Host "exeのファイルバージョン: $version"
+          if (-not $version.StartsWith('${{ steps.version.outputs.version }}')) {
+            throw "exeのバージョン($version)がcsprojのVersionと一致しません。"
+          }
+
+          $process = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 10
+            $process.Refresh()
+            if ($process.HasExited) { throw "起動後に終了しました（終了コード: $($process.ExitCode)）。" }
+            Write-Host "起動を確認しました（PID: $($process.Id)）。"
+          }
+          finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+
+      - name: zip化
+        shell: pwsh
+        run: |
+          $name = "ExplorerAlternative-v${{ steps.version.outputs.version }}-win-x64.zip"
+          Compress-Archive -Path publish/ExplorerAlternative.exe -DestinationPath $name
+          "ZIP_NAME=$name" >> $env:GITHUB_ENV
+          Get-Item $name | Select-Object Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}
+
+      # タグのプッシュのときだけ、リリースを作成する。リリースノートは docs/release-notes/v<バージョン>.md が
+      # あればそれを使い、無ければGitHubの自動生成にする。
+      - name: リリースの作成
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = "docs/release-notes/$env:GITHUB_REF_NAME.md"
+          if (Test-Path $notes) {
+            gh release create $env:GITHUB_REF_NAME $env:ZIP_NAME --title $env:GITHUB_REF_NAME --notes-file $notes --verify-tag
+          } else {
+            gh release create $env:GITHUB_REF_NAME $env:ZIP_NAME --title $env:GITHUB_REF_NAME --generate-notes --verify-tag
+          }

@@ -63,10 +63,21 @@ dotnet test ExplorerAlternative.Tests
 
 ## リリース手順
 
-1. `ExplorerAlternative/ExplorerAlternative.csproj` の `<Version>` を新しいバージョン（例：`1.3.2`）に更新してコミットする（GitHubのタグ `v1.3.2` と一致させる。exeのプロパティに表示されるバージョンになる）。
-2. 上記のリリースビルド（`dotnet publish`）を実行し、生成された `ExplorerAlternative.exe` を起動して動作を確認する。
-3. `ExplorerAlternative.exe` を `ExplorerAlternative-v<バージョン>-win-x64.zip` にまとめる。
-4. `gh release create v<バージョン> <zip> --target main --title v<バージョン> --notes-file <リリースノート>` でリリースを作成する。
+リリースは、タグをプッシュすると GitHub Actions（`.github/workflows/release.yml`）が自動で行う。
+
+1. `ExplorerAlternative/ExplorerAlternative.csproj` の `<Version>` を新しいバージョン（例：`1.3.3`）に更新する（GitHubのタグ `v1.3.3` と一致させる。exeのプロパティに表示されるバージョンになる）。
+2. `docs/release-notes/v1.3.3.md` にリリースノートを書く（書き方は `docs/release-notes/README.md`。無い場合はGitHubの自動生成になる）。
+3. 上記2つをPRで `main` に取り込む（CIの `check` が成功すること）。
+4. `main` の最新から、タグを作ってプッシュする：`git tag v1.3.3 && git push origin v1.3.3`
+
+タグをプッシュすると、次が自動で実行され、成功すると GitHub Release が作られる（zipが添付される）。
+
+- タグと `csproj` の `<Version>` が一致しているかの確認
+- テスト、発行（自己完結型・単一ファイル）
+- exeのバージョンの確認と、起動確認
+- `ExplorerAlternative-v<バージョン>-win-x64.zip` の作成、Releaseの作成
+
+手動で動作だけ確認したいときは、GitHubの「Actions」→「Release」→「Run workflow」を実行する（既定では、リリースは作らず、zipをArtifactに残すだけ）。
 
 ## プロジェクト構成
 
