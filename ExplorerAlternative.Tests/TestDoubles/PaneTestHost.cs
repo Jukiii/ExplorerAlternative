@@ -106,13 +106,14 @@ internal sealed class PaneTestHost : IDisposable
         Undo = new UndoService();
         FileSystem = new FileSystemService();
 
-        var versionControl = StubProxy.Create<IVersionControlService>();
-        StubProxy.Of(versionControl).On("Detect", _ => VersionControlInfo.None);
+        VersionControl = StubProxy.Create<IVersionControlService>();
+        VersionControlControl = StubProxy.Of(VersionControl);
+        VersionControlControl.On("Detect", _ => VersionControlInfo.None);
 
         Pane = new PaneViewModel(
             FileSystem,
             Dialog,
-            versionControl,
+            VersionControl,
             StubProxy.Create<IExternalToolService>(),
             Settings,
             StubProxy.Create<IPatchService>(),
@@ -135,6 +136,11 @@ internal sealed class PaneTestHost : IDisposable
 
     /// <summary>ダイアログの偽物の制御用（<see cref="StubProxy.On"/>で回答を差し替え、呼び出しを確認する）。</summary>
     public StubProxy DialogControl { get; }
+
+    /// <summary>Git/SVN判定の偽物。既定では、どこでも「管理なし」を返す（<see cref="VersionControlControl"/>で差し替える）。</summary>
+    public IVersionControlService VersionControl { get; }
+
+    public StubProxy VersionControlControl { get; }
 
     public FakeFileOperationQueueService Queue { get; }
 

@@ -13,7 +13,7 @@ namespace ExplorerAlternative.Services;
 /// </summary>
 public sealed class VersionControlService : IVersionControlService
 {
-    public VersionControlInfo Detect(string path)
+    public VersionControlInfo Detect(string path, VersionControlKind preferred = VersionControlKind.None)
     {
         if (!Directory.Exists(path))
         {
@@ -21,12 +21,22 @@ public sealed class VersionControlService : IVersionControlService
         }
 
         var gitRoot = FindMarkerUpward(path, ".git");
+        var svnRoot = FindMarkerUpward(path, ".svn");
+
+        // 仕様書20章「両方存在する場合は両方を認識する」：両方ある場合は、指定された方（無指定ならGit）を
+        // 主として表示・操作の対象にし、もう一方は「ある」ことだけを伝える（ペインの操作で切り替えられる）。
+        if (gitRoot is not null && svnRoot is not null)
+        {
+            return preferred == VersionControlKind.Svn
+                ? BuildSvnInfo(svnRoot, VersionControlKind.Git, gitRoot)
+                : BuildGitInfo(gitRoot, VersionControlKind.Svn, svnRoot);
+        }
+
         if (gitRoot is not null)
         {
             return BuildGitInfo(gitRoot);
         }
 
-        var svnRoot = FindMarkerUpward(path, ".svn");
         if (svnRoot is not null)
         {
             return BuildSvnInfo(svnRoot);
@@ -65,7 +75,7 @@ public sealed class VersionControlService : IVersionControlService
         return null;
     }
 
-    private static VersionControlInfo BuildGitInfo(string root)
+    private static VersionControlInfo BuildGitInfo(string root, VersionControlKind otherKind = VersionControlKind.None, string? otherRoot = null)
     {
         string? branch = null;
         string? status = null;
@@ -100,11 +110,13 @@ public sealed class VersionControlService : IVersionControlService
             Kind = VersionControlKind.Git,
             RootPath = root,
             BranchName = branch,
-            StatusSummary = status
+            StatusSummary = status,
+            OtherKind = otherKind,
+            OtherRootPath = otherRoot
         };
     }
 
-    private static VersionControlInfo BuildSvnInfo(string root)
+    private static VersionControlInfo BuildSvnInfo(string root, VersionControlKind otherKind = VersionControlKind.None, string? otherRoot = null)
     {
         string? status;
 
@@ -122,7 +134,9 @@ public sealed class VersionControlService : IVersionControlService
             Kind = VersionControlKind.Svn,
             RootPath = root,
             BranchName = null,
-            StatusSummary = status
+            StatusSummary = status,
+            OtherKind = otherKind,
+            OtherRootPath = otherRoot
         };
     }
 
