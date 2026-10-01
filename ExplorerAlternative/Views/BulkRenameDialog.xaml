@@ -38,7 +38,7 @@
                 </Style>
             </StackPanel.Style>
             <TextBlock Text="新しい名前のパターンを入力してください。" Margin="0,0,0,4" />
-            <TextBlock Text="{}{n} = 連番（1から。{n:000}でゼロ埋め）　{name} = 元の名前　{ext} = 拡張子　{date} = 日付（{date:yyyyMMdd}で書式指定）"
+            <TextBlock Text="{}{n} = 連番（1から。{n:000}でゼロ埋め）　{name} = 元の名前　{ext} = 拡張子　{date} = 今日の日付　{created} = 作成日時　{modified} = 更新日時（{date:yyyyMMdd}のように書式指定。{created}・{modified}も同様）"
                        Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,8" TextWrapping="Wrap" />
             <TextBox Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}" Padding="6,4" />
         </StackPanel>

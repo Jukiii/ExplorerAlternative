@@ -156,7 +156,7 @@ public sealed class BulkRenameViewModel : ObservableObject
             var originalName = Targets[i].Name;
 
             var newName = Mode == BulkRenameMode.Pattern
-                ? RenamePatternExpander.Expand(Pattern, originalName, i)
+                ? RenamePatternExpander.Expand(Pattern, originalName, i, Targets[i].Created, Targets[i].LastModified)
                 : RenamePatternExpander.ApplyFindReplace(originalName, FindText, ReplaceText, UseRegex, CaseSensitive);
 
             newName = RenamePatternExpander.ApplyTransforms(newName, CaseConversion, WidthConversion, NormalizeUnicode);
