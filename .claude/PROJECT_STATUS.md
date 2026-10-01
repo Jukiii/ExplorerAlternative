@@ -54,9 +54,9 @@
 
 | 項目 | 内容 |
 | --- | --- |
-| ブランチ | `chore-common-rules` |
-| 内容 | NOLITOとClaude・GitHubの運用ルールを共通化（CI・Dependabot・PRテンプレート・ブランチ保護・Issue題名ルール） |
-| 状態 | IN_PROGRESS |
+| ブランチ | なし（待機中。次は Issue【対応不要】の中から着手する） |
+| 直近の完了 | NOLITOとClaude・GitHubの運用ルールを共通化（PR #37。CI・Dependabot・PRテンプレート・ブランチ保護・Issue題名ルール） |
+| 状態 | COMPLETED |
 
 ---
 
