@@ -115,7 +115,8 @@ public partial class App : Application
             fileOperationHistoryService,
             fileOperationQueueService,
             FolderWatcherServiceFactory,
-            startupPath);
+            startupPath,
+            new PowerShellTabCompletionService(settingsService.Current.Terminal.ShellExecutable));
 
         _mainWindowViewModel = mainWindowViewModel;
 

@@ -103,6 +103,13 @@ public sealed class TerminalInputBuffer
         Caret = Text.Length;
     }
 
+    /// <summary>内容を置き換え、カーソルを指定の位置へ置く（Tab補完）。位置は、0〜文字列の長さに丸める。</summary>
+    public void Set(string text, int caret)
+    {
+        Text = text ?? string.Empty;
+        Caret = Math.Clamp(caret, 0, Text.Length);
+    }
+
     /// <summary>現在の内容を返し、入力行を空にする（Enterでの確定）。</summary>
     public string Take()
     {

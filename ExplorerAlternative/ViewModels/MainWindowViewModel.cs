@@ -76,7 +76,8 @@ public sealed class MainWindowViewModel : ObservableObject
         IFileOperationHistoryService fileOperationHistoryService,
         IFileOperationQueueService fileOperationQueueService,
         Func<IFolderWatcherService> folderWatcherServiceFactory,
-        string? startupPath = null)
+        string? startupPath = null,
+        ITabCompletionService? tabCompletionService = null)
     {
         _fileSystemService = fileSystemService;
         _dialogService = dialogService;
@@ -106,7 +107,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         NavigationPane = new NavigationPaneViewModel(settingsService, fileSystemService, dialogService, NavigateActiveTo);
         NavigationPane.WorkspaceOpenRequested += name => LoadWorkspaceByName((Window)Application.Current!.MainWindow!, name);
-        TerminalHost = new TerminalHostViewModel(terminalServiceFactory, settingsService.Current.Terminal.SyncByDefault);
+        TerminalHost = new TerminalHostViewModel(terminalServiceFactory, settingsService.Current.Terminal.SyncByDefault, tabCompletionService);
 
         UndoCommand = new RelayCommand(_ => Undo(), _ => _undoService.CanUndo);
         RedoCommand = new RelayCommand(_ => Redo(), _ => _undoService.CanRedo);
