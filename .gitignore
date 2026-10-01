@@ -15,3 +15,6 @@ obj/
 # OS
 Thumbs.db
 .DS_Store
+
+# Claude Code のセッション管理ファイル(共有しない)
+.claude/scheduled_tasks.lock
