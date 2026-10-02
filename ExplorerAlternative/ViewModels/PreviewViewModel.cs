@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows.Documents;
@@ -38,14 +39,23 @@ public sealed class PreviewViewModel : ObservableObject
     private CancellationTokenSource? _folderSizeCts;
     private CodeSymbol? _selectedSymbol;
 
-    // 仕様書13章「PDF」：ページの表示と移動。
+    // 仕様書13章「PDF」：全ページを縦に並べて、スクロールで見る。
     private const int PdfRenderWidth = 1000;
+
+    /// <summary>見えている範囲の前後に、先に描いておくページ数（スクロールしたとき、空白が見えないように）。</summary>
+    internal const int PdfPrefetchPages = 1;
+
+    /// <summary>見えている範囲から、これより離れたページの画像は捨てる（メモリを使いすぎないように）。</summary>
+    internal const int PdfKeepPages = 6;
+
     private CancellationTokenSource? _pdfCts;
     private IPdfDocument? _pdfDocument;
-    private int _pdfRenderGeneration;
+    private readonly SemaphoreSlim _pdfRenderGate = new(1, 1);
+    private int _pdfRangeGeneration;
+    private int _pdfVisibleFirst;
+    private int _pdfVisibleLast;
     private int _pdfPageNumber;
     private int _pdfPageCount;
-    private BitmapSource? _pdfPageImage;
     private string _pdfStatusMessage = string.Empty;
 
     private PreviewViewModel(
@@ -74,8 +84,6 @@ public sealed class PreviewViewModel : ObservableObject
         PreviousCommand = new RelayCommand(_ => RequestPrevious?.Invoke());
         NextCommand = new RelayCommand(_ => RequestNext?.Invoke());
         OpenExternallyCommand = new RelayCommand(_ => OpenExternally());
-        PreviousPageCommand = new RelayCommand(_ => _ = ShowPdfPageAsync(PdfPageNumber - 1), _ => PdfPageNumber > 1);
-        NextPageCommand = new RelayCommand(_ => _ = ShowPdfPageAsync(PdfPageNumber + 1), _ => PdfPageNumber > 0 && PdfPageNumber < PdfPageCount);
     }
 
     /// <summary>仕様書16章「コードシンボル表示」：対応言語のソースコードのみ非空。</summary>
@@ -171,16 +179,12 @@ public sealed class PreviewViewModel : ObservableObject
     /// <summary>仕様書13章「PDF」：PDFを既定のアプリで開くボタン（ページを表示できない場合の代わりにも使う）。</summary>
     public RelayCommand OpenExternallyCommand { get; }
 
-    // ===== 仕様書13章「PDF」：ページの表示と移動 =====
+    // ===== 仕様書13章「PDF」：全ページをスクロールで見る =====
 
-    /// <summary>表示中のページの画像。まだ読み込めていない・読み込めなかった場合はnull。</summary>
-    public BitmapSource? PdfPageImage
-    {
-        get => _pdfPageImage;
-        private set => SetProperty(ref _pdfPageImage, value);
-    }
+    /// <summary>全ページ（場所だけ先に決まっていて、画像は、見える範囲の近くだけ描く）。</summary>
+    public ObservableCollection<PdfPageItem> PdfPages { get; } = new();
 
-    /// <summary>表示中のページ番号（1始まり）。PDFを読み込めていない間は0。</summary>
+    /// <summary>いま見えている付近のページ番号（1始まり。スクロールに合わせて、画面が更新する）。PDFを読み込めていない間は0。</summary>
     public int PdfPageNumber
     {
         get => _pdfPageNumber;
@@ -189,8 +193,6 @@ public sealed class PreviewViewModel : ObservableObject
             if (SetProperty(ref _pdfPageNumber, value))
             {
                 OnPropertyChanged(nameof(PdfPageLabel));
-                PreviousPageCommand.RaiseCanExecuteChanged();
-                NextPageCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -205,8 +207,6 @@ public sealed class PreviewViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(HasPdfPages));
                 OnPropertyChanged(nameof(PdfPageLabel));
-                PreviousPageCommand.RaiseCanExecuteChanged();
-                NextPageCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -223,11 +223,16 @@ public sealed class PreviewViewModel : ObservableObject
         private set => SetProperty(ref _pdfStatusMessage, value);
     }
 
-    /// <summary>前のページ（PageUp）。</summary>
-    public RelayCommand PreviousPageCommand { get; }
+    /// <summary>スクロールで、見えているページが変わったときに、画面が呼ぶ（範囲外は、最初・最後のページに丸める）。</summary>
+    public void SetCurrentPdfPage(int pageNumber)
+    {
+        if (PdfPageCount == 0)
+        {
+            return;
+        }
 
-    /// <summary>次のページ（PageDown）。</summary>
-    public RelayCommand NextPageCommand { get; }
+        PdfPageNumber = Math.Clamp(pageNumber, 1, PdfPageCount);
+    }
 
     /// <summary>PDFの読み込み（最初のページの表示まで）の完了を待つためのもの（テスト用）。</summary>
     internal Task PdfLoadTask { get; private set; } = Task.CompletedTask;
@@ -259,9 +264,21 @@ public sealed class PreviewViewModel : ObservableObject
                 return;
             }
 
-            _pdfDocument = result.Document;
-            PdfPageCount = result.Document.PageCount;
-            await ShowPdfPageAsync(1);
+            var document = result.Document;
+            _pdfDocument = document;
+
+            // 全ページの場所を、先に決める（画像は、見える範囲の近くだけ描く）。
+            for (var i = 0; i < document.PageCount; i++)
+            {
+                PdfPages.Add(CreatePdfPageItem(document, i));
+            }
+
+            PdfPageCount = document.PageCount;
+            PdfPageNumber = 1;
+            PdfStatusMessage = string.Empty;
+
+            // 最初に見える付近を、すぐ描く（画面からも、スクロール位置に応じて呼ばれる）。
+            await UpdatePdfVisibleRangeAsync(0, 0);
         }
         catch (OperationCanceledException)
         {
@@ -273,31 +290,118 @@ public sealed class PreviewViewModel : ObservableObject
         }
     }
 
-    /// <summary>指定のページ（1始まり。範囲外は、最初・最後のページに丸める）を表示する。</summary>
-    internal async Task ShowPdfPageAsync(int pageNumber)
+    // ページの縦横比から、画面上の大きさを決める。大きさを取れないページは、A4縦のような比にする。
+    private static PdfPageItem CreatePdfPageItem(IPdfDocument document, int pageIndex)
+    {
+        var height = PdfRenderWidth * 1.414;
+
+        try
+        {
+            var (width, pageHeight) = document.GetPageSize(pageIndex);
+            if (width > 0 && pageHeight > 0)
+            {
+                height = PdfRenderWidth * pageHeight / width;
+            }
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or ArgumentException or InvalidOperationException)
+        {
+            // このページの大きさを取れなくても、他のページは表示する。
+        }
+
+        return new PdfPageItem(pageIndex + 1, PdfRenderWidth, height);
+    }
+
+    /// <summary>
+    /// 見えているページの範囲（0始まり。<paramref name="firstVisible"/>〜<paramref name="lastVisible"/>）が変わったときに、
+    /// 画面が呼ぶ。見えているページと、その前後の少しのページの画像を描き（見えているページを先に）、
+    /// 遠くなったページの画像は捨てる。呼び出しが重なった場合は、最新の範囲だけを処理する。
+    /// </summary>
+    internal async Task UpdatePdfVisibleRangeAsync(int firstVisible, int lastVisible)
     {
         var document = _pdfDocument;
-        if (document is null || PdfPageCount == 0)
+        if (document is null || PdfPages.Count == 0)
         {
             return;
         }
 
-        pageNumber = Math.Clamp(pageNumber, 1, PdfPageCount);
-        var generation = Interlocked.Increment(ref _pdfRenderGeneration);
-        var token = _pdfCts?.Token ?? CancellationToken.None;
+        var last = PdfPages.Count - 1;
+        firstVisible = Math.Clamp(Math.Min(firstVisible, lastVisible), 0, last);
+        lastVisible = Math.Clamp(Math.Max(firstVisible, lastVisible), 0, last);
 
-        // ページ位置は、描画の完了を待たずに、すぐ更新する（連打しても、表示が追いつくようにする）。
-        PdfPageNumber = pageNumber;
+        var generation = Interlocked.Increment(ref _pdfRangeGeneration);
+        var token = _pdfCts?.Token ?? CancellationToken.None;
+        _pdfVisibleFirst = firstVisible;
+        _pdfVisibleLast = lastVisible;
+
+        // 遠くなったページの画像を捨てる。
+        for (var i = 0; i < PdfPages.Count; i++)
+        {
+            if ((i < firstVisible - PdfKeepPages || i > lastVisible + PdfKeepPages) && PdfPages[i].Image is not null)
+            {
+                PdfPages[i].Image = null;
+            }
+        }
+
+        // 見えているページ → 前後の少しのページ、の順に描く。
+        var wanted = Enumerable.Range(firstVisible, lastVisible - firstVisible + 1).ToList();
+        for (var offset = 1; offset <= PdfPrefetchPages; offset++)
+        {
+            if (lastVisible + offset <= last)
+            {
+                wanted.Add(lastVisible + offset);
+            }
+
+            if (firstVisible - offset >= 0)
+            {
+                wanted.Add(firstVisible - offset);
+            }
+        }
+
+        foreach (var index in wanted)
+        {
+            if (generation != Volatile.Read(ref _pdfRangeGeneration) || token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await RenderPdfPageAsync(document, index, generation, token);
+        }
+    }
+
+    private bool IsWithinPdfKeepRange(int index) =>
+        index >= _pdfVisibleFirst - PdfKeepPages && index <= _pdfVisibleLast + PdfKeepPages;
+
+    private async Task RenderPdfPageAsync(IPdfDocument document, int index, int generation, CancellationToken token)
+    {
+        var page = PdfPages[index];
+        if (page.Image is not null || page.FailureMessage is not null)
+        {
+            return;
+        }
 
         try
         {
-            var image = await document.RenderPageAsync(pageNumber - 1, PdfRenderWidth, token);
+            await _pdfRenderGate.WaitAsync(token);
 
-            // 描画している間に、別のページが要求された・プレビューが閉じられた場合は、古い結果を捨てる。
-            if (generation == Volatile.Read(ref _pdfRenderGeneration) && !token.IsCancellationRequested)
+            try
             {
-                PdfPageImage = image;
-                PdfStatusMessage = string.Empty;
+                // 順番を待っている間に、範囲が変わった・閉じられた場合は、描かない。
+                if (generation != Volatile.Read(ref _pdfRangeGeneration) || token.IsCancellationRequested || page.Image is not null)
+                {
+                    return;
+                }
+
+                var image = await document.RenderPageAsync(index, PdfRenderWidth, token);
+
+                // 描いている間に、そのページが遠くなっていた（スクロールが進んだ）場合は、捨てる（メモリを使わないため）。
+                if (!token.IsCancellationRequested && IsWithinPdfKeepRange(index))
+                {
+                    page.Image = image;
+                }
+            }
+            finally
+            {
+                _pdfRenderGate.Release();
             }
         }
         catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
@@ -306,10 +410,7 @@ public sealed class PreviewViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            if (generation == Volatile.Read(ref _pdfRenderGeneration))
-            {
-                PdfStatusMessage = $"{pageNumber}ページ目を表示できませんでした。({ex.Message})";
-            }
+            page.FailureMessage = $"このページを表示できませんでした。({ex.Message})";
         }
     }
 
@@ -337,6 +438,7 @@ public sealed class PreviewViewModel : ObservableObject
 
         // PDFの読み込み・描画を中断し、開いているPDFを閉じる（ファイルを開いたままにしない）。
         _pdfCts?.Cancel();
+        Interlocked.Increment(ref _pdfRangeGeneration);
         _pdfDocument?.Dispose();
         _pdfDocument = null;
     }

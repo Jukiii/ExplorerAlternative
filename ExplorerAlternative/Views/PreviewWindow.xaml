@@ -156,8 +156,8 @@
                 </Image>
             </ScrollViewer>
 
-            <!-- 仕様書13章「PDF」：Windows標準のPDF描画で、ページを画像として表示する。PageUp/PageDownで
-                 ページ移動（←/→は、ほかのファイルと同じく、前後のファイルへの移動）。読み込み中・読み込めなかった
+            <!-- 仕様書13章「PDF」：Windows標準のPDF描画で、全ページを縦に並べて、普通にスクロールで見る。
+                 画像は、見えている付近のページだけ描く（遠くなったページは捨てる）。読み込み中・読み込めなかった
                  場合は、その旨と、ファイル情報、「既定のアプリで開く」ボタンを表示する。 -->
             <Grid>
                 <Grid.Style>
@@ -175,7 +175,7 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- ページ移動のバー（PDFを読み込めて、ページがあるときだけ表示する）。 -->
+                <!-- ページ位置の表示（PDFを読み込めて、ページがあるときだけ表示する）。 -->
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
                     <StackPanel.Style>
                         <Style TargetType="StackPanel">
@@ -187,37 +187,63 @@
                             </Style.Triggers>
                         </Style>
                     </StackPanel.Style>
-                    <Button Content="◀ 前のページ" Padding="8,3" ToolTip="前のページ (PageUp)" Command="{Binding PreviousPageCommand}" />
-                    <TextBlock Text="{Binding PdfPageLabel}" VerticalAlignment="Center" Margin="10,0" FontWeight="SemiBold" />
-                    <Button Content="次のページ ▶" Padding="8,3" ToolTip="次のページ (PageDown)" Command="{Binding NextPageCommand}" />
-                    <TextBlock Text="PageUp / PageDown でページ移動" Foreground="{DynamicResource TextSecondaryBrush}"
+                    <TextBlock Text="{Binding PdfPageLabel}" VerticalAlignment="Center" FontWeight="SemiBold" />
+                    <TextBlock Text="スクロール、または PageUp / PageDown で移動" Foreground="{DynamicResource TextSecondaryBrush}"
                                FontSize="12" VerticalAlignment="Center" Margin="12,0,0,0" />
                 </StackPanel>
 
-                <!-- ページの画像。幅に合わせて縮小し、縦はスクロールで見る。 -->
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <!-- 全ページ。幅に合わせて縮小して並べ、縦にスクロールする。 -->
+                <ScrollViewer x:Name="PdfScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled" ScrollChanged="PdfScrollViewer_ScrollChanged"
+                              SizeChanged="PdfScrollViewer_SizeChanged">
                     <ScrollViewer.Style>
                         <Style TargetType="ScrollViewer">
-                            <Setter Property="Visibility" Value="Visible" />
+                            <Setter Property="Visibility" Value="Collapsed" />
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding PdfPageImage}" Value="{x:Null}">
-                                    <Setter Property="Visibility" Value="Collapsed" />
+                                <DataTrigger Binding="{Binding HasPdfPages}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </ScrollViewer.Style>
-                    <Image Source="{Binding PdfPageImage}" Stretch="Uniform" StretchDirection="DownOnly"
-                           HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
+                    <ItemsControl x:Name="PdfPagesControl" ItemsSource="{Binding PdfPages}" Margin="0,0,8,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:PdfPageItem}">
+                                <Viewbox Stretch="Uniform" StretchDirection="DownOnly" Margin="0,0,0,10" HorizontalAlignment="Center">
+                                    <Grid Width="{Binding LayoutWidth}" Height="{Binding LayoutHeight}" Background="White">
+                                        <Image Source="{Binding Image}" Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality" />
+                                        <!-- まだ描いていないページ（または、描けなかったページ）：ページ番号の入った空白。 -->
+                                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                            <StackPanel.Style>
+                                                <Style TargetType="StackPanel">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsPlaceholder}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </StackPanel.Style>
+                                            <TextBlock Text="{Binding PageNumber, StringFormat=ページ {0}}" FontSize="40" Foreground="#FF9A9A9A"
+                                                       HorizontalAlignment="Center" />
+                                            <TextBlock Text="{Binding FailureMessage}" FontSize="20" Foreground="#FFB00020" TextWrapping="Wrap"
+                                                       MaxWidth="800" HorizontalAlignment="Center" Margin="0,16,0,0" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Viewbox>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </ScrollViewer>
 
                 <!-- ページを表示できていないとき（読み込み中・読み込めなかった）：状態、ファイル情報、既定のアプリで開くボタン。 -->
                 <StackPanel Grid.Row="1" VerticalAlignment="Top">
                     <StackPanel.Style>
                         <Style TargetType="StackPanel">
-                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Setter Property="Visibility" Value="Visible" />
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding PdfPageImage}" Value="{x:Null}">
-                                    <Setter Property="Visibility" Value="Visible" />
+                                <DataTrigger Binding="{Binding HasPdfPages}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>

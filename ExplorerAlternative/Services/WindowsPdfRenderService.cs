@@ -75,6 +75,19 @@ public sealed class WindowsPdfRenderService : IPdfRenderService
 
         public int PageCount => (int)_document.PageCount;
 
+        public (double Width, double Height) GetPageSize(int pageIndex)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (pageIndex < 0 || pageIndex >= PageCount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(pageIndex), $"ページ番号が範囲外です。(0〜{PageCount - 1})");
+            }
+
+            using var page = _document.GetPage((uint)pageIndex);
+            return (page.Size.Width, page.Size.Height);
+        }
+
         public async Task<BitmapSource> RenderPageAsync(int pageIndex, int widthPixels, CancellationToken cancellationToken)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
