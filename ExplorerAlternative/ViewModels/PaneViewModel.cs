@@ -520,8 +520,13 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         GoForwardCommand.RaiseCanExecuteChanged();
     }
 
-    /// <summary>実際にフォルダ内容を読み込んで表示を更新する（履歴には影響しない）。</summary>
-    private void LoadPath(string path)
+    /// <summary>
+    /// 実際にフォルダ内容を読み込んで表示を更新する（履歴には影響しない）。
+    /// <paramref name="raisePathChanged"/>は、パスの変更の通知（ターミナルの同期・最近使った場所の記録）を行うか。
+    /// 同じフォルダの再読み込み（F5・外部のファイル変更による自動更新・Git/SVNの切替）では、パスは変わっていないので、
+    /// 通知しない（通知すると、ファイルが変わるたびに、ターミナルへ「Set-Location」が送られ続けてしまう）。
+    /// </summary>
+    private void LoadPath(string path, bool raisePathChanged = true)
     {
         try
         {
@@ -610,7 +615,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             RebaseCommand.RaiseCanExecuteChanged();
             InitRepositoryCommand.RaiseCanExecuteChanged();
 
-            PathChanged?.Invoke(path);
+            if (raisePathChanged)
+            {
+                PathChanged?.Invoke(path);
+            }
 
             if (!isComputerRoot)
             {
@@ -689,7 +697,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         }
 
         _preferredVcs = VcsInfo.OtherKind;
-        LoadPath(CurrentPath);
+        LoadPath(CurrentPath, raisePathChanged: false);
     }
 
     private void RefreshVisibleVcsStatusDisplay()
@@ -701,7 +709,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>現在フォルダを再読込する（履歴には積まない）。</summary>
-    public void RefreshCurrentFolder() => LoadPath(CurrentPath);
+    public void RefreshCurrentFolder() => LoadPath(CurrentPath, raisePathChanged: false);
 
     // 仕様書64章：FileSystemWatcherの通知は背景スレッドから来るため、UIスレッドへ
     // マーシャリングした上で、短時間に連続する変化をまとめるためデバウンスしてから更新する。
