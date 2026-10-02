@@ -139,15 +139,50 @@ public sealed class SftpBrowserViewModel : ObservableObject, IDisposable
 
     public RelayCommand DeleteCommand { get; }
 
+    /// <summary>パスフレーズ付きの秘密鍵で、パスフレーズを間違えてよい回数（この回数まで、入力し直せる）。</summary>
+    internal const int MaxPassphraseAttempts = 3;
+
     private void Connect(ISftpService sftpService, string? password)
     {
+        string? passphrase = null;
+
         try
         {
             StatusMessage = "接続中...";
-            _session = sftpService.Connect(Profile, password);
+
+            // 秘密鍵がパスフレーズで保護されている場合は、利用者に入力してもらって、つなぎ直す
+            // （パスフレーズは保存せず、この接続のあいだだけ、メモリに持つ）。
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    _session = sftpService.Connect(Profile, password, passphrase);
+                    break;
+                }
+                catch (SftpKeyPassphraseException ex) when (attempt <= MaxPassphraseAttempts)
+                {
+                    passphrase = _dialogService.PromptPassword(
+                        "秘密鍵のパスフレーズ",
+                        ex.WasWrong
+                            ? $"{ex.Message}\nもう一度入力してください。（{attempt}/{MaxPassphraseAttempts}回目）"
+                            : $"{ex.Message}\nパスフレーズを入力してください。（保存はされません）");
+
+                    if (string.IsNullOrEmpty(passphrase))
+                    {
+                        StatusMessage = "接続をキャンセルしました。";
+                        return;
+                    }
+                }
+            }
+
             CurrentPath = _session.HomeDirectory;
             IsConnected = true;
             Refresh();
+        }
+        catch (SftpKeyPassphraseException ex)
+        {
+            StatusMessage = "接続に失敗しました。";
+            _dialogService.ShowError($"{ex.Message}\n入力できる回数（{MaxPassphraseAttempts}回）を超えたため、接続をやめました。");
         }
         catch (AppOperationException ex)
         {

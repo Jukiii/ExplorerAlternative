@@ -57,6 +57,16 @@ public sealed class DialogService : IDialogService
         return dialog.ShowDialog() == true ? dialog.InputText : null;
     }
 
+    public string? PromptPassword(string title, string message)
+    {
+        var dialog = new PasswordPromptDialog(title, message)
+        {
+            Owner = Application.Current?.MainWindow
+        };
+
+        return dialog.ShowDialog() == true ? dialog.Password : null;
+    }
+
     public string? ShowOpenFolderDialog(string title)
     {
         var dialog = new OpenFolderDialog { Title = title };
