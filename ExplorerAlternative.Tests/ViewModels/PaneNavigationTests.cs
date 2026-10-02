@@ -221,6 +221,91 @@ public sealed class PaneNavigationTests : IDisposable
         Assert.Equal(new[] { "one", "x.txt", "two" }, Visible());
     }
 
+    // ===== パス変更の通知（ターミナルの同期・最近使った場所の記録に使う） =====
+
+    // 同じフォルダの再読み込み（F5・外部のファイル変更による自動更新）では、パスは変わっていない。通知すると、
+    // ファイルが変わり続けるフォルダ（他のアプリが書き込んでいるリポジトリ等）で、ターミナルへ「Set-Location」が
+    // 送られ続けてしまう（ターミナルの同期がONのとき、同じ行が延々と入力される不具合の原因だった）。
+    [Fact]
+    public void Refresh_DoesNotRaisePathChanged_SoTheTerminalIsNotToldToChangeDirectoryAgain()
+    {
+        var raised = new List<string>();
+        Pane.PathChanged += raised.Add;
+
+        Pane.RefreshCurrentFolder();
+        Pane.RefreshCommand.Execute(null);
+        Pane.RefreshCurrentFolder();
+
+        Assert.Empty(raised);
+    }
+
+    [Fact]
+    public void Refresh_StillShowsNewFiles_WithoutRaisingPathChanged()
+    {
+        var raised = new List<string>();
+        Pane.RefreshCurrentFolder();
+        Pane.PathChanged += raised.Add;
+
+        File_("added.txt");
+        Pane.RefreshCurrentFolder();
+
+        Assert.Equal(new[] { "added.txt" }, Visible());
+        Assert.Empty(raised);
+    }
+
+    [Fact]
+    public void ToggleShowHidden_ReloadsTheFolder_WithoutRaisingPathChanged()
+    {
+        File_(".hidden");
+        Pane.RefreshCurrentFolder();
+        var raised = new List<string>();
+        Pane.PathChanged += raised.Add;
+
+        Pane.ToggleShowHiddenFilesCommand.Execute(null);
+
+        Assert.Contains(".hidden", Visible());
+        Assert.Empty(raised);
+    }
+
+    [Fact]
+    public void Navigating_ToADifferentFolder_RaisesPathChangedOnce()
+    {
+        var sub = Dir("sub");
+        var raised = new List<string>();
+        Pane.PathChanged += raised.Add;
+
+        Pane.NavigateTo(sub);
+
+        Assert.Equal(new[] { sub }, raised);
+    }
+
+    // 利用者が、同じフォルダへ、もう一度移動する操作（ターミナルが、cdでずれたときに、Explorerのフォルダへ
+    // そろえ直したい場合）は、明示的な操作なので、通知する。
+    [Fact]
+    public void Navigating_ToTheSameFolderExplicitly_RaisesPathChanged_SoTheTerminalCanBeRealigned()
+    {
+        var raised = new List<string>();
+        Pane.PathChanged += raised.Add;
+
+        Pane.NavigateTo(_host.Root);
+
+        Assert.Equal(new[] { _host.Root }, raised);
+    }
+
+    [Fact]
+    public void BackAndForward_RaisePathChanged()
+    {
+        var a = Dir("a");
+        Pane.NavigateTo(a);
+        var raised = new List<string>();
+        Pane.PathChanged += raised.Add;
+
+        Pane.GoBack();
+        Pane.GoForward();
+
+        Assert.Equal(new[] { _host.Root, a }, raised);
+    }
+
     // ===== 移動・履歴 =====
 
     [Fact]
