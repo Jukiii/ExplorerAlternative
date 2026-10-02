@@ -133,7 +133,7 @@
             </RichTextBox>
 
             <!-- 仕様書13章：画像プレビュー。マウスホイールで拡大縮小、スクロールバーでパンする。 -->
-            <ScrollViewer x:Name="ImageScrollViewer" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+            <ScrollViewer x:Name="ImageScrollViewer" PanningMode="Both" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
                           PreviewMouseWheel="ImageScrollViewer_PreviewMouseWheel"
                           PreviewMouseLeftButtonDown="ImageScrollViewer_PreviewMouseLeftButtonDown"
                           PreviewMouseMove="ImageScrollViewer_PreviewMouseMove"
@@ -193,7 +193,7 @@
                 </StackPanel>
 
                 <!-- 全ページ。幅に合わせて縮小して並べ、縦にスクロールする。 -->
-                <ScrollViewer x:Name="PdfScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                <ScrollViewer x:Name="PdfScrollViewer" Grid.Row="1" PanningMode="Both" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled" ScrollChanged="PdfScrollViewer_ScrollChanged"
                               SizeChanged="PdfScrollViewer_SizeChanged">
                     <ScrollViewer.Style>
@@ -255,7 +255,7 @@
             </Grid>
 
             <!-- 仕様書14章：フォルダQuick Look（項目数・サイズ・更新日時・Git/SVN状態・タグ・最近変更されたファイル）。 -->
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" PanningMode="Both">
                 <ScrollViewer.Style>
                     <Style TargetType="ScrollViewer">
                         <Setter Property="Visibility" Value="Collapsed" />

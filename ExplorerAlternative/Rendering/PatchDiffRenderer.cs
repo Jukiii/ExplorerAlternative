@@ -11,6 +11,19 @@ namespace ExplorerAlternative.Rendering;
 /// </summary>
 public static class PatchDiffRenderer
 {
+    /// <summary>追加された行（+）の背景（黄緑）。文字色は変えず、背景だけで示す（どのテーマでも読めるように、少し透かす）。</summary>
+    public static readonly Brush AddedBackground = CreateBrush(150, 154, 205, 50);
+
+    /// <summary>削除された行（-）の背景（赤）。</summary>
+    public static readonly Brush RemovedBackground = CreateBrush(150, 220, 50, 47);
+
+    private static Brush CreateBrush(byte alpha, byte red, byte green, byte blue)
+    {
+        var brush = new SolidColorBrush(Color.FromArgb(alpha, red, green, blue));
+        brush.Freeze();
+        return brush;
+    }
+
     public static FlowDocument Render(string patchText)
     {
         var document = new FlowDocument { PagePadding = new Thickness(4), FontFamily = new FontFamily("Consolas") };
@@ -57,13 +70,11 @@ public static class PatchDiffRenderer
         }
         else if (line.StartsWith("+", StringComparison.Ordinal))
         {
-            run.Foreground = Brushes.Green;
-            paragraph.Background = new SolidColorBrush(Color.FromArgb(30, 0, 200, 0));
+            paragraph.Background = AddedBackground;
         }
         else if (line.StartsWith("-", StringComparison.Ordinal))
         {
-            run.Foreground = Brushes.Firebrick;
-            paragraph.Background = new SolidColorBrush(Color.FromArgb(30, 200, 0, 0));
+            paragraph.Background = RemovedBackground;
         }
 
         paragraph.Inlines.Add(run);
