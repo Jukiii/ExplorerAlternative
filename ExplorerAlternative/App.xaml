@@ -39,6 +39,13 @@
         <!-- ListBoxは既定（Fluent）テンプレートのクロム背景がBackgroundプロパティを
              参照しないため、Setterで上書きしても効かない（ScrollBarと同様の問題）。
              最小限のテンプレートに差し替えて確実に反映させる。 -->
+        <!-- タッチパネルの指でなぞって、スクロールできるようにする（既定は、タッチでのスクロールが無効）。
+             ListBox・ListView・TextBox等の内部のScrollViewerにも、この既定のスタイルが適用される。
+             個別にStyleを指定しているScrollViewerは、PanningModeを個別に指定する。 -->
+        <Style TargetType="ScrollViewer">
+            <Setter Property="PanningMode" Value="Both" />
+        </Style>
+
         <Style TargetType="ListBox">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />

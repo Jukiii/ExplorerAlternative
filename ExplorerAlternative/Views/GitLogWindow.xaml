@@ -45,13 +45,14 @@
                           Background="{DynamicResource BorderBrush2}" Focusable="False" />
 
             <!-- 仕様書21章「Show Commit」：選択したコミットの変更内容をdiff形式でそのまま表示する。 -->
-            <TextBox Grid.Column="2" Text="{Binding DiffText, Mode=OneWay}" IsReadOnly="True"
-                     FontFamily="Consolas" FontSize="12" TextWrapping="NoWrap"
-                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
-                     Background="{DynamicResource TerminalBackgroundBrush}"
-                     Foreground="{DynamicResource TerminalForegroundBrush}"
-                     BorderThickness="1" BorderBrush="{DynamicResource BorderBrush2}"
-                     Margin="8,0,0,0" Padding="8" />
+            <!-- 追加行（+）は背景を黄緑、削除行（-）は背景を赤にして表示する（PatchDiffRenderer。内容は、コードビハインドで設定）。 -->
+            <RichTextBox x:Name="DiffViewer" Grid.Column="2" IsReadOnly="True"
+                         FontFamily="Consolas" FontSize="12"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                         Background="{DynamicResource TerminalBackgroundBrush}"
+                         Foreground="{DynamicResource TerminalForegroundBrush}"
+                         BorderThickness="1" BorderBrush="{DynamicResource BorderBrush2}"
+                         Margin="8,0,0,0" Padding="8" />
         </Grid>
     </Grid>
 </Window>

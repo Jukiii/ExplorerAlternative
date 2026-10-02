@@ -41,16 +41,16 @@ public sealed class PatchDiffRendererTests
         Assert.Equal(1, PatchDiffRenderer.CountFiles(GitPatch.Replace("\n", "\r\n")));
     }
 
-    private static (string Text, Brush? Foreground, bool HasBackground)[] Lines(string patch)
+    private static (string Text, Brush? Foreground, bool HasBackground, Brush? Background)[] Lines(string patch)
     {
-        var result = new List<(string, Brush?, bool)>();
+        var result = new List<(string, Brush?, bool, Brush?)>();
         StaTest.Run(() =>
         {
             var doc = PatchDiffRenderer.Render(patch);
             foreach (var p in doc.Blocks.OfType<Paragraph>())
             {
                 var run = (Run)p.Inlines.First();
-                result.Add((run.Text, run.Foreground, p.Background is not null));
+                result.Add((run.Text, run.Foreground, p.Background is not null, p.Background));
             }
         });
         return result.ToArray();
@@ -65,16 +65,45 @@ public sealed class PatchDiffRendererTests
         Assert.Equal("-old", lines[6].Text);
     }
 
+    // 運営者の指示（2026-10-03）：追加行（+）は背景を黄緑、削除行（-）は背景を赤にする。
     [Fact]
-    public void Render_AddedAndRemovedLines_GetColorsAndBackground_ContextDoesNot()
+    public void Render_AddedLinesGetAYellowGreenBackground_RemovedLinesARedOne_ContextNone()
     {
         var lines = Lines(GitPatch);
 
-        Assert.Same(Brushes.Green, lines[7].Foreground);
-        Assert.True(lines[7].HasBackground);
-        Assert.Same(Brushes.Firebrick, lines[6].Foreground);
-        Assert.True(lines[6].HasBackground);
+        Assert.Same(PatchDiffRenderer.AddedBackground, lines[7].Background);
+        Assert.Same(PatchDiffRenderer.RemovedBackground, lines[6].Background);
         Assert.False(lines[5].HasBackground); // " context"
+    }
+
+    [Fact]
+    public void Backgrounds_AreYellowGreenAndRed()
+    {
+        var added = ((SolidColorBrush)PatchDiffRenderer.AddedBackground).Color;
+        var removed = ((SolidColorBrush)PatchDiffRenderer.RemovedBackground).Color;
+
+        // 黄緑：緑が強く、赤は中程度、青が小さい。赤：赤が強く、緑・青が小さい。
+        Assert.True(added.G > added.R && added.R > added.B);
+        Assert.True(removed.R > removed.G && removed.R > removed.B);
+        Assert.True(PatchDiffRenderer.AddedBackground.IsFrozen && PatchDiffRenderer.RemovedBackground.IsFrozen);
+    }
+
+    // 背景で示すので、文字の色は変えない（テーマの文字色のまま。どちらの背景でも読める）。
+    [Fact]
+    public void Render_AddedAndRemovedLines_KeepTheNormalTextColor()
+    {
+        StaTest.Run(() =>
+        {
+            var document = PatchDiffRenderer.Render(GitPatch);
+            var blocks = document.Blocks.OfType<Paragraph>().ToList();
+
+            // 文字色を、行に直接指定していない（周りの色を引き継ぐ）。
+            foreach (var index in new[] { 6, 7 })
+            {
+                var run = (Run)blocks[index].Inlines.First();
+                Assert.Equal(System.Windows.DependencyProperty.UnsetValue, run.ReadLocalValue(TextElement.ForegroundProperty));
+            }
+        });
     }
 
     [Fact]
