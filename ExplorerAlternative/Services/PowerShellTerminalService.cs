@@ -83,7 +83,16 @@ public sealed class PowerShellTerminalService : IPowerShellTerminalService
             startInfo.Environment["CLICOLOR_FORCE"] = "1";
 
             _process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-            _process.Start();
+
+            // Ctrl+Cの送信（Interrupt）は、一時的に、対象のシェルのコンソールへ、このプロセスをアタッチする。
+            // その間にシェルを起動すると、新しいシェルが、アタッチ先のコンソール（直前のシェルのもので、
+            // まもなく消える）を共有してしまい、新しいシェルへのCtrl+Cが届かなくなる。
+            // そのため、起動もアタッチと同じロックで直列化し、アタッチ中は起動を待たせる（最長で0.2秒ほど）。
+            lock (ConsoleAttachLock)
+            {
+                _process.Start();
+            }
+
             _process.StandardInput.AutoFlush = true;
 
             _readCancellation = new CancellationTokenSource();

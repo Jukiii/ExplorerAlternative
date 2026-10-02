@@ -86,6 +86,17 @@ public sealed class PowerShellTerminalServiceTests : IDisposable
             $"コマンドの結果が届きませんでした。受信内容: [{Output()}]");
     }
 
+    // 60秒のスリープを始める。スリープの直前に目印を出力するので、その目印が届けば、コマンドが実行中になっている
+    // （固定の時間だけ待つ方式だと、PowerShellの起動が遅い環境で、実行が始まる前にCtrl+Cを送ってしまい、
+    // 中断が効かず、テストが不安定になっていた）。目印は、入力のエコーバックと区別するため、連結して作る。
+    private void StartLongRunningCommand(string marker)
+    {
+        _sut.SendCommand($"Write-Output ('{marker}-' + 'RUNNING'); Start-Sleep -Seconds 60");
+
+        Assert.True(WaitFor(text => text.Contains($"{marker}-RUNNING", StringComparison.Ordinal)),
+            $"コマンドが実行中になりませんでした。受信内容: [{Output()}]");
+    }
+
     // 仕様書17章「Ctrl+C」：実行中のコマンドを中断でき、その後もシェルが使えること。
     // 中断できなければ、次のコマンドは60秒のスリープが終わるまで実行されないため、
     // 制限時間内に結果が届くかどうかで判定できる。
@@ -95,8 +106,7 @@ public sealed class PowerShellTerminalServiceTests : IDisposable
         _sut.Start();
         Assert.True(WaitFor(text => text.Contains("PS ", StringComparison.Ordinal)), "シェルの起動を確認できませんでした。");
 
-        _sut.SendCommand("Start-Sleep -Seconds 60");
-        Thread.Sleep(1500); // コマンドが実行中になるまで待つ
+        StartLongRunningCommand("FIRST");
 
         var stopwatch = Stopwatch.StartNew();
         _sut.Interrupt();
@@ -118,10 +128,13 @@ public sealed class PowerShellTerminalServiceTests : IDisposable
 
         for (var i = 0; i < 3; i++)
         {
-            _sut.SendCommand("Start-Sleep -Seconds 60");
-            Thread.Sleep(800);
+            StartLongRunningCommand($"ROUND{i}");
             _sut.Interrupt();
-            Thread.Sleep(800);
+
+            // 中断のあと、シェルが次のコマンドに応えること（中断できていなければ、60秒のスリープが終わるまで応えない）。
+            _sut.SendCommand($"Write-Output ('BACK{i}-' + 'OK')");
+            Assert.True(WaitFor(text => text.Contains($"BACK{i}-OK", StringComparison.Ordinal), TimeSpan.FromSeconds(20)),
+                $"{i + 1}回目の中断のあと、シェルが応答しませんでした。受信内容: [{Output()}]");
         }
 
         _sut.SendCommand("Write-Output ('STILL-' + 'ALIVE')");
@@ -129,6 +142,65 @@ public sealed class PowerShellTerminalServiceTests : IDisposable
         Assert.True(WaitFor(text => text.Contains("STILL-ALIVE", StringComparison.Ordinal), TimeSpan.FromSeconds(20)),
             $"繰り返しの中断後にシェルが応答しませんでした。受信内容: [{Output()}]");
         Assert.True(_sut.IsRunning);
+    }
+
+    // Ctrl+Cの送信は、一時的に、対象のシェルのコンソールへ、このプロセスをアタッチする。その最中に次のシェルを起動すると、
+    // 新しいシェルが、アタッチ先のコンソール（直前のシェルのもの）を共有してしまい、新しいシェルへのCtrl+Cが
+    // 届かなくなっていた（シェルを続けて作ると、1つおきに中断できなかった）。起動をアタッチと同じロックで
+    // 直列化したので、続けて起動したシェルでも、それぞれCtrl+Cが効くこと。
+    [Fact]
+    public void Interrupt_WorksForShellsStartedRightAfterAnotherOneWasInterrupted()
+    {
+        for (var round = 0; round < 4; round++)
+        {
+            var output = new StringBuilder();
+            var outputLock = new object();
+            using var shell = new PowerShellTerminalService("powershell.exe", loadProfile: false, invokeOnUi: action => action());
+            shell.OutputReceived += (_, text) =>
+            {
+                lock (outputLock)
+                {
+                    output.Append(text);
+                }
+            };
+
+            bool Wait(string expected, TimeSpan timeout)
+            {
+                var stopwatch = Stopwatch.StartNew();
+
+                while (stopwatch.Elapsed < timeout)
+                {
+                    lock (outputLock)
+                    {
+                        if (output.ToString().Contains(expected, StringComparison.Ordinal))
+                        {
+                            return true;
+                        }
+                    }
+
+                    Thread.Sleep(30);
+                }
+
+                lock (outputLock)
+                {
+                    return output.ToString().Contains(expected, StringComparison.Ordinal);
+                }
+            }
+
+            shell.Start();
+            Assert.True(Wait("PS ", Timeout), $"{round + 1}つ目のシェルが起動しませんでした。");
+
+            shell.SendCommand($"Write-Output ('R{round}-' + 'RUNNING'); Start-Sleep -Seconds 60");
+            Assert.True(Wait($"R{round}-RUNNING", Timeout), $"{round + 1}つ目のシェルのコマンドが実行中になりませんでした。");
+
+            shell.Interrupt();
+            shell.SendCommand($"Write-Output ('R{round}-' + 'AFTER')");
+
+            // 中断できなければ、60秒のスリープが終わるまで、応答しない。
+            Assert.True(Wait($"R{round}-AFTER", TimeSpan.FromSeconds(15)), $"{round + 1}つ目のシェルを、Ctrl+Cで中断できませんでした。");
+
+            // 次のシェルは、このCtrl+Cの送信（アタッチ中）が終わる前に、すぐ起動する（Disposeのあと、間を置かない）。
+        }
     }
 
     [Fact]
