@@ -876,7 +876,10 @@
                 <Border Grid.Row="1" Background="{DynamicResource TerminalBackgroundBrush}"
                         Visibility="{Binding TerminalHost.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}"
                         PreviewMouseLeftButtonDown="TerminalPanel_MouseLeftButtonDown">
-                    <Grid Height="{Binding TerminalHost.PanelHeight}" DataContext="{Binding TerminalHost}">
+                    <!-- 同じ要素にDataContextとHeightのバインディングを書くと、Heightは、変更後のDataContext（TerminalHost）を
+                         基準に探されるため、パスは「PanelHeight」でなければならない（「TerminalHost.PanelHeight」だと見つからず、
+                         高さが自動になって、内容に合わせて枠が広がってしまう）。 -->
+                    <Grid Height="{Binding PanelHeight}" DataContext="{Binding TerminalHost}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
