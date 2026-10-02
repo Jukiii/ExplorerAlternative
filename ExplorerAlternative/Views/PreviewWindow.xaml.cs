@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using ExplorerAlternative.ViewModels;
@@ -24,6 +25,59 @@ public partial class PreviewWindow : Window
         ImageScaleTransform.ScaleX = 1;
         ImageScaleTransform.ScaleY = 1;
         previewViewModel.RequestJumpToLine = JumpToLine;
+
+        // 仕様書13章「PDF」：PDFを読み込んで、ページの場所が決まったら、見えている付近を描く。
+        PdfScrollViewer.ScrollToTop();
+        previewViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PreviewViewModel.PdfPageCount) && ReferenceEquals(DataContext, previewViewModel))
+            {
+                Dispatcher.BeginInvoke(new Action(UpdatePdfVisibleRange), System.Windows.Threading.DispatcherPriority.Loaded);
+            }
+        };
+    }
+
+    private void PdfScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e) => UpdatePdfVisibleRange();
+
+    private void PdfScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e) => UpdatePdfVisibleRange();
+
+    // 仕様書13章「PDF」：各ページの、表示領域の中での位置を集めて、見えているページの範囲と、いまのページ番号を
+    // ViewModelへ伝える（計算は、PdfScrollCalculator。画像を描くのは、ViewModelの役目。Viewは、位置を集めるだけ）。
+    private void UpdatePdfVisibleRange()
+    {
+        if (DataContext is not PreviewViewModel { Kind: PreviewKind.Pdf } viewModel || viewModel.PdfPages.Count == 0)
+        {
+            return;
+        }
+
+        var viewportHeight = PdfScrollViewer.ViewportHeight;
+        var bounds = new List<(double Top, double Bottom)?>(viewModel.PdfPages.Count);
+
+        for (var i = 0; i < viewModel.PdfPages.Count; i++)
+        {
+            if (PdfPagesControl.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement container)
+            {
+                bounds.Add(null);
+                continue;
+            }
+
+            var top = container.TranslatePoint(new Point(0, 0), PdfScrollViewer).Y;
+            bounds.Add((top, top + container.ActualHeight));
+
+            // 表示領域より下のページは、位置を調べる必要がない。
+            if (top >= viewportHeight)
+            {
+                break;
+            }
+        }
+
+        if (PdfScrollCalculator.Compute(bounds, viewportHeight) is not { } range)
+        {
+            return;
+        }
+
+        viewModel.SetCurrentPdfPage(range.CurrentPage + 1);
+        _ = viewModel.UpdatePdfVisibleRangeAsync(range.FirstVisible, range.LastVisible);
     }
 
     // 仕様書16章「シンボルクリックで該当位置へジャンプ」。
@@ -63,14 +117,24 @@ public partial class PreviewWindow : Window
                 e.Handled = true;
                 break;
 
-            // 仕様書13章「PDFページ移動」：PDFのときだけ、PageUp/PageDownでページを移動する。
+            // 仕様書13章「PDF」：PDFのときだけ、PageUp/PageDown（とHome/End）で、1画面分ずつスクロールする。
             case Key.PageUp when viewModel.Kind == PreviewKind.Pdf:
-                viewModel.PreviousPageCommand.Execute(null);
+                PdfScrollViewer.ScrollToVerticalOffset(PdfScrollViewer.VerticalOffset - (PdfScrollViewer.ViewportHeight * 0.9));
                 e.Handled = true;
                 break;
 
             case Key.PageDown when viewModel.Kind == PreviewKind.Pdf:
-                viewModel.NextPageCommand.Execute(null);
+                PdfScrollViewer.ScrollToVerticalOffset(PdfScrollViewer.VerticalOffset + (PdfScrollViewer.ViewportHeight * 0.9));
+                e.Handled = true;
+                break;
+
+            case Key.Home when viewModel.Kind == PreviewKind.Pdf:
+                PdfScrollViewer.ScrollToTop();
+                e.Handled = true;
+                break;
+
+            case Key.End when viewModel.Kind == PreviewKind.Pdf:
+                PdfScrollViewer.ScrollToBottom();
                 e.Handled = true;
                 break;
 

@@ -22,6 +22,12 @@ public interface IPdfDocument : IDisposable
     int PageCount { get; }
 
     /// <summary>
+    /// 指定のページ（0始まり）の大きさ（縦横比を求めるためのもの。単位は問わない）。
+    /// 全ページの画像を描く前に、スクロールの長さ（各ページの場所）を決めるために使う。
+    /// </summary>
+    (double Width, double Height) GetPageSize(int pageIndex);
+
+    /// <summary>
     /// 指定のページ（0始まり）を、幅<paramref name="widthPixels"/>ピクセルの画像として描画する（縦横比は保つ）。
     /// 描画した画像は、別のスレッドからも使えるよう、フリーズしてある。
     /// </summary>

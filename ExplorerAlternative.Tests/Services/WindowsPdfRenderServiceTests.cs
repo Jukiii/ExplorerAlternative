@@ -194,6 +194,41 @@ public sealed class WindowsPdfRenderServiceTests : IDisposable
         document.Dispose();
     }
 
+    // ===== ページの大きさ =====
+
+    [Fact]
+    public async Task PageSize_GivesTheShapeOfThePage()
+    {
+        var path = PdfTestFile.Write(_root, "size.pdf", 2);
+        using var document = (await _sut.OpenAsync(path, CancellationToken.None)).Document!;
+
+        var (width, height) = document.GetPageSize(0);
+
+        // 300x400ポイントのページ（縦横比 3:4）。単位は問わないが、縦横比は保たれる。
+        Assert.Equal(4.0 / 3.0, height / width, precision: 2);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(2)]
+    public async Task PageSize_OutOfRange_Throws(int pageIndex)
+    {
+        var path = PdfTestFile.Write(_root, "size2.pdf", 2);
+        using var document = (await _sut.OpenAsync(path, CancellationToken.None)).Document!;
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => document.GetPageSize(pageIndex));
+    }
+
+    [Fact]
+    public async Task PageSize_AfterDispose_Throws()
+    {
+        var path = PdfTestFile.Write(_root, "size3.pdf", 1);
+        var document = (await _sut.OpenAsync(path, CancellationToken.None)).Document!;
+        document.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => document.GetPageSize(0));
+    }
+
     // ===== ファイルを開いたままにしない =====
 
     // プレビューで開いている間も、他のアプリ（このアプリ自身の削除・名前変更を含む）がファイルを
