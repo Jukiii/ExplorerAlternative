@@ -7,7 +7,7 @@ using Renci.SshNet.Common;
 namespace ExplorerAlternative.Services;
 
 /// <summary>仕様書44章「SFTPリモートファイル操作」の実装。SSH.NET（Renci.SshNet）を使用する。
-/// パスフレーズ付き秘密鍵には対応しない（パスフレーズはどこにも保存しない方針のため）。</summary>
+/// パスフレーズ付きの秘密鍵は、接続のたびに利用者に入力してもらう（パスフレーズはどこにも保存しない）。</summary>
 public sealed class SftpService : ISftpService
 {
     /// <summary>
@@ -29,20 +29,70 @@ public sealed class SftpService : ISftpService
         return name;
     }
 
-    public ISftpSession Connect(SshConnectionProfile profile, string? password)
+    /// <summary>
+    /// 秘密鍵を読み込む。パスフレーズで保護されていて、パスフレーズが無い・違う場合は、
+    /// <see cref="SftpKeyPassphraseException"/>を投げる。それ以外の理由で読めない鍵は、<c>null</c>を返す
+    /// （パスワード認証にフォールバックさせるため）。
+    /// </summary>
+    internal static PrivateKeyFile? LoadPrivateKey(string path, string? passphrase)
+    {
+        try
+        {
+            return string.IsNullOrEmpty(passphrase) ? new PrivateKeyFile(path) : new PrivateKeyFile(path, passphrase);
+        }
+        catch (SshPassPhraseNullOrEmptyException)
+        {
+            throw new SftpKeyPassphraseException(Path.GetFileName(path), wasWrong: false);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            return null;
+        }
+        catch (Exception) when (!string.IsNullOrEmpty(passphrase))
+        {
+            // パスフレーズが違うと、鍵の形式（RSA・Ed25519等）によって、SshException・CryptographicException・
+            // ASN.1の例外などの、様々な例外になる。パスフレーズなしで開こうとして、パスフレーズが要る鍵だと
+            // 分かれば「パスフレーズが違う」、そうでなければ「読めない鍵」として扱う。
+            if (IsProtectedByPassphrase(path))
+            {
+                throw new SftpKeyPassphraseException(Path.GetFileName(path), wasWrong: true);
+            }
+
+            return null;
+        }
+        catch (SshException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsProtectedByPassphrase(string path)
+    {
+        try
+        {
+            _ = new PrivateKeyFile(path);
+            return false;
+        }
+        catch (SshPassPhraseNullOrEmptyException)
+        {
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    public ISftpSession Connect(SshConnectionProfile profile, string? password, string? keyPassphrase = null)
     {
         var authMethods = new List<AuthenticationMethod>();
 
         if (!string.IsNullOrWhiteSpace(profile.IdentityFilePath) && File.Exists(profile.IdentityFilePath))
         {
-            try
+            var keyFile = LoadPrivateKey(profile.IdentityFilePath, keyPassphrase);
+            if (keyFile is not null)
             {
-                var keyFile = new PrivateKeyFile(profile.IdentityFilePath);
                 authMethods.Add(new PrivateKeyAuthenticationMethod(profile.UserName ?? Environment.UserName, keyFile));
-            }
-            catch (Exception ex) when (ex is SshException or UnauthorizedAccessException or IOException)
-            {
-                // パスフレーズ付き等、読み込めない鍵は無視してパスワード認証にフォールバックする。
             }
         }
 
@@ -54,7 +104,7 @@ public sealed class SftpService : ISftpService
         if (authMethods.Count == 0)
         {
             throw new AppOperationException(
-                "SFTP接続に使える認証情報がありません。パスワードを保存するか、パスフレーズなしの秘密鍵を指定してください。");
+                "SFTP接続に使える認証情報がありません。パスワードを保存するか、秘密鍵を指定してください。");
         }
 
         var connectionInfo = new ConnectionInfo(profile.Host, profile.Port, profile.UserName ?? Environment.UserName, authMethods.ToArray());

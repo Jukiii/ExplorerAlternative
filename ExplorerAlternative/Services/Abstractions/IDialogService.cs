@@ -17,6 +17,9 @@ public interface IDialogService
 
     string? PromptText(string title, string message, string defaultValue = "");
 
+    /// <summary>入力が画面に見えない（伏せ字）入力欄で、パスフレーズ・パスワードを尋ねる。キャンセルは<c>null</c>。</summary>
+    string? PromptPassword(string title, string message);
+
     string? SelectFromList(string title, string message, IReadOnlyList<string> items);
 
     /// <summary>Quick Look相当のプレビュー（仕様書11章）を非モーダルで表示する。既存の表示は差し替える。</summary>
