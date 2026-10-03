@@ -379,6 +379,48 @@ public sealed class FileSystemServiceTests : IDisposable
         Assert.Throws<AppOperationException>(() => _sut.ReadTextPreview(Path.Combine(_root, "none.txt"), 10, out _));
     }
 
+    // ===== 削除（ごみ箱へ） =====
+
+    // 仕様書52章：使用中のファイルの削除は、Windows自身の「使用中のファイル」ダイアログではなく、アプリのエラー表示に、
+    // 使用中のプロセス名とPIDを載せる（以前は、シェルのダイアログが処理を引き取り、PIDが表示されなかった）。
+    [Fact]
+    public void Delete_LockedFile_FailsWithTheProcessNameAndPid_AndKeepsTheFile()
+    {
+        var path = File_("locked.txt", "data");
+        using var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var ex = Assert.Throws<AppOperationException>(() => _sut.Delete(new[] { path }));
+
+        Assert.Contains("「locked.txt」を削除できませんでした", ex.Message);
+        Assert.Contains($"PID: {Environment.ProcessId}", ex.Message);
+        Assert.Contains(Path.GetFileName(Environment.ProcessPath!), ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public void Delete_LockedFile_StopsAtTheFirstFailure_LeavingTheRestAlone()
+    {
+        var locked = File_("a-locked.txt");
+        var other = File_("b-other.txt");
+        using var held = new FileStream(locked, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        Assert.Throws<AppOperationException>(() => _sut.Delete(new[] { locked, other }));
+
+        Assert.True(File.Exists(other));
+    }
+
+    [Fact]
+    public void Delete_NonexistentPath_IsIgnored()
+    {
+        _sut.Delete(new[] { Path.Combine(_root, "never-existed.txt") });
+    }
+
+    [Fact]
+    public void Delete_NoPaths_DoesNothing()
+    {
+        _sut.Delete(Array.Empty<string>());
+    }
+
     // ===== 存在確認・ドライブ =====
 
     [Fact]

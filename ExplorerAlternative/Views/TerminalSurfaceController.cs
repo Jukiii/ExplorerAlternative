@@ -39,8 +39,12 @@ public sealed class TerminalSurfaceController
         _surface.PreviewKeyDown += OnPreviewKeyDown;
         _surface.PreviewTextInput += OnPreviewTextInput;
         _surface.IsVisibleChanged += OnIsVisibleChanged;
-        _surface.DragOver += OnDragOver;
-        _surface.Drop += OnDrop;
+        // ドラッグ&ドロップは、トンネリング（Preview）のイベントで受ける。通常のDragEnter/DragOver/Dropは、
+        // RichTextBoxの内蔵の処理が先に「不可（None）」と答えて処理済みにしてしまい（読み取り専用のため）、
+        // こちらのハンドラが働かず、ドラッグ中に禁止マークになっていた。
+        _surface.PreviewDragEnter += OnDragOver;
+        _surface.PreviewDragOver += OnDragOver;
+        _surface.PreviewDrop += OnDrop;
     }
 
     /// <summary>ターミナル画面へキーボードフォーカスを移す。</summary>
@@ -244,16 +248,10 @@ public sealed class TerminalSurfaceController
 
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
 
-        // Ctrl+C：選択中ならコピー、そうでなければ実行中コマンドの中断（VS Code/一般的な
-        // ターミナルと同じ挙動）。Ctrl+VとCtrl+Aは通常どおり貼り付け・全選択として扱う。
-        if (ctrl && e.Key == Key.C)
+        // Ctrl+VとCtrl+Aは通常どおり貼り付け・全選択として扱う。
+        if (TryHandleCopyOrInterrupt(e.Key, Keyboard.Modifiers))
         {
-            if (_surface.Selection.IsEmpty)
-            {
-                _terminal.InterruptAndClearInput();
-                e.Handled = true;
-            }
-
+            e.Handled = true;
             return;
         }
 
@@ -350,6 +348,51 @@ public sealed class TerminalSurfaceController
     }
 
     // 仕様書19章：ファイル・フォルダをターミナル画面へドラッグ＆ドロップするとパスが入力される。
+    /// <summary>クリップボードへ文字を入れる処理（テストでは、利用者のクリップボードを書き換えないよう、差し替える）。</summary>
+    internal Action<string> SetClipboardText { get; set; } = text => Clipboard.SetText(text);
+
+    /// <summary>
+    /// Ctrl+C：常に、実行中コマンドの中断。ターミナルの中で動いているアプリ（テキストを選択している最中も含む）を、
+    /// コピーのつもりのCtrl+Cで、意図せず中断してしまわないように、コピーはCtrl+Shift+Cに分ける
+    /// （運営者の指示。VS Codeの統合ターミナルと同じ）。処理したらtrue。
+    /// </summary>
+    internal bool TryHandleCopyOrInterrupt(Key key, ModifierKeys modifiers)
+    {
+        if (_terminal is null || key != Key.C || !modifiers.HasFlag(ModifierKeys.Control))
+        {
+            return false;
+        }
+
+        if (modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            CopySelection();
+        }
+        else
+        {
+            _terminal.InterruptAndClearInput();
+        }
+
+        return true;
+    }
+
+    // Ctrl+Shift+C：選択している文字をクリップボードへコピーする（選択がなければ、何もしない）。
+    private void CopySelection()
+    {
+        if (_surface.Selection.IsEmpty)
+        {
+            return;
+        }
+
+        try
+        {
+            SetClipboardText(_surface.Selection.Text);
+        }
+        catch (System.Runtime.InteropServices.ExternalException)
+        {
+            // クリップボードを、別のアプリが使用中のとき（一時的）。アプリを落とさず、コピーしないだけにする。
+        }
+    }
+
     private void OnDragOver(object sender, DragEventArgs e)
     {
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
