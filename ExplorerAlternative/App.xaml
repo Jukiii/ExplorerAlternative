@@ -405,7 +405,10 @@
 
         <!-- ファイル/フォルダ一覧の行（階層表示・詳細表示共通） -->
         <Style x:Key="FileRowItemStyle" TargetType="ListBoxItem">
-            <Setter Property="Padding" Value="4,5" />
+            <!-- 選択中の行は、背景色に加えて、Windows 11のエクスプローラーのように、外枠（1px）の色も変える
+                 （運営者の依頼 #79）。枠の分（上下左右1px）だけ余白を減らし、選択の有無で、行の高さ・文字の位置が
+                 動かないようにする（枠は、選択していないときは透明）。 -->
+            <Setter Property="Padding" Value="3,4" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <!-- IsSelectedをFileSystemNodeViewModel側に保持することで、展開/折りたたみに伴う
                  VisibleNodesの再構築（Clear+再追加）でListBox内部の選択状態が消えても復元できる。 -->
@@ -413,7 +416,8 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
                             <ContentPresenter />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -422,6 +426,7 @@
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentLightBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                             </Trigger>
                             <!-- ドラッグ&ドロップ中、ドロップ先フォルダであることを枠線で強調する。 -->
                             <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
@@ -438,13 +443,14 @@
              列が描画されずToString()が表示されてしまうため、FileRowItemStyleとは
              別のListViewItem専用スタイルにする。 -->
         <Style x:Key="DetailRowItemStyle" TargetType="ListViewItem">
-            <Setter Property="Padding" Value="4,5" />
+            <Setter Property="Padding" Value="3,4" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListViewItem">
-                        <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
                             <GridViewRowPresenter Content="{TemplateBinding Content}"
                                                    Columns="{TemplateBinding GridView.ColumnCollection}" />
                         </Border>
@@ -454,6 +460,7 @@
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentLightBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                             </Trigger>
                             <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
