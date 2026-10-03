@@ -100,6 +100,38 @@ internal sealed class FakeFileOperationQueueService : IFileOperationQueueService
     }
 }
 
+/// <summary>ファイルのクリップボードを、メモリ上だけで持つ偽物（利用者の実際のクリップボードを書き換えない）。</summary>
+internal sealed class FakeFileClipboard : IFileClipboard
+{
+    public FileClipboardContent? Content { get; set; }
+
+    /// <summary>設定すると、読み書きがこの例外を投げる（別のアプリがクリップボードを使用中の状況の再現用）。</summary>
+    public Exception? Failure { get; set; }
+
+    public int SetCount { get; private set; }
+
+    public void SetFiles(IReadOnlyList<string> paths, bool isCut)
+    {
+        if (Failure is not null)
+        {
+            throw Failure;
+        }
+
+        SetCount++;
+        Content = new FileClipboardContent(paths.ToList(), isCut);
+    }
+
+    public FileClipboardContent? GetFiles()
+    {
+        if (Failure is not null)
+        {
+            throw Failure;
+        }
+
+        return Content;
+    }
+}
+
 /// <summary>
 /// <see cref="PaneViewModel"/>を、実際のファイルシステム（一時フォルダ）の上で動かすためのテスト用ホスト。
 /// ファイル・フォルダの読み取りは本物の<see cref="FileSystemService"/>、ダイアログ・キュー・履歴・設定は
@@ -125,6 +157,7 @@ internal sealed class PaneTestHost : IDisposable
         ExternalTools = StubProxy.Create<IExternalToolService>();
         ExternalToolsControl = StubProxy.Of(ExternalTools);
         SystemOpened = new List<string>();
+        Clipboard = new FakeFileClipboard();
 
         Pane = new PaneViewModel(
             FileSystem,
@@ -144,11 +177,16 @@ internal sealed class PaneTestHost : IDisposable
             ViewMode.Detail)
         {
             // 実際にWindowsの既定のアプリを起動せず、開こうとしたファイルを記録する。
-            SystemOpenFile = SystemOpened.Add
+            SystemOpenFile = SystemOpened.Add,
+            // 実際のクリップボード（利用者のもの）を書き換えない。
+            FileClipboard = Clipboard
         };
     }
 
     public string Root { get; }
+
+    /// <summary>ファイルのコピー/切り取り用の、偽のクリップボード。</summary>
+    public FakeFileClipboard Clipboard { get; }
 
     public PaneViewModel Pane { get; }
 

@@ -187,16 +187,15 @@ public sealed partial class PaneViewModel
             return;
         }
 
-        var fileList = new StringCollection();
-        fileList.AddRange(SelectedNodes.Select(n => n.FullPath).ToArray());
-
-        var dataObject = new DataObject();
-        dataObject.SetFileDropList(fileList);
-
-        var effect = isCut ? DragDropEffects.Move : DragDropEffects.Copy;
-        dataObject.SetData(DropEffectFormat, new MemoryStream(BitConverter.GetBytes((int)effect)));
-
-        Clipboard.SetDataObject(dataObject, true);
+        try
+        {
+            FileClipboard.SetFiles(SelectedNodes.Select(n => n.FullPath).ToList(), isCut);
+        }
+        catch (ExternalException)
+        {
+            // クリップボードを、別のアプリが使用中のとき（一時的）。アプリを落とさず、日本語で伝える（27章）。
+            _dialogService.ShowError("クリップボードを使用できませんでした。少し待って、もう一度お試しください。");
+        }
     }
 
     // 仕様書19章：登録済みのSSH接続先を一覧から選んで、接続を依頼する。
@@ -334,29 +333,25 @@ public sealed partial class PaneViewModel
 
     private void PasteFromClipboard()
     {
-        if (!Clipboard.ContainsFileDropList())
+        FileClipboardContent? content;
+
+        try
+        {
+            content = FileClipboard.GetFiles();
+        }
+        catch (ExternalException)
+        {
+            _dialogService.ShowError("クリップボードを使用できませんでした。少し待って、もう一度お試しください。");
+            return;
+        }
+
+        if (content is null || content.Files.Count == 0)
         {
             return;
         }
 
-        var files = Clipboard.GetFileDropList().Cast<string>().ToList();
-        if (files.Count == 0)
-        {
-            return;
-        }
-
-        var isMove = false;
-        var dataObject = Clipboard.GetDataObject();
-
-        if (dataObject?.GetDataPresent(DropEffectFormat) == true &&
-            dataObject.GetData(DropEffectFormat) is MemoryStream stream)
-        {
-            var buffer = new byte[4];
-            stream.Position = 0;
-            _ = stream.Read(buffer, 0, buffer.Length);
-            var effect = (DragDropEffects)BitConverter.ToInt32(buffer, 0);
-            isMove = effect.HasFlag(DragDropEffects.Move);
-        }
+        var files = content.Files.ToList();
+        var isMove = content.IsMove;
 
         if (!ConfirmOperationIfNeeded(isMove ? "移動" : "コピー", files, CurrentPath))
         {

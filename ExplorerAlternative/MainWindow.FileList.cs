@@ -75,6 +75,18 @@ public partial class MainWindow
             return;
         }
 
+        // 仕様書20章：Ctrl+C（コピー）・Ctrl+X（切り取り）・Ctrl+V（貼り付け）。右クリックのメニューと同じ操作。
+        if (FileListShortcuts.ResolveClipboardCommand(pane, e.Key, Keyboard.Modifiers) is { } clipboardCommand)
+        {
+            if (clipboardCommand.CanExecute(null))
+            {
+                clipboardCommand.Execute(null);
+            }
+
+            e.Handled = true;
+            return;
+        }
+
         switch (e.Key)
         {
             case Key.Enter when pane.OpenCommand.CanExecute(null):
