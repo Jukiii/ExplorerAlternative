@@ -425,8 +425,8 @@
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentLightBrush}" />
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectionBackgroundBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource SelectionBorderBrush}" />
                             </Trigger>
                             <!-- ドラッグ&ドロップ中、ドロップ先フォルダであることを枠線で強調する。 -->
                             <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
@@ -459,8 +459,8 @@
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentLightBrush}" />
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectionBackgroundBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource SelectionBorderBrush}" />
                             </Trigger>
                             <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
