@@ -1,7 +1,7 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using ExplorerAlternative.Models;
 using ExplorerAlternative.Services.Abstractions;
-using Microsoft.VisualBasic.FileIO;
 
 namespace ExplorerAlternative.Services;
 
@@ -176,21 +176,70 @@ public sealed class FileSystemService : IFileSystemService
     {
         foreach (var path in fullPaths)
         {
-            try
+            if (!Directory.Exists(path) && !File.Exists(path))
             {
-                if (Directory.Exists(path))
-                {
-                    FileSystem.DeleteDirectory(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
-                }
-                else if (File.Exists(path))
-                {
-                    FileSystem.DeleteFile(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
-                }
+                continue;
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+
+            // ごみ箱へ移す。以前使っていたVisualBasicのFileSystem.DeleteFile（OnlyErrorDialogs）は、使用中のファイルで
+            // Windows自身の「使用中のファイル」ダイアログを出して処理を引き取るため、使用中のプロセス名とPID
+            // （仕様書52章）を載せたエラー表示まで届かなかった。ここでは、エラーのダイアログを出さずに、
+            // 結果のコードだけを受け取り、失敗したら、アプリのエラー表示（使用中のプロセス名とPID付き）にする。
+            var result = RecycleBin.MoveToRecycleBin(path);
+            if (result != 0)
             {
-                throw CreateFailure($"「{Path.GetFileName(path)}」を削除できませんでした。", ex, path);
+                throw CreateFailure(
+                    $"「{Path.GetFileName(path)}」を削除できませんでした。（エラーコード 0x{result:X}）",
+                    new IOException($"SHFileOperation failed: 0x{result:X}"),
+                    path);
             }
+        }
+    }
+
+    // ごみ箱へ移す（Windowsシェルの、SHFileOperation）。エラーのダイアログ・確認・進捗は出さない。
+    // 構造体の配置は、x64（このアプリの配布形態）のもの。
+    private static class RecycleBin
+    {
+        private const uint FoDelete = 0x0003;
+        private const ushort FofSilent = 0x0004;
+        private const ushort FofNoConfirmation = 0x0010;
+        private const ushort FofAllowUndo = 0x0040;
+        private const ushort FofNoErrorUi = 0x0400;
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct ShFileOpStruct
+        {
+            public IntPtr Hwnd;
+            public uint Func;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string From;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string? To;
+            public ushort Flags;
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool AnyOperationsAborted;
+            public IntPtr NameMappings;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string? ProgressTitle;
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern int SHFileOperationW(ref ShFileOpStruct fileOp);
+
+        /// <summary>ごみ箱へ移す。成功は0、失敗はWindowsのエラーコード（0以外）。</summary>
+        public static int MoveToRecycleBin(string path)
+        {
+            var operation = new ShFileOpStruct
+            {
+                Func = FoDelete,
+                From = path + "\0\0", // 対象のパスの並びは、末尾が「二重のヌル文字」
+                Flags = (ushort)(FofAllowUndo | FofNoConfirmation | FofSilent | FofNoErrorUi)
+            };
+
+            var result = SHFileOperationW(ref operation);
+
+            // 中断（利用者の操作は無いので、通常は起きない）は、失敗として扱う。
+            return result == 0 && operation.AnyOperationsAborted ? 0x4C7 : result;
         }
     }
 

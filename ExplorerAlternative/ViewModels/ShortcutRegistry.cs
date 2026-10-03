@@ -43,6 +43,8 @@ public static class ShortcutRegistry
 
         new("ターミナル", "ターミナル表示/非表示", "Ctrl + @（USキー配列ではCtrl + Shift + 2でも可）"),
         new("ターミナル", "コマンド・パスの補完（候補が複数なら、押すたびに次・前の候補）", "Tab / Shift + Tab"),
+        new("ターミナル", "実行中のコマンドを中断（選択中でも、常に中断）", "Ctrl + C"),
+        new("ターミナル", "選択した文字をコピー", "Ctrl + Shift + C"),
 
         new("検索・その他", "検索", "Ctrl + F"),
         new("検索・その他", "コマンドパレット", "Ctrl + Shift + P"),
