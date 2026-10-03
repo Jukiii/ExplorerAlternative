@@ -70,7 +70,7 @@ public sealed class FileRowSelectionStyleTests
     [InlineData("FileRowItemStyle", "DarkTheme.xaml")]
     [InlineData("DetailRowItemStyle", "LightTheme.xaml")]
     [InlineData("DetailRowItemStyle", "DarkTheme.xaml")]
-    public void SelectedRow_GetsAnAccentColoredOutline_AndTheLightFill(string styleKey, string themeFile)
+    public void SelectedRow_GetsASelectionColoredOutline_AndFill(string styleKey, string themeFile)
     {
         StaTest.Run(() =>
         {
@@ -78,8 +78,8 @@ public sealed class FileRowSelectionStyleTests
             if (resources is null) return;
 
             var item = Rows.Single(r => r.Style == styleKey).Create();
-            var accent = BrushColor((Brush)resources["AccentBrush"]);
-            var accentLight = BrushColor((Brush)resources["AccentLightBrush"]);
+            var selectionBorder = BrushColor((Brush)resources["SelectionBorderBrush"]);
+            var selectionBackground = BrushColor((Brush)resources["SelectionBackgroundBrush"]);
 
             var border = RowBorder(item, resources, styleKey);
             Assert.Equal(Colors.Transparent, BrushColor(border.BorderBrush)); // 選択していないときは、枠は見えない
@@ -96,8 +96,42 @@ public sealed class FileRowSelectionStyleTests
             item.ApplyTemplate();
             border = (Border)item.Template.FindName("Bd", item);
 
-            Assert.Equal(accent, BrushColor(border.BorderBrush)); // 外枠の色が変わる
-            Assert.Equal(accentLight, BrushColor(border.Background)); // 背景の色も、これまでどおり
+            Assert.Equal(selectionBorder, BrushColor(border.BorderBrush)); // 外枠の色が変わる
+            Assert.Equal(selectionBackground, BrushColor(border.Background)); // 背景の色も変わる
+        });
+    }
+
+    // 運営者の依頼（#79）：ライトテーマの選択色は、ピンクっぽくない（赤みが強くない）こと。
+    [Fact]
+    public void LightTheme_SelectionColors_AreNotPinkish()
+    {
+        StaTest.Run(() =>
+        {
+            var resources = LoadStyleWithTheme("FileRowItemStyle", "LightTheme.xaml");
+            if (resources is null) return;
+
+            var background = BrushColor((Brush)resources["SelectionBackgroundBrush"]);
+            var border = BrushColor((Brush)resources["SelectionBorderBrush"]);
+
+            // ピンク・サーモン系は、赤が青より強い。青系・無彩色は、赤が青を上回らない。
+            Assert.True(background.R <= background.B, $"背景がピンクっぽい色です: {background}");
+            Assert.True(border.R <= border.B, $"外枠がピンクっぽい色です: {border}");
+            // 白い背景の上で、選択が見分けられること（白との差がある）。
+            Assert.True(255 - background.R >= 20, "背景が白に近すぎます。");
+        });
+    }
+
+    // ダークテーマは、従来どおりのアクセント色のまま。
+    [Fact]
+    public void DarkTheme_SelectionColors_KeepTheAccentLook()
+    {
+        StaTest.Run(() =>
+        {
+            var resources = LoadStyleWithTheme("FileRowItemStyle", "DarkTheme.xaml");
+            if (resources is null) return;
+
+            Assert.Equal(BrushColor((Brush)resources["AccentLightBrush"]), BrushColor((Brush)resources["SelectionBackgroundBrush"]));
+            Assert.Equal(BrushColor((Brush)resources["AccentBrush"]), BrushColor((Brush)resources["SelectionBorderBrush"]));
         });
     }
 

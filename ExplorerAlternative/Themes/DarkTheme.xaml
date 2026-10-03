@@ -8,6 +8,9 @@
     <SolidColorBrush x:Key="BorderBrush2" Color="#46453D" />
     <SolidColorBrush x:Key="AccentBrush" Color="#D97757" />
     <SolidColorBrush x:Key="AccentLightBrush" Color="#4A3428" />
+    <!-- ファイル一覧の選択中の行（背景と外枠）。ダークテーマは、従来どおりのアクセント色。 -->
+    <SolidColorBrush x:Key="SelectionBackgroundBrush" Color="#4A3428" />
+    <SolidColorBrush x:Key="SelectionBorderBrush" Color="#D97757" />
     <SolidColorBrush x:Key="HoverBrush" Color="#3A3A35" />
     <SolidColorBrush x:Key="PressedBrush" Color="#454540" />
     <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F5F4ED" />
