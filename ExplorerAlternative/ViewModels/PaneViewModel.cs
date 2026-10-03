@@ -17,7 +17,8 @@ namespace ExplorerAlternative.ViewModels;
 /// </summary>
 public sealed partial class PaneViewModel : ObservableObject, IDisposable
 {
-    private const string DropEffectFormat = "Preferred DropEffect";
+    /// <summary>ファイルのコピー/切り取りで使うクリップボード（テストでは、利用者のクリップボードを触らないよう差し替える）。</summary>
+    internal IFileClipboard FileClipboard { get; set; } = new WindowsFileClipboard();
 
     private readonly IFileSystemService _fileSystemService;
     private readonly IDialogService _dialogService;
