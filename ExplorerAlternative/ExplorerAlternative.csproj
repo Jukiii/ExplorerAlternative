@@ -35,7 +35,7 @@
        委譲するが、SFTPはファイル一覧取得・転送を対話プロンプトなしで行う必要があるため、
        プログラムから直接扱えるSSH.NETライブラリを使用する。 -->
   <ItemGroup>
-    <PackageReference Include="SSH.NET" Version="2026.0.0" />
+    <PackageReference Include="SSH.NET" Version="2026.0.1" />
   </ItemGroup>
 
   <!-- 単体テストプロジェクト（ExplorerAlternative.Tests）からinternalなメンバーを参照するため。 -->
